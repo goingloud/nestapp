@@ -15,7 +15,9 @@ end
 % ── setup ─────────────────────────────────────────────────────────────────
 
 function setupOnce(testCase) %#ok<INUSD>
-addpath(repoRoot());
+r = repoRoot();
+addpath(r);
+addpath(fullfile(r, 'src'));
 end
 
 function r = repoRoot()

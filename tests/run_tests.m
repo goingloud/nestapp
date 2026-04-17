@@ -21,6 +21,7 @@ end
 testRoot = fileparts(mfilename('fullpath'));
 repoRoot = fileparts(testRoot);
 addpath(repoRoot);
+addpath(fullfile(repoRoot, 'src'));
 
 switch lower(suite)
     case {'fast', 'unit'}

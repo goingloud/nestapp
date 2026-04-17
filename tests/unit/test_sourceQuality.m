@@ -18,11 +18,17 @@ end
 % ── setup ─────────────────────────────────────────────────────────────────
 
 function setupOnce(testCase) %#ok<INUSD>
-addpath(repoRoot());
+r = repoRoot();
+addpath(r);
+addpath(fullfile(r, 'src'));
 end
 
 function r = repoRoot()
 r = fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))));
+end
+
+function r = srcRoot()
+r = fullfile(repoRoot(), 'src');
 end
 
 % ══════════════════════════════════════════════════════════════════════════
@@ -51,7 +57,7 @@ end
 function test_runPipelineNoCircularDep(testCase)
 % runPipeline.m must not call app.updateReportsTab() directly — that creates
 % a circular dependency: a standalone function calling back into its caller.
-src = fileread(fullfile(repoRoot(), 'runPipeline.m'));
+src = fileread(fullfile(srcRoot(), 'runPipeline.m'));
 testCase.verifyEmpty(regexp(src, 'app\.updateReportsTab', 'match'), ...
     ['Phase 2: runPipeline.m calls app.updateReportsTab(). ' ...
      'Pass a reportCallback instead to break the circular dependency.']);
@@ -59,7 +65,7 @@ end
 
 function test_noAssignInBaseRunPipeline(testCase)
 % runPipeline.m must not pollute the base workspace.
-src   = fileread(fullfile(repoRoot(), 'runPipeline.m'));
+src   = fileread(fullfile(srcRoot(), 'runPipeline.m'));
 lines = strsplit(src, newline);
 for k = 1:numel(lines)
     L = strtrim(lines{k});
@@ -75,7 +81,7 @@ function test_noAssignInBaseNestapp(testCase)
 %       is intentional (user-requested feature) and must NOT be flagged here.
 %       Only the workspace-pollution patterns ('files', 'paths', 'steps2run',
 %       'stepsName') are disallowed.
-src   = fileread(fullfile(repoRoot(), 'nestapp.m'));
+src   = fileread(fullfile(srcRoot(), 'nestapp.m'));
 lines = strsplit(src, newline);
 pollutionPatterns = {'assignin\s*\(\s*''base''\s*,\s*''files''', ...
                      'assignin\s*\(\s*''base''\s*,\s*''paths''', ...
@@ -94,7 +100,7 @@ end
 
 function test_stepRegistryIsPureFunction(testCase)
 % stepRegistry must not access app state, globals, or UI.
-src = fileread(fullfile(repoRoot(), 'stepRegistry.m'));
+src = fileread(fullfile(srcRoot(), 'stepRegistry.m'));
 lines = strsplit(src, newline);
 for k = 1:numel(lines)
     L = strtrim(lines{k});
@@ -113,7 +119,7 @@ end
 function test_noRandColorInPlotTEP(testCase)
 % rand(1,3) for colour produces non-reproducible figures — violates the
 % project's reproducibility requirement.
-src = fileread(fullfile(repoRoot(), 'nestapp.m'));
+src = fileread(fullfile(srcRoot(), 'nestapp.m'));
 % Find plotTEP function body
 startIdx = strfind(src, 'function plotTEP(app)');
 if isempty(startIdx)
@@ -134,7 +140,7 @@ end
 
 function test_noDatestrInExportReport(testCase)
 % datestr() is deprecated in R2025b.
-src = fileread(fullfile(repoRoot(), 'exportReport.m'));
+src = fileread(fullfile(srcRoot(), 'exportReport.m'));
 lines = strsplit(src, newline);
 for k = 1:numel(lines)
     L = strtrim(lines{k});
@@ -147,7 +153,7 @@ end
 
 function test_noNowInInitReport(testCase)
 % now() is deprecated in R2025b (returns datenum).
-src = fileread(fullfile(repoRoot(), 'initPipelineReport.m'));
+src = fileread(fullfile(srcRoot(), 'initPipelineReport.m'));
 lines = strsplit(src, newline);
 for k = 1:numel(lines)
     L = strtrim(lines{k});
@@ -160,7 +166,7 @@ end
 
 function test_loadLabelsNoReturnValue(testCase)
 % LoadLabels returns the app handle unnecessarily — handles are pass-by-reference.
-src = fileread(fullfile(repoRoot(), 'nestapp.m'));
+src = fileread(fullfile(srcRoot(), 'nestapp.m'));
 % Look for the function declaration pattern with a return value
 matches = regexp(src, 'function\s+app\s*=\s*LoadLabels\s*\(', 'match');
 testCase.verifyEmpty(matches, ...
@@ -171,7 +177,7 @@ end
 function test_electrodeButtonAccessGuarded(testCase)
 % Dynamic property access must have an isprop guard to handle non-standard
 % electrode names that would otherwise crash the app.
-src = fileread(fullfile(repoRoot(), 'nestapp.m'));
+src = fileread(fullfile(srcRoot(), 'nestapp.m'));
 hasDynamicAccess = contains(src, ",'Button'])");
 hasIspropGuard   = contains(src, 'isprop(app');
 if hasDynamicAccess
@@ -188,7 +194,7 @@ end
 function test_stepRegistryHasPersistentCache(testCase)
 % stepRegistry() is called multiple times from callbacks. A persistent cache
 % avoids rebuilding the 1,112-line struct on every call.
-src = fileread(fullfile(repoRoot(), 'stepRegistry.m'));
+src = fileread(fullfile(srcRoot(), 'stepRegistry.m'));
 testCase.verifyTrue(contains(src, 'persistent'), ...
     'Phase 6: stepRegistry.m should use a persistent variable to cache the result');
 end
@@ -196,7 +202,7 @@ end
 function test_nSplitsIsReasonable(testCase)
 % N_SPLITS = 100 blocks the UI thread for ~100 ms per file.
 % Acceptable range: 1–50 for interactive use.
-src    = fileread(fullfile(repoRoot(), 'computeTEPQuality.m'));
+src    = fileread(fullfile(srcRoot(), 'computeTEPQuality.m'));
 tokens = regexp(src, 'N_SPLITS\s*=\s*(\d+)', 'tokens');
 if isempty(tokens)
     return   % constant may have been renamed — skip
@@ -210,7 +216,7 @@ end
 function test_resizeCallbackHasThrottle(testCase)
 % UIFigureSizeChanged repositions 140+ components on every pixel of a drag.
 % A drawnow limitrate call prevents runaway redraws.
-src = fileread(fullfile(repoRoot(), 'nestapp.m'));
+src = fileread(fullfile(srcRoot(), 'nestapp.m'));
 % Search for the function definition, not just any mention of the name.
 fnIdx = regexp(src, 'function\s+UIFigureSizeChanged', 'once');
 if isempty(fnIdx); return; end

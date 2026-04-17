@@ -14,11 +14,17 @@ end
 % ── setup ─────────────────────────────────────────────────────────────────
 
 function setupOnce(testCase) %#ok<INUSD>
-addpath(repoRoot());
+r = repoRoot();
+addpath(r);
+addpath(fullfile(r, 'src'));
 end
 
 function r = repoRoot()
 r = fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))));
+end
+
+function r = srcRoot()
+r = fullfile(repoRoot(), 'src');
 end
 
 % ── 3.2 SavePipeline uses uiputfile ──────────────────────────────────────
@@ -26,7 +32,7 @@ end
 function test_savePipelineUsesUiputfile(testCase)
 % uisave does not return the chosen path, making it impossible to clear
 % pipelineDirty or update pipelineName after a save.
-src = fileread(fullfile(repoRoot(), 'nestapp.m'));
+src = fileread(fullfile(srcRoot(), 'nestapp.m'));
 idx = strfind(src, 'SavePipelineButtonPushed');
 testCase.verifyFalse(isempty(idx), 'SavePipelineButtonPushed must exist');
 % Check within the callback body
@@ -39,7 +45,7 @@ testCase.verifyTrue(contains(window, 'uiputfile'), ...
 end
 
 function test_savePipelineClearsDirtyFlag(testCase)
-src = fileread(fullfile(repoRoot(), 'nestapp.m'));
+src = fileread(fullfile(srcRoot(), 'nestapp.m'));
 idx = strfind(src, 'SavePipelineButtonPushed');
 testCase.verifyFalse(isempty(idx), 'SavePipelineButtonPushed must exist');
 window = src(idx(1) : min(idx(1)+1500, numel(src)));
@@ -50,7 +56,7 @@ testCase.verifyTrue( ...
 end
 
 function test_savePipelineUpdatesPipelineName(testCase)
-src = fileread(fullfile(repoRoot(), 'nestapp.m'));
+src = fileread(fullfile(srcRoot(), 'nestapp.m'));
 idx = strfind(src, 'SavePipelineButtonPushed');
 testCase.verifyFalse(isempty(idx), 'SavePipelineButtonPushed must exist');
 window = src(idx(1) : min(idx(1)+1500, numel(src)));
@@ -61,7 +67,7 @@ end
 % ── 3.3 Visualizing EEG cache invalidation ───────────────────────────────
 
 function test_selectData2ResetsEEGLoadedFlag(testCase)
-src = fileread(fullfile(repoRoot(), 'nestapp.m'));
+src = fileread(fullfile(srcRoot(), 'nestapp.m'));
 idx = strfind(src, 'SelectDataButton_2Pushed');
 testCase.verifyFalse(isempty(idx), 'SelectDataButton_2Pushed must exist');
 window = src(idx(1) : min(idx(1)+2000, numel(src)));
@@ -74,7 +80,7 @@ testCase.verifyTrue( ...
 end
 
 function test_selectData2ClearsEEGCache(testCase)
-src = fileread(fullfile(repoRoot(), 'nestapp.m'));
+src = fileread(fullfile(srcRoot(), 'nestapp.m'));
 idx = strfind(src, 'SelectDataButton_2Pushed');
 testCase.verifyFalse(isempty(idx), 'SelectDataButton_2Pushed must exist');
 window = src(idx(1) : min(idx(1)+2000, numel(src)));
@@ -89,7 +95,7 @@ end
 
 function test_noNumericFlagTEPCreated(testCase)
 % TEPCreated = 0 / 1 should be a logical false/true with a descriptive name.
-src = fileread(fullfile(repoRoot(), 'nestapp.m'));
+src = fileread(fullfile(srcRoot(), 'nestapp.m'));
 % Declaration should use false/true, not 0/1
 declMatch = regexp(src, 'TEPCreated\s*=\s*0\s*[;,]', 'match');
 testCase.verifyEmpty(declMatch, ...
@@ -99,7 +105,7 @@ end
 
 function test_noNumericFlagEEGLoaded(testCase)
 % EEG_SelectedTEPFiles_Loaded = 0 should be a logical with an is_ prefix.
-src = fileread(fullfile(repoRoot(), 'nestapp.m'));
+src = fileread(fullfile(srcRoot(), 'nestapp.m'));
 declMatch = regexp(src, 'EEG_SelectedTEPFiles_Loaded\s*=\s*0\s*[;,]', 'match');
 testCase.verifyEmpty(declMatch, ...
     ['Phase 3: EEG_SelectedTEPFiles_Loaded = 0 uses numeric 0 as boolean. ' ...
@@ -112,7 +118,7 @@ function test_EEGrawCaptureIsDocumented(testCase)
 % The implicit contract "EEGraw is captured in the Epoching case, before
 % artifact rejection" must be explained with a comment so future developers
 % don't accidentally move or remove it.
-src = fileread(fullfile(repoRoot(), 'runPipeline.m'));
+src = fileread(fullfile(srcRoot(), 'runPipeline.m'));
 % Find the EEGraw = EEG assignment
 idx = regexp(src, 'EEGraw\s*=\s*EEG\s*[;,]', 'once');
 testCase.verifyFalse(isempty(idx), ...

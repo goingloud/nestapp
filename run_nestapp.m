@@ -5,5 +5,5 @@
 %   Run this script from the project root in the MATLAB command window.
 %   nestapp.m is the authoritative source — do not open nestapp_designer.mlapp.
 
-addpath(fileparts(mfilename('fullpath')));
+addpath(fullfile(fileparts(mfilename('fullpath')), 'src'));
 nestapp;

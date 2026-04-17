@@ -17,11 +17,17 @@ end
 % ── setup ─────────────────────────────────────────────────────────────────
 
 function setupOnce(testCase) %#ok<INUSD>
-addpath(repoRoot());
+r = repoRoot();
+addpath(r);
+addpath(fullfile(r, 'src'));
 end
 
 function r = repoRoot()
 r = fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))));
+end
+
+function r = srcRoot()
+r = fullfile(repoRoot(), 'src');
 end
 
 % ── M0 bug fixes ──────────────────────────────────────────────────────────
@@ -29,7 +35,7 @@ end
 function test_saveNewSetAssignsFname(testCase)
 % BUG: replace(fname,' ','_') return value was discarded.
 % FIX: fname = replace(fname,' ','_')
-src   = fileread(fullfile(repoRoot(), 'runPipeline.m'));
+src   = fileread(fullfile(srcRoot(), 'runPipeline.m'));
 lines = strsplit(src, newline);
 for k = 1:numel(lines)
     L = strtrim(lines{k});
@@ -44,7 +50,7 @@ end
 function test_noInputCallsInRunPipeline(testCase)
 % BUG: input('...') calls blocked GUI execution.
 % FIX: replaced with uiconfirm dialogs.
-src = fileread(fullfile(repoRoot(), 'runPipeline.m'));
+src = fileread(fullfile(srcRoot(), 'runPipeline.m'));
 % Allow input() only inside comments; bare input( in live code is the bug.
 lines = strsplit(src, newline);
 for k = 1:numel(lines)
@@ -62,7 +68,6 @@ function test_methodsSummaryUsesNRejectedNotFinCh(testCase)
 % BUG: methods text said "N/N retained" even when channels were removed and
 %      later interpolated, because finCh == origCh after interpolation.
 % FIX: methods text now uses nRejected and nInterpolated directly.
-addpath(repoRoot());
 report = initPipelineReport('test.set');
 report.channels.original      = 64;
 report.channels.nRejected     = 5;
@@ -83,7 +88,6 @@ end
 
 function test_methodsInterpolationAppears(testCase)
 % When interpolation occurred, the methods text must mention it.
-addpath(repoRoot());
 report = initPipelineReport('test.set');
 report.channels.original      = 64;
 report.channels.nRejected     = 4;
@@ -99,7 +103,7 @@ end
 
 function test_noInputCallsInNestapp(testCase)
 % All interactive prompts must use MATLAB UI dialogs, not command-line input().
-src   = fileread(fullfile(repoRoot(), 'nestapp.m'));
+src   = fileread(fullfile(srcRoot(), 'nestapp.m'));
 lines = strsplit(src, newline);
 for k = 1:numel(lines)
     L = strtrim(lines{k});
@@ -115,7 +119,7 @@ end
 function test_noAssignInBaseInRunPipeline(testCase)
 % assignin('base',...) pollutes the user's MATLAB workspace unconditionally.
 % This test pins the removal of those calls.
-src = fileread(fullfile(repoRoot(), 'runPipeline.m'));
+src = fileread(fullfile(srcRoot(), 'runPipeline.m'));
 % Allow the string in comments only
 lines = strsplit(src, newline);
 for k = 1:numel(lines)
@@ -133,7 +137,7 @@ function test_runPipelineDoesNotCallUpdateReportsTab(testCase)
 % runPipeline.m must not call app.updateReportsTab() directly.
 % That creates a circular import dependency: the standalone function calls
 % back into the nestapp class that invoked it.
-src = fileread(fullfile(repoRoot(), 'runPipeline.m'));
+src = fileread(fullfile(srcRoot(), 'runPipeline.m'));
 testCase.verifyEmpty(regexp(src, 'app\.updateReportsTab', 'match'), ...
     ['Regression — runPipeline.m calls app.updateReportsTab(). ' ...
      'Pass a callback instead to break the circular dependency.']);
@@ -145,7 +149,7 @@ function test_selectDataButton2ResetsEEGLoaded(testCase)
 % BUG: EEG_SelectedTEPFiles_Loaded was never reset on new file selection,
 %      so the old EEG data was silently reused.
 % FIX: SelectDataButton_2Pushed resets the flag.
-src = fileread(fullfile(repoRoot(), 'nestapp.m'));
+src = fileread(fullfile(srcRoot(), 'nestapp.m'));
 % Find the SelectDataButton_2 callback body and check it contains the reset
 idx = strfind(src, 'SelectDataButton_2Pushed');
 testCase.verifyFalse(isempty(idx), 'SelectDataButton_2Pushed must exist in nestapp.m');
@@ -162,7 +166,7 @@ end
 function test_electrodeButtonAccessHasIspropGuard(testCase)
 % BUG: app.([upper(label),'Button']) crashes for non-standard electrode names.
 % FIX: Guard with isprop(app, propName) before accessing.
-src = fileread(fullfile(repoRoot(), 'nestapp.m'));
+src = fileread(fullfile(srcRoot(), 'nestapp.m'));
 % Verify isprop guard exists somewhere near the dynamic access pattern
 hasGuard   = contains(src, 'isprop(app');
 hasPattern = contains(src, ",'Button'])");
@@ -178,7 +182,7 @@ end
 function test_savePipelineClearsDirtyFlag(testCase)
 % BUG: uisave does not return the chosen path, so pipelineDirty was never cleared.
 % FIX: SavePipelineButtonPushed uses uiputfile and clears pipelineDirty.
-src = fileread(fullfile(repoRoot(), 'nestapp.m'));
+src = fileread(fullfile(srcRoot(), 'nestapp.m'));
 % Find SavePipelineButtonPushed
 idx = strfind(src, 'SavePipelineButtonPushed');
 testCase.verifyFalse(isempty(idx), 'SavePipelineButtonPushed must exist');

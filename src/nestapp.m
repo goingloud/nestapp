@@ -204,6 +204,80 @@ classdef nestapp < matlab.apps.AppBase
     end
 
     methods (Access = private)
+        % ── Pipeline state mutation methods ───────────────────────────────
+        % All four parallel arrays (Items, ItemsData, ChangedVal, stepParamKeys)
+        % must stay in sync. These methods are the ONLY permitted way to add,
+        % remove, move, or clear steps — callbacks delegate here.
+
+        function appendStep(app, stepName)
+        % APPENDSTEP  Append stepName to the pipeline using its default params.
+            regIdx = find(strcmp(app.StepsListBox.Items, stepName), 1);
+            if isempty(regIdx); return; end
+            n = numel(app.SelectedListBox.Items);
+            % Treat a single empty-string sentinel as an empty list
+            if n == 1 && isempty(app.SelectedListBox.Items{1})
+                n = 0;
+                app.SelectedListBox.Items(:)    = [];
+                app.SelectedListBox.ItemsData(:) = [];
+                app.ChangedVal      = {};
+                app.stepParamKeys   = {};
+            end
+            pos = n + 1;
+            app.SelectedListBox.Items{pos}     = stepName;
+            app.SelectedListBox.ItemsData{pos} = ['Item' num2str(pos)];
+            app.ChangedVal{pos}                = app.DefaultsVal{regIdx};
+            app.stepParamKeys{pos}             = app.defaultParamKeys{regIdx};
+            app.pipelineDirty = true;
+            updateStatusBar(app);
+        end
+
+        function removeStep(app, idx)
+        % REMOVESTEP  Remove the step at index idx and renumber ItemsData.
+            app.SelectedListBox.Items(idx)     = [];
+            app.SelectedListBox.ItemsData(idx) = [];
+            app.ChangedVal(idx)                = [];
+            app.stepParamKeys(idx)             = [];
+            for i = idx : numel(app.SelectedListBox.ItemsData)
+                app.SelectedListBox.ItemsData{i} = ['Item' num2str(i)];
+            end
+            app.pipelineDirty = true;
+            updateStatusBar(app);
+        end
+
+        function moveStep(app, idx, direction)
+        % MOVESTEP  Swap step at idx with its neighbour in the given direction
+        %   (+1 = move down, -1 = move up). No-op at boundaries.
+            n   = numel(app.SelectedListBox.Items);
+            idx2 = idx + direction;
+            if idx2 < 1 || idx2 > n; return; end
+            % Swap all four arrays at positions idx and idx2
+            [app.SelectedListBox.Items{idx},  app.SelectedListBox.Items{idx2}] = ...
+                deal(app.SelectedListBox.Items{idx2},  app.SelectedListBox.Items{idx});
+            [app.ChangedVal{idx},   app.ChangedVal{idx2}]   = deal(app.ChangedVal{idx2},   app.ChangedVal{idx});
+            [app.stepParamKeys{idx}, app.stepParamKeys{idx2}] = deal(app.stepParamKeys{idx2}, app.stepParamKeys{idx});
+            % ItemsData stays in positional order — just renumber both slots
+            app.SelectedListBox.ItemsData{idx}  = ['Item' num2str(idx)];
+            app.SelectedListBox.ItemsData{idx2} = ['Item' num2str(idx2)];
+            app.SelectedListBox.Value = app.SelectedListBox.ItemsData{idx2};
+            app.pipelineDirty = true;
+            updateStatusBar(app);
+        end
+
+        function clearSteps(app)
+        % CLEARSTEPS  Remove all pipeline steps and reset state.
+            app.SelectedListBox.Items(:)     = [];
+            app.SelectedListBox.ItemsData(:) = [];
+            app.UITable.Data    = [];
+            app.ChangedVal      = {};
+            app.stepParamKeys   = {};
+            app.ItemNum         = 0;
+            app.nstep           = 1;
+            app.needchanloc     = 1;
+            app.pipelineDirty   = true;
+            updateStatusBar(app);
+        end
+        % ─────────────────────────────────────────────────────────────────
+
         function updateStatusBar(app)
         % UPDATESTATUSBAR  Refresh the status bar text from current app state.
         %   Called after any change to the pipeline list, data selection,
@@ -1280,7 +1354,7 @@ classdef nestapp < matlab.apps.AppBase
             % ListBoxInteraction has no NumClicks property in R2025b.
             t = datetime('now');
             if seconds(t - app.lastStepClick) < 0.5
-                AddButtonPushed(app, []);
+                appendStep(app, app.StepsListBox.Value);
             end
             app.lastStepClick = t;
         end
@@ -1295,53 +1369,14 @@ classdef nestapp < matlab.apps.AppBase
 
         % Button pushed function: AddButton
         function AddButtonPushed(app, event)
-            if isempty(app.SelectedListBox.Items) || isempty(app.SelectedListBox.Items{1})
-                ind = find(ismember(app.StepsListBox.Items,app.StepsListBox.Value));
-                app.SelectedListBox.Items{1} = app.StepsListBox.Value;
-                app.SelectedListBox.ItemsData{1} = ['item',num2str(1)];
-                app.ChangedVal{1}       = app.DefaultsVal{ind};
-                app.stepParamKeys{1}    = app.defaultParamKeys{ind};
-            % elseif isempty(app.SelectedListBox.Items{1})
-            %     ind = find(ismember(app.StepsListBox.Items,app.StepsListBox.Value));
-            %     app.SelectedListBox.Items{1} = app.StepsListBox.Value;
-            %     app.SelectedListBox.ItemsData{1} = ['item',num2str(1)];
-            %     app.ChangedVal{1}=app.DefaultsVal{ind};
-            else
-                ind = find(ismember(app.StepsListBox.Items,app.StepsListBox.Value));
-                app.ItemNum = numel(app.SelectedListBox.Items);
-                app.SelectedListBox.Items{app.ItemNum+1} = app.StepsListBox.Value;
-                app.SelectedListBox.ItemsData{app.ItemNum+1} = ['item',num2str(app.ItemNum+1)];
-                app.ChangedVal{app.ItemNum+1}    = app.DefaultsVal{ind};
-                app.stepParamKeys{app.ItemNum+1} = app.defaultParamKeys{ind};
-            end
-            app.pipelineDirty = true;
-            updateStatusBar(app);
+            stepName = app.StepsListBox.Value;
+            appendStep(app, stepName);
         end
 
         % Button pushed function: MoveUpButton
         function MoveUpButtonPushed(app, event)
-            value = app.SelectedListBox.Value;
-            ind1 = find(ismember(app.SelectedListBox.ItemsData,value));
-            if ind1 ~= 1
-                A = app.SelectedListBox.Items{ind1-1};
-                B = app.SelectedListBox.Items{ind1};
-                app.SelectedListBox.Items{ind1-1} = B;
-                app.SelectedListBox.Items{ind1} = A;
-
-                app.SelectedListBox.ItemsData{ind1-1} = strcat('Item',num2str(ind1-1));
-                app.SelectedListBox.ItemsData{ind1} = strcat('Item',num2str(ind1));
-                C = app.ChangedVal{ind1-1};
-                D = app.ChangedVal{ind1};
-                app.ChangedVal{ind1-1} = D;
-                app.ChangedVal{ind1}   = C;
-                Ck = app.stepParamKeys{ind1-1};
-                Dk = app.stepParamKeys{ind1};
-                app.stepParamKeys{ind1-1} = Dk;
-                app.stepParamKeys{ind1}   = Ck;
-            end
-            app.SelectedListBox.Value=app.SelectedListBox.ItemsData{ind1-1};
-            app.pipelineDirty = true;
-            updateStatusBar(app);
+            ind = find(ismember(app.SelectedListBox.ItemsData, app.SelectedListBox.Value));
+            moveStep(app, ind, -1);
         end
 
         % Button pushed function: SavePipelineButton
@@ -1365,42 +1400,14 @@ classdef nestapp < matlab.apps.AppBase
 
         % Button pushed function: RemoveButton
         function RemoveButtonPushed(app, event)
-            ind = find(ismember(app.SelectedListBox.ItemsData,app.SelectedListBox.Value));
-            app.SelectedListBox.Items(ind) = [];
-            app.SelectedListBox.ItemsData(ind) = [];
-            app.ChangedVal(ind)    = [];
-            app.stepParamKeys(ind) = [];
-            for i = ind : length(app.SelectedListBox.ItemsData)
-                app.SelectedListBox.ItemsData{i} = ['Item',num2str(i)];
-            end
-            app.pipelineDirty = true;
-            updateStatusBar(app);
+            ind = find(ismember(app.SelectedListBox.ItemsData, app.SelectedListBox.Value));
+            removeStep(app, ind);
         end
 
         % Button pushed function: MoveDownButton
         function MoveDownButtonPushed(app, event)
-            value = app.SelectedListBox.Value;
-            ind1 = find(ismember(app.SelectedListBox.ItemsData,value));
-            if ind1 ~= numel(app.SelectedListBox.Items)
-                A = app.SelectedListBox.Items{ind1+1};
-                B = app.SelectedListBox.Items{ind1};
-                app.SelectedListBox.Items{ind1+1} = B;
-                app.SelectedListBox.Items{ind1} = A;
-
-                app.SelectedListBox.ItemsData{ind1+1} = strcat('Item',num2str(ind1+1));
-                app.SelectedListBox.ItemsData{ind1} = strcat('Item',num2str(ind1));
-                C = app.ChangedVal{ind1+1};
-                D = app.ChangedVal{ind1};
-                app.ChangedVal{ind1+1} = D;
-                app.ChangedVal{ind1}   = C;
-                Ck = app.stepParamKeys{ind1+1};
-                Dk = app.stepParamKeys{ind1};
-                app.stepParamKeys{ind1+1} = Dk;
-                app.stepParamKeys{ind1}   = Ck;
-            end
-            app.SelectedListBox.Value=app.SelectedListBox.ItemsData{ind1+1};
-            app.pipelineDirty = true;
-            updateStatusBar(app);
+            ind = find(ismember(app.SelectedListBox.ItemsData, app.SelectedListBox.Value));
+            moveStep(app, ind, +1);
         end
 
         % Button pushed function: LoadPipelineButton
@@ -1511,14 +1518,7 @@ classdef nestapp < matlab.apps.AppBase
                 if strcmp(answer, 'Cancel'); return; end
             end
             clc
-            app.SelectedListBox.Items(:)  = [];
-            app.SelectedListBox.ItemsData(:) = [];
-            app.UITable.Data    = [];
-            app.ChangedVal      = {};
-            app.stepParamKeys   = {};
-            app.ItemNum         = 0;
-            app.nstep           = 1;
-            app.needchanloc     = 1;
+            clearSteps(app);
         end
 
         % Menu selected function: Load Template...
@@ -1552,36 +1552,19 @@ classdef nestapp < matlab.apps.AppBase
                 t = templates(idx);
 
                 % Clear pipeline without confirmation
-                app.SelectedListBox.Items(:)  = [];
-                app.SelectedListBox.ItemsData(:) = [];
-                app.UITable.Data    = [];
-                app.ChangedVal      = {};
-                app.stepParamKeys   = {};
-                app.ItemNum         = 0;
-                app.nstep           = 1;
-                app.needchanloc     = 1;
+                clearSteps(app);
                 clc
 
                 % Add each step and apply overrides
                 for si = 1:numel(t.steps)
                     stepLabel = t.steps{si};
-                    regIdx = find(strcmp(app.StepsListBox.Items, stepLabel), 1);
-                    if isempty(regIdx)
+                    if ~any(strcmp(app.StepsListBox.Items, stepLabel))
                         warning('nestapp:template', ...
                             'Template step "%s" not found in registry — skipped.', stepLabel);
                         continue
                     end
-                    % Add the step using the same logic as AddButtonPushed
-                    n = numel(app.SelectedListBox.Items);
-                    if n == 0 || (n == 1 && isempty(app.SelectedListBox.Items{1}))
-                        pos = 1;
-                    else
-                        pos = n + 1;
-                    end
-                    app.SelectedListBox.Items{pos}    = stepLabel;
-                    app.SelectedListBox.ItemsData{pos} = ['item' num2str(pos)];
-                    app.ChangedVal{pos}    = app.DefaultsVal{regIdx};
-                    app.stepParamKeys{pos} = app.defaultParamKeys{regIdx};
+                    appendStep(app, stepLabel);
+                    pos = numel(app.SelectedListBox.Items);
 
                     % Apply parameter overrides for this step
                     if si <= numel(t.overrides) && ~isempty(fieldnames(t.overrides{si}))
@@ -1595,8 +1578,6 @@ classdef nestapp < matlab.apps.AppBase
                             if isempty(row); continue; end
                             v = ov.(rawKey);
                             if isnumeric(v)
-                                % Store as mat2str string, consistent with
-                                % how DefaultsVal is built in startupFcn.
                                 T.val{row} = string(mat2str(v));
                             else
                                 T.val{row} = string(v);

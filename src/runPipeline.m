@@ -235,7 +235,6 @@ for nfile = 1:nFiles
                         vars([ind3, ind3+1])=[];
                     end
                     EEG = eeg_checkset(EEG);
-                    EEG.pipeline=app.steps2run;
                     % CURRENTSET = CURRENTSET + 1;
                     % assignin('base','EEG',EEG)
                     % assignin('base','ALLEEG',ALLEEG)
@@ -1046,6 +1045,14 @@ for nfile = 1:nFiles
         end
     end
 
+    % Write pipeline provenance to EEG.history so it is visible when the
+    % researcher types `EEG` in the MATLAB command window and is preserved
+    % inside the saved .set file.
+    if isstruct(EEG) && isfield(EEG, 'history')
+        EEG.history = [EEG.history, newline, ...
+            buildHistoryEntry(app.steps2run, app.pipelineName)];
+    end
+
     % Compute five-axis TEP quality vector (opt-in; off by default)
     if getpref('nestapp', 'computeQuality', false) && ...
             isstruct(EEG) && isfield(EEG, 'trials') && EEG.trials > 1
@@ -1077,6 +1084,51 @@ end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Local helpers
+
+function entry = buildHistoryEntry(steps2run, pipelineName)
+% BUILDHISTORYENTRY  Build a human-readable provenance string for EEG.history.
+%   steps2run is the flat cell array {name1, params1, name2, params2, ...}
+%   produced by runPipeline's initialisation block.
+%
+%   The resulting string follows EEGLAB's convention of comment-prefixed
+%   lines so it is readable when the user types EEG in the command window.
+
+timestamp = string(datetime('now'), 'yyyy-MM-dd HH:mm:ss');
+if isempty(pipelineName)
+    pipelineName = '(unsaved)';
+end
+
+lines = { ...
+    sprintf('%% --- nestapp pipeline  [%s] ---', timestamp), ...
+    sprintf('%% Pipeline: %s', pipelineName), ...
+    '%  Steps:' ...
+};
+
+nSteps = numel(steps2run) / 2;
+for si = 1:nSteps
+    sName  = steps2run{2*si - 1}{1};
+    params = steps2run{2*si};
+    if isempty(params)
+        paramStr = '';
+    else
+        pairs = cell(1, numel(params)/2);
+        for pi = 1:numel(params)/2
+            key = params{2*pi - 1};
+            val = params{2*pi};
+            if isnumeric(val)
+                valStr = mat2str(val);
+            else
+                valStr = char(val);
+            end
+            pairs{pi} = sprintf('%s=%s', key, valStr);
+        end
+        paramStr = ['  [', strjoin(pairs, ', '), ']'];
+    end
+    lines{end+1} = sprintf('%%  %2d. %s%s', si, sName, paramStr); %#ok<AGROW>
+end
+
+entry = strjoin(lines, newline);
+end
 
 function writeSessionLog(pathName, fileName, stepLog)
 % WRITESESSIONLOG  Write a plain-text processing log alongside the data file.
