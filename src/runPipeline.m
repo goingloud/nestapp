@@ -1069,10 +1069,19 @@ end
 
 if isvalid(dlg); close(dlg); end
 
-% Store reports on app and update the Reports tab
+% Store reports on app and update the Reports tab.
+% For multi-file runs, prepend a session summary entry above the individual
+% file entries so the researcher sees the cross-file overview first.
+if numel(allReports) > 1
+    summEntry.text      = summarizeReports(allReports);
+    summEntry.report    = [];   % no single-file report for this entry
+    summEntry.isSummary = true;
+    app.allPipelineReports{end+1} = summEntry;
+end
 for ri = 1:numel(allSummaries)
-    entry.text   = allSummaries{ri};
-    entry.report = allReports{ri};
+    entry.text      = allSummaries{ri};
+    entry.report    = allReports{ri};
+    entry.isSummary = false;
     app.allPipelineReports{end+1} = entry;
 end
 % Reports tab is refreshed by nestapp.RunAnalysisButtonPushed after this

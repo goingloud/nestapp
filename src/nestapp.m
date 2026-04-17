@@ -556,13 +556,23 @@ classdef nestapp < matlab.apps.AppBase
             labels = cell(1, n);
             for i = 1:n
                 e = allEntries{i};
-                [~, baseName] = fileparts(e.report.inputFile);
-                try
-                    dateLabel = datestr(e.report.processedAt, 'yyyy-mm-dd HH:MM'); %#ok<DATST>
-                catch
-                    dateLabel = '?';
+                if isfield(e, 'isSummary') && e.isSummary
+                    % Extract file count from the summary header line
+                    tok = regexp(e.text, 'PIPELINE SUMMARY\s+\((\d+) files\)', 'tokens', 'once');
+                    if ~isempty(tok)
+                        labels{i} = sprintf('Session Summary (%s files)', tok{1});
+                    else
+                        labels{i} = 'Session Summary';
+                    end
+                else
+                    [~, baseName] = fileparts(e.report.inputFile);
+                    try
+                        dateLabel = datestr(e.report.processedAt, 'yyyy-mm-dd HH:MM'); %#ok<DATST>
+                    catch
+                        dateLabel = '?';
+                    end
+                    labels{i} = sprintf('%s (%s)', baseName, dateLabel);
                 end
-                labels{i} = sprintf('%s (%s)', baseName, dateLabel);
             end
 
             % Preserve selection index across refresh if still valid
@@ -692,7 +702,9 @@ classdef nestapp < matlab.apps.AppBase
                 'Reproducibility,AEP likeness\n']);
 
             for i = 1:numel(allEntries)
-                r = allEntries{i}.report;
+                e = allEntries{i};
+                if isfield(e, 'isSummary') && e.isSummary; continue; end
+                r = e.report;
                 [~, baseName] = fileparts(r.inputFile);
                 try
                     dStr = datestr(r.processedAt, 'yyyy-mm-dd HH:MM:SS'); %#ok<DATST>
@@ -728,6 +740,12 @@ classdef nestapp < matlab.apps.AppBase
             if isempty(idx); return; end
             allEntries = [app.allPipelineReports, app.loadedReports];
             if ~isnumeric(idx) || idx < 1 || idx > numel(allEntries); return; end
+            if isfield(allEntries{idx}, 'isSummary') && allEntries{idx}.isSummary
+                uialert(app.UIFigure, ...
+                    'Select an individual file report to copy a methods paragraph.', ...
+                    'Session Summary');
+                return
+            end
             r = allEntries{idx}.report;
 
             parts = {};
