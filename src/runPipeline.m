@@ -85,6 +85,14 @@ nSteps = numel(app.steps2run) / 2;
 allSummaries = {};
 allReports   = {};
 
+% Pre-flight overwrite check: when EEGLAB dialogs are suppressed the normal
+% "Dataset info" prompt that would warn about overwrites is also gone.
+% Warn once here, before any file is touched, so the user can cancel cleanly.
+if getpref('nestapp', 'suppressEEGLABDialogs', true)
+    warnIfOverwriteFiles(app, nFiles, nSteps);
+    % warnIfOverwriteFiles throws 'nestapp:cancelled' if the user cancels.
+end
+
 dlg = uiprogressdlg(app.UIFigure, ...
     'Title',           'Running Pipeline', ...
     'Message',         'Initialising...', ...
@@ -1063,7 +1071,12 @@ for nfile = 1:nFiles
     [summaryText, ~] = exportReport(fileReport, pathName);
     allSummaries{end+1} = summaryText; %#ok<AGROW>
     allReports{end+1}   = fileReport;  %#ok<AGROW>
-    eeglab redraw
+    % Only update the EEGLAB window if the user has opted in; the redraw
+    % is the source of both the EEGLAB window appearing and the
+    % "Dataset info - pop_newset()" dialog that fires after each file.
+    if ~getpref('nestapp', 'hideEEGLABWindow', true)
+        eeglab redraw
+    end
     disp('-----------------Data processed!-----------------')
 end
 
@@ -1093,6 +1106,78 @@ end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Local helpers
+
+function warnIfOverwriteFiles(app, nFiles, nSteps)
+% WARNIFOVERWRITEFILES  Before running, check whether Save New Set would
+%   overwrite existing .set files and warn the user.
+%
+%   When EEGLAB dialogs are suppressed the normal mid-run "Dataset info"
+%   prompt is gone, so we surface overwrites here — once, cleanly, before
+%   any file is touched. Throws 'nestapp:cancelled' if the user cancels.
+
+% Find the Save New Set step in steps2run
+saveIdx = [];
+for si = 1:nSteps
+    name = app.steps2run{2*si - 1};
+    if iscell(name); name = name{1}; end
+    if strcmp(name, 'Save New Set')
+        saveIdx = si;
+        break
+    end
+end
+if isempty(saveIdx); return; end   % no Save New Set → nothing to check
+
+% Extract savenew suffix and includeFileName flag from the step params
+params  = app.steps2run{2 * saveIdx};
+savenew = '';
+ifn     = 'yes';
+for pi = 1:2:numel(params)-1
+    switch lower(string(params{pi}))
+        case 'savenew'
+            v = params{pi+1};
+            if ischar(v) || isstring(v)
+                sv = strtrim(char(v));
+                if ~strcmp(sv,'[]') && ~isempty(sv)
+                    savenew = sv;
+                end
+            end
+        case 'includefilename'
+            ifn = char(params{pi+1});
+    end
+end
+if isempty(savenew); return; end   % no output filename configured
+
+% Check each input file for a pre-existing output file
+existing = {};
+for fi = 1:nFiles
+    fn = app.file{fi};
+    [~, base, ext] = fileparts(fn);
+    ext = ext(2:end);   % strip dot
+    % Mirror the fname construction in the Save New Set case of runPipeline
+    if strcmpi(ifn, 'yes')
+        stem = replace(replace([app.path, fn(1:end-numel(ext)-1)], ' ', '_'), '-', '_');
+        outName = [stem, '_', savenew, '.set'];
+    else
+        outName = fullfile(app.path, [savenew, '.set']);
+    end
+    if exist(outName, 'file')
+        [~, dispName] = fileparts(outName);
+        existing{end+1} = [dispName, '.set']; %#ok<AGROW>
+    end
+end
+if isempty(existing); return; end
+
+% Warn — uiconfirm blocks until the user responds
+msg = sprintf(['%d output file(s) already exist and will be overwritten:\n\n' ...
+    '%s\n\nContinue?'], numel(existing), strjoin(existing, '\n'));
+answer = uiconfirm(app.UIFigure, msg, 'Output Files Exist', ...
+    'Options', {'Continue', 'Cancel'}, ...
+    'DefaultOption', 2, 'CancelOption', 2, ...
+    'Icon', 'warning');
+if strcmp(answer, 'Cancel')
+    error('nestapp:cancelled', 'Run cancelled by user.');
+end
+end
 
 function entry = buildHistoryEntry(steps2run, pipelineName)
 % BUILDHISTORYENTRY  Build a human-readable provenance string for EEG.history.
