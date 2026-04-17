@@ -73,10 +73,6 @@ else
         app.steps2run{i} = [];
         app.steps2run{i} = inputvals;
     end
-    % Below will export the Steps and their name to MATLAB workspace
-    assignin('base','steps2run',app.steps2run);
-    assignin('base','stepsName',app.SelectedListBox.Items);
-
     app.nstep = 1; % The Steps starting point
     chName = []; % No File Selected for Channel Location
     dstep = 2; % DO NOT CHANGE THIS.
@@ -203,13 +199,6 @@ for nfile = 1:nFiles
                     EEG.filename=fileName;
                     % Set the mode as 'on' to redraw loaded file to eeglab
                     if strcmpi(mode,'on')
-                        postVars = who;
-                        assignin('base','postVars',postVars)
-                        for i = 1:numel(postVars)
-                            if find(ismember(postVars{i}, app.initialVars))
-                                assignin('base',postVars{i},eval(postVars{i}))
-                            end
-                        end
                         % eeglab redraw
                     end
                     [ALLEEG, EEG, CURRENTSET] = eeg_store(ALLEEG, EEG, CURRENTSET);
@@ -285,7 +274,6 @@ for nfile = 1:nFiles
                     vars = convertContainedStringsToChars(varin);
                     inds = find(strcmp(vars,'[]'));
                     vars([inds,inds-1])=[];
-                    assignin('base',"vars",vars)
                     EEG = pop_select( EEG,vars{:});
                     EEG = eeg_checkset( EEG );
                 
@@ -460,7 +448,6 @@ for nfile = 1:nFiles
                     % Notch frequency, 60 Hz and its first harmonic, 120 Hz is being filtered
                     % from all channels, 1:63
                     vars = convertContainedStringsToChars(varin);
-                    assignin('base','vars',vars);
                     ind = find(strcmp(vars,'chanlist'));
 
                     if vars{ind+1}(2) > EEG.nbchan
@@ -857,8 +844,7 @@ for nfile = 1:nFiles
                     vars = convertContainedStringsToChars(varin);
                     inds = find(strcmp(vars,'[]'));
                     vars([inds,inds-1]) = [];
-                    tepoutput = pop_tesa_peakoutput( EEG, vars{:} );
-                    assignin('base','tep_output',tepoutput)
+                    tepoutput = pop_tesa_peakoutput( EEG, vars{:} ); %#ok<NASGU>
 
             end
 
@@ -1053,15 +1039,6 @@ for nfile = 1:nFiles
                     stepIdx, stepName, err.message), ...
                 'Step Failed','Options',{'Continue','Abort'},'DefaultOption','Continue','CancelOption','Abort');
             if strcmp(toContinue,'Abort')
-                postVars = who;
-                assignin('base','postVars',postVars)
-                for i = 1:numel(postVars)
-                    if find(ismember(postVars{i}, app.initialVars))
-                        assignin('base',postVars{i},eval(postVars{i}))
-                    end
-                end
-                assignin('base','lastVarin',varin);
-                assignin('base','lastStepInd',Step);
                 writeSessionLog(pathName, fileName, stepLog);
                 if isvalid(dlg); close(dlg); end
                 return
@@ -1091,7 +1068,8 @@ for ri = 1:numel(allSummaries)
     entry.report = allReports{ri};
     app.allPipelineReports{end+1} = entry;
 end
-app.updateReportsTab();
+% Reports tab is refreshed by nestapp.RunAnalysisButtonPushed after this
+% function returns — not called here to avoid a circular dependency.
 if getpref('nestapp', 'showReport', true) && ~isempty(allSummaries)
     app.TabGroup.SelectedTab = app.ReportsTab;
 end

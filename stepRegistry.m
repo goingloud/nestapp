@@ -19,6 +19,14 @@ function steps = stepRegistry()
 % Copyright (C) 2023  Aref Pariz, University of Ottawa & The Royal
 % Institute for Mental Health, Ottawa, Ontario, Canada.
 
+% Persistent cache: stepRegistry() is called from startupFcn, LoadPipeline,
+% and LoadTemplate — avoid rebuilding the full struct array on every call.
+persistent cachedSteps
+if ~isempty(cachedSteps)
+    steps = cachedSteps;
+    return
+end
+
 steps = struct('name',{},'defaults',{},'info',{},'params',{});
 
 %% ---- Load Data -------------------------------------------------------
@@ -1089,6 +1097,8 @@ s.params = [ ...
     mp('description','Description', '','string', ...
        'Optional label for this step shown in the pipeline log.')];
 steps(end+1) = s;
+
+cachedSteps = steps;
 
 end % stepRegistry
 

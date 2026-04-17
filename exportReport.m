@@ -28,7 +28,7 @@ end
 lines = {};
 lines{end+1} = '=== Pipeline Report ===';
 lines{end+1} = sprintf('File:      %s', report.inputFile);
-lines{end+1} = sprintf('Processed: %s', datestr(report.processedAt, 'yyyy-mm-dd HH:MM:SS'));
+lines{end+1} = sprintf('Processed: %s', string(report.processedAt, 'yyyy-MM-dd HH:mm:ss'));
 lines{end+1} = '';
 
 % Channels
@@ -278,7 +278,7 @@ end
 if getpref('nestapp', 'overwriteReports', false)
     matFileName = sprintf('%s_report.mat', baseName);
 else
-    timestamp   = datestr(report.processedAt, 'yyyymmdd_HHMMSS');
+    timestamp   = string(report.processedAt, 'yyyyMMdd_HHmmss');
     matFileName = sprintf('%s_report_%s.mat', baseName, timestamp);
 end
 matPath = fullfile(outputDir, matFileName);

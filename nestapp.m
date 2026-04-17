@@ -185,8 +185,8 @@ classdef nestapp < matlab.apps.AppBase
         SelectedFilesforTEP % Selected files to plot the TEP
         Common_Labels % Commong electrod name among files
         ROIelecsLabels % Selected electrodes as Region of Interest
-        TEPCreated = 0; % If the TEP plot bottomn has been pressed once
-        EEG_SelectedTEPFiles_Loaded = 0;
+        TEPCreated = false; % true once the TEP plot has been rendered at least once
+        EEG_SelectedTEPFiles_Loaded = false;
         EEGofAllSelectedFiles = [];
         DefaulTEPxLim = [-50 300]; % Default xLim for time in TEP
         EEGtime
@@ -284,8 +284,6 @@ classdef nestapp < matlab.apps.AppBase
                 else
                     app.NSelecFiles = numel(app.file);
                 end
-                assignin('base', 'files', app.file);
-                assignin('base', 'paths', app.path);
                 app.SelectedFilesListBox.Items = app.file;
                 setpref('nestapp', 'lastDataFolder', app.path);
                 pushRecent(app, 'recentFiles', app.path);
@@ -948,10 +946,10 @@ classdef nestapp < matlab.apps.AppBase
                 app.EEGofAllSelectedFiles{nfile} = EEGaux;
                 app.EEGtime = EEGaux.times;
             end
-            app.EEG_SelectedTEPFiles_Loaded = 1;
+            app.EEG_SelectedTEPFiles_Loaded = true;
         end
 
-        function app = LoadLabels(app)
+        function LoadLabels(app)
             all_labels = cell(1,numel(app.SelectedFilesforTEP));
             if ~app.EEG_SelectedTEPFiles_Loaded
                 LoadSelecEEGdata(app)
@@ -973,8 +971,11 @@ classdef nestapp < matlab.apps.AppBase
             % Uncommon labels = total - common
             uncommon_labels.Items = intersect(app.elecList,setdiff(total_labels, app.Common_Labels.Items));
             for nn = 1:length(uncommon_labels.Items)
-                app.([upper(uncommon_labels.Items{nn}),'Button']).Enable = 'off';
-                app.([upper(uncommon_labels.Items{nn}),'Button']).Value = 0;
+                propName = [upper(uncommon_labels.Items{nn}), 'Button'];
+                if isprop(app, propName)
+                    app.(propName).Enable = 'off';
+                    app.(propName).Value  = 0;
+                end
             end
             
         end
@@ -1066,7 +1067,7 @@ classdef nestapp < matlab.apps.AppBase
             if ~app.EEG_SelectedTEPFiles_Loaded
                 LoadSelecEEGdata(app)
             end
-            app = LoadLabels(app);
+            LoadLabels(app);
             BIGEEG = zeros(numel(app.Common_Labels.Items), length(app.EEGtime),numel(app.EEGofAllSelectedFiles));
             for nfile = 1:numel(app.EEGofAllSelectedFiles)
                 EEGaux = app.EEGofAllSelectedFiles{1,nfile};
@@ -1345,15 +1346,21 @@ classdef nestapp < matlab.apps.AppBase
 
         % Button pushed function: SavePipelineButton
         function SavePipelineButtonPushed(app, event) %#ok<INUSD>
-            PLItems = app.SelectedListBox.Items;     %#ok<NASGU>
-            PLItemsData = app.SelectedListBox.ItemsData; %#ok<NASGU>
-            VarIns = app.ChangedVal;                 %#ok<NASGU>
-            ParamKeys = app.stepParamKeys;           %#ok<NASGU>
             startFolder = getpref('nestapp', 'lastPipelineFolder', '');
-            uisave({'PLItems','PLItemsData','VarIns','ParamKeys'}, ...
-                fullfile(startFolder, '*.mat'));
-            % uisave does not return the chosen path; dirty flag and name update
-            % deferred until Save Pipeline moves to a proper uiputfile dialog.
+            [fName, fPath] = uiputfile('*.mat', 'Save Pipeline', ...
+                fullfile(startFolder, 'pipeline.mat'));
+            if isequal(fName, 0); return; end   % user cancelled
+            PLItems     = app.SelectedListBox.Items;      %#ok<NASGU>
+            PLItemsData = app.SelectedListBox.ItemsData;  %#ok<NASGU>
+            VarIns      = app.ChangedVal;                 %#ok<NASGU>
+            ParamKeys   = app.stepParamKeys;              %#ok<NASGU>
+            save(fullfile(fPath, fName), 'PLItems', 'PLItemsData', 'VarIns', 'ParamKeys');
+            setpref('nestapp', 'lastPipelineFolder', fPath);
+            pushRecent(app, 'recentPipelines', fullfile(fPath, fName));
+            [~, baseName, ~] = fileparts(fName);
+            app.pipelineName  = baseName;
+            app.pipelineDirty = false;
+            updateStatusBar(app);
         end
 
         % Button pushed function: RemoveButton
@@ -1479,9 +1486,6 @@ classdef nestapp < matlab.apps.AppBase
                     app.NSelecFiles = 1;
                     app.file = {app.file};
                 end
-
-                assignin('base','files',app.file)
-                assignin('base','paths',app.path)
 
                 app.SelectedFilesListBox.Items = app.file;
                 setpref('nestapp', 'lastDataFolder', app.path);
@@ -1624,6 +1628,9 @@ classdef nestapp < matlab.apps.AppBase
                 uialert(app.UIFigure, err.message, 'Pipeline Error', 'Icon', 'error');
                 return
             end
+            % Update Reports tab after pipeline completes — done here rather
+            % than inside runPipeline to avoid a circular dependency.
+            updateReportsTab(app);
             if app.UseCurrentlyCleanedDataCheckBox.Value
                 UseCurrentlyCleanedDataCheckBoxValueChanged(app)
             end
@@ -1678,6 +1685,7 @@ classdef nestapp < matlab.apps.AppBase
         % Size changed function: UIFigure
         function UIFigureSizeChanged(app, ~)
             if isempty(app.originalSize); return; end
+            drawnow limitrate  % throttle: skip redraws that arrive faster than screen refresh
             newSize = app.UIFigure.Position(3:4);
             minW = 650; minH = 420;
             if newSize(1) < minW || newSize(2) < minH
@@ -1724,12 +1732,12 @@ classdef nestapp < matlab.apps.AppBase
             if ~CheckifanyFileSelected(app)
                 warning('Please select at least a file to plot the TEP!');
             else
-                app = LoadLabels(app);
+                LoadLabels(app);
                 findTEPelecs(app);
                 plotTEP(app)
                 app.Slider.Limits = [app.EEGtime(1) app.EEGtime(end)];
                 app.TEPWindowSlider.Limits = [app.EEGtime(1) app.EEGtime(end)];
-                app.TEPCreated = 1;
+                app.TEPCreated = true;
                 app.TEPWindowSlider.Value = app.DefaulTEPxLim;
                 
                 app.ExportTEPDataButton.Enable = 'on';
@@ -1798,6 +1806,10 @@ classdef nestapp < matlab.apps.AppBase
                     app.TEPfiles = {app.TEPfiles};
                 end
 
+                % Invalidate EEG cache — new files mean stale loaded data must be discarded.
+                app.EEG_SelectedTEPFiles_Loaded = false;
+                app.EEGofAllSelectedFiles = {};
+
                 % app.FileEditField_2.Value = app.TEPfiles{1};
                 app.FolderEditField_2.Value = app.PathofSelectedFilesforTEP;
                 app.FilesListBox.Items =  app.TEPfiles';
@@ -1821,7 +1833,7 @@ classdef nestapp < matlab.apps.AppBase
 
         % Value changed function: FilesListBox
         function FilesListBoxValueChanged(app, event)
-            app.EEG_SelectedTEPFiles_Loaded = 0;
+            app.EEG_SelectedTEPFiles_Loaded = false;
             app.EEGofAllSelectedFiles = []; % Every time the new file is checked clear the all loaded EEG data
             if ~isempty(event.Value) || event.Value ~= 0
                 % fname = event.Value;
@@ -1865,7 +1877,7 @@ classdef nestapp < matlab.apps.AppBase
         % Button pushed function: ReLoadAvailableElectrodesButton
         function ReLoadAvailableElectrodesButtonPushed(app, event)
             if CheckifanyFileSelected(app)
-                app = LoadLabels(app);
+                LoadLabels(app);
             end
 
         end

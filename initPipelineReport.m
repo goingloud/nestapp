@@ -7,7 +7,7 @@ function report = initPipelineReport(inputFile)
 %
 %   Fields
 %     inputFile             - full path to the file being processed
-%     processedAt           - datenum when processing started
+%     processedAt           - datetime when processing started
 %     steps                 - cell array of step records (one per completed step)
 %     channels.original     - EEG.nbchan at Load Data
 %     channels.nRejected    - cumulative channels removed (bad channel steps)
@@ -30,7 +30,7 @@ function report = initPipelineReport(inputFile)
 %   See also: exportReport, runPipeline
 
 report.inputFile   = inputFile;
-report.processedAt = now;   % datenum — exportReport uses datestr() which requires datenum
+report.processedAt = datetime('now');
 
 report.steps = {};
 

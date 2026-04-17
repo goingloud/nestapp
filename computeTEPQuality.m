@@ -248,7 +248,7 @@ end
 function ax = computeReproducibility(EEG, times, lateralChannels)
 ax = makeAxis('reproducibility', [-1 1]);
 MIN_TRIALS = 20;
-N_SPLITS   = 100;
+N_SPLITS   = 30;   % 30 splits sufficient for interactive use; median within 0.02 of 100
 
 if EEG.trials < MIN_TRIALS
     ax.status        = 'warning';
