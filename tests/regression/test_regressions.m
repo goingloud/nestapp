@@ -191,3 +191,33 @@ testCase.verifyTrue(contains(window, 'pipelineDirty') && ...
     (contains(window, '= false') || contains(window, '= 0')), ...
     'SavePipelineButtonPushed must clear pipelineDirty after successful save');
 end
+
+% ── EEG.history provenance ────────────────────────────────────────────────
+
+function test_runPipelineWritesToEEGHistory(testCase)
+% Pipeline steps must be written to EEG.history so researchers see the
+% processing record when typing EEG at the MATLAB prompt.
+src = fileread(fullfile(srcRoot(), 'runPipeline.m'));
+testCase.verifyTrue(contains(src, 'EEG.history'), ...
+    'runPipeline.m must write to EEG.history for pipeline provenance');
+end
+
+function test_buildHistoryEntryExists(testCase)
+% buildHistoryEntry is the local function that formats the provenance string.
+% Its existence pins the implementation: renaming or deleting it breaks the
+% EEG.history feature.
+src = fileread(fullfile(srcRoot(), 'runPipeline.m'));
+testCase.verifyTrue(contains(src, 'buildHistoryEntry'), ...
+    'runPipeline.m must contain buildHistoryEntry for formatting EEG.history entries');
+end
+
+function test_buildHistoryEntryIncludesTimestamp(testCase)
+% The provenance entry must include a timestamp so researchers can see when
+% the pipeline ran, not just what steps it contained.
+src = fileread(fullfile(srcRoot(), 'runPipeline.m'));
+idx = strfind(src, 'function entry = buildHistoryEntry');
+testCase.verifyFalse(isempty(idx), 'buildHistoryEntry function must exist');
+window = src(idx(1):min(idx(1)+1500, numel(src)));
+testCase.verifyTrue(contains(window, 'datetime'), ...
+    'buildHistoryEntry must include a datetime timestamp in the history entry');
+end

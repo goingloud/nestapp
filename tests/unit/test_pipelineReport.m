@@ -225,3 +225,47 @@ report.ica.varMax      = 7.1;
 txt = exportReport(report, '');
 testCase.verifyTrue(contains(txt, '18'), 'Should mention variance removed (~18%)');
 end
+
+function test_methodsICAWithCategories(testCase)
+% When ICLabel category data is present the report must show the breakdown.
+report = initPipelineReport('test.set');
+report.ica.nComponents = 25;
+report.ica.nRejected   = 5;
+report.ica.nKept       = 20;
+% Set two non-zero category counts (Muscle and Eye)
+report.ica.categories.nRemoved(2) = 3;   % Muscle
+report.ica.categories.nRemoved(3) = 2;   % Eye
+report.ica.categories.varShare(2) = 12.0;
+report.ica.categories.varShare(3) = 6.5;
+txt = exportReport(report, '');
+testCase.verifyTrue(contains(txt, 'Muscle') || contains(lower(txt), 'muscle'), ...
+    'Report must list Muscle category when components were rejected in that category');
+testCase.verifyTrue(contains(txt, 'Eye') || contains(lower(txt), 'eye'), ...
+    'Report must list Eye category when components were rejected in that category');
+end
+
+function test_methodsMultiRoundNoVariance(testCase)
+% Multi-round TESA ICA: top-level variance fields are NaN (variance is not
+% additive across ICA bases); only per-round detail should carry variance.
+report = initPipelineReport('test.set');
+report.ica.nComponents = 30;
+report.ica.nRejected   = 8;
+report.ica.nKept       = 22;
+% Simulate two rounds — varRemoved stays NaN at the top level
+rnd1.nComponents = 30; rnd1.nRejected = 4; rnd1.varRemoved = 15.0;
+rnd1.varMin = 2.0; rnd1.varMax = 6.0;
+rnd1.categories = report.ica.categories;
+rnd2.nComponents = 26; rnd2.nRejected = 4; rnd2.varRemoved = NaN;
+rnd2.varMin = NaN; rnd2.varMax = NaN;
+rnd2.categories = report.ica.categories;
+report.ica.rounds = {rnd1, rnd2};
+txt = exportReport(report, '');
+% Must mention multiple rounds
+testCase.verifyTrue(contains(txt, '2') && contains(lower(txt), 'round'), ...
+    'Multi-round report must mention round count');
+% Top-level summary must NOT assert a single combined variance figure
+% (because variance across different ICA bases is not additive)
+testCase.verifyFalse(contains(txt, sprintf('%.1f%% ICA variance', ...
+    rnd1.varRemoved + rnd2.varRemoved)), ...
+    'Must not sum variance across rounds in top-level summary');
+end
