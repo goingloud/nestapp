@@ -1,36 +1,136 @@
-# nestapp v2.0
-The NeuroStimulation App (nestapp) utilizes EEGLAB and TESA functions to clean the TMS-EEG data automatically and plot the TMS evoked potentials (TEPs) for selected or already cleaned data.
-The app now has two tabs: Cleaning and Visualizing.
-# Introduction
-The nestapp has been developed using MATLAB App Designer (R2023b & R2018a). The idea is to use the currently available EEGLAB (v2025.0.0), TESA (v1.1.1), and FastICA (2.5) functions for cleaning and analyzing TMS-EEG data.
-Note that FastICA should be added to your MATLAB path.
-# How to use
-In the Cleaning tab:
-1- After downloading the app, run nestapp.m. 
+# nestapp
 
-2- On the left panel, you will see a list of steps that you can choose to apply to your data. By clicking on each step, extra information including the function name, will be available in the 'Info' section. Please read the extra information about each function, on EEGLAB, TESA, and FastICA websites:
+**nestapp** is a MATLAB GUI for cleaning and analysing TMS-EEG recordings. It wraps [EEGLAB](https://eeglab.org/), [TESA](https://nigelrogasch.gitbook.io/tesa-user-manual/), and [FastICA](http://research.ics.aalto.fi/ica/fastica/) into a point-and-click pipeline builder that lets researchers process data without writing code.
 
-EEGLAB: https://eeglab.org/
-TESA: https://nigelrogasch.gitbook.io/tesa-user-manual/
-FastICA: http://research.ics.aalto.fi/ica/fastica/index.shtml
+---
 
-3- You can use the 'Add', 'Remove', 'Move Up' and 'Move Down' buttons to create your desired cleaning pipeline in the 'Selected Steps'. Each of the steps may have parameters that you wish to modify. You can change the value for appropriate properties in the panel below the 'Parameter(s)' section by clicking on the value for appropriate properties. The 'Default Value' button will reset the values of the selected step into the default values.
+## Requirements
 
-4- You can save the created pipeline for future uses, by clicking 'Save pipeline' and giving it the desired name. The pipeline will be saved as a MATLAB Mat file. The 'Load Pipeline' will load the pipeline into the 'Selected Steps' section.
+| Dependency | Version |
+|---|---|
+| MATLAB | R2023b or later (developed on R2025b) |
+| EEGLAB | 2025.0.0 |
+| TESA | 1.1.1 |
+| FastICA | 2.5 |
+| Signal Processing Toolbox | any recent |
+| Statistics and Machine Learning Toolbox | any recent |
 
-5- In the right panel, if EEGLAB is not in your MATLAB path, you can select the folder containing the EEGLAB package.
+FastICA must be on your MATLAB path before running the app.
 
-6- In the 'Select data to perform Analysis' section, choose the files ( in *.vhdr, *.set, *.cnt, *.cdt format) you want to apply the analysis. the number of selected files and the index of the current file being processed will appear below.
+---
 
-7- Pressing 'Re/Start Steps' will erase all selected steps and changes made to the parameters.
+## Getting started
 
-8- By pressing the 'Run Analysis' the cleaning and analyzing process will be started.
+1. Clone or download this repository.
+2. Open MATLAB and navigate to the project root.
+3. Run the entry point:
+   ```matlab
+   run_nestapp
+   ```
+4. The first time you run, open **Settings → Preferences** and point the app to your EEGLAB installation folder.
 
-NOTE: In case your data doesn't have a channel location and you would like to use 'Load Channel Location', please make sure that this function is performing right. Extra features will be added in the future.
+---
 
-In the Visualizing tab:
-Now, you can plot the TEPs for selected data. To plot the TEPs, you need to select the Region of Interest (ROI) electrodes by clicking on them. The selected electrodes will be highlighted. Using the buttons, you can either plot the selected TEP in a new figure or add it to the existing plot. You can also export the TEP for the selected files with a given name to the MATLAB Workspace for further analysis. Also, the topoplot button will allow you to plot the overall activity of the brain around the selected time point and averaged over a given time window. You can also plot the EEG data by selecting the data from the drop-down list.
+## Cleaning tab
 
-# Code Contributors/Developers
-Aref Pariz: The developed code (v1.0 2023) was a part of my job at the Royal Institute for Mental Health, in Dr. Sara Tremblay's lab (NESTLAB: https://www.nest-lab.ca/) and Dr. Jeremie Lefebvre's Lab at the University of Ottawa.
+### Building a pipeline
 
+- The left panel lists all available processing steps. Click a step to see a description and parameter details in the **Info** panel.
+- Use **Add** (or double-click a step) to append it to the **Selected Steps** list.
+- Use **Remove**, **Move Up**, and **Move Down** to edit the order.
+- Click any step in **Selected Steps** to view and edit its parameters in the table below. **Default Value** resets parameters for that step.
+- **Re/Start Steps** clears the pipeline after a confirmation prompt.
+
+### Pipeline templates
+
+**File → Load Template** provides three ready-to-use starting points:
+
+| Template | Description |
+|---|---|
+| TMS-EEG (TESA) | Full TESA artifact-removal workflow for single-pulse TMS |
+| Resting-State EEG | Standard resting-state cleaning with ICA |
+| Minimal (HPF + bad channels) | High-pass filter and bad channel removal only |
+
+### Saving and loading pipelines
+
+- **File → Save Pipeline** saves the current step list and parameters as a `.mat` file.
+- **File → Load Pipeline** restores a previously saved pipeline.
+- Recent pipelines are listed under **File → Recent Pipelines**.
+
+### Running the pipeline
+
+1. Select the data files to process (`.set`, `.vhdr`, `.cnt`, `.cdt`).
+2. Press **Run Analysis**. A progress dialog shows the current file and step; processing can be cancelled between steps.
+
+After the run, the **Reports tab** opens automatically with a per-file summary including channel counts, trial retention, and ICA statistics.
+
+### Pipeline provenance in EEG.history
+
+Every processed file has the pipeline steps and parameters written into `EEG.history`, so the full processing record is visible when a researcher types `EEG` at the MATLAB prompt and is preserved inside the saved `.set` file.
+
+---
+
+## Visualizing tab
+
+- Select one or more processed `.set` files.
+- Click electrode buttons to define the region of interest (ROI).
+- **PLOT TEP** plots the trial-averaged waveform with a shaded SEM band. Multiple files can be overlaid on the same axes.
+- **Show Components** detects and overlays the six canonical TEP components (N15, P30, N45, P60, N100, P180) with latency and amplitude labels.
+- **TOPOPLOT** plots the scalp topography at a selected time point and window.
+- **Export TEP Figure** saves the current plot as PNG, PDF, or `.fig`.
+- The **TEP Window** slider sets the time range shown in the plot.
+
+---
+
+## Reports tab
+
+After each pipeline run, a summary report is added to the **Reports** tab. Reports can be browsed, copied as methods text, and exported as CSV for multi-subject summaries.
+
+### TEP quality metrics (opt-in)
+
+An experimental five-axis quality vector can be enabled under **Settings → Preferences → Compute TEP quality metrics**. It is off by default. The five axes are:
+
+| Axis | What it measures |
+|---|---|
+| Retention | Fraction of trials and channels that survived cleaning |
+| Artifact Reduction | Early-window (11–30 ms) variance reduction at lateral channels |
+| Background Restoration | Spectral similarity of pre- and post-stimulus background |
+| Reproducibility | Split-half correlation of the 30–80 ms TEP window |
+| AEP-Likeness *(experimental)* | Topographic similarity to the canonical auditory vertex potential |
+
+Axes are reported separately — no composite score is computed.
+
+---
+
+## Preferences
+
+Open **Settings → Preferences** to configure:
+
+- EEGLAB installation path
+- Default data and pipeline folders
+- Whether to show the Reports tab automatically after each run
+- Whether to compute TEP quality metrics
+- Whether to require confirmation before clearing a pipeline
+
+---
+
+## Running the test suite
+
+```matlab
+% Unit and regression tests (no EEGLAB required, < 1 minute):
+run_nestapp       % ensures src/ is on the path
+runtests('tests/unit')
+runtests('tests/regression')
+
+% Or use the bundled runner:
+run_tests         % unit + regression
+run_tests('all')  % includes integration tests (requires EEGLAB)
+```
+
+---
+
+## Contributors
+
+**Aref Pariz** — original application (v1.0, 2023), developed at the Royal Institute for Mental Health in Dr. Sara Tremblay's lab ([NESTLAB](https://www.nest-lab.ca/)) and Dr. Jeremie Lefebvre's Lab, University of Ottawa.
+
+**Wesley Dunne** — v2.0 enhancements: pipeline architecture, progress reporting, ICA tracking, pipeline reports, TEP visualisation improvements, TEP quality metrics, pipeline templates, UI improvements, test suite.
