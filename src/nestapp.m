@@ -1087,13 +1087,15 @@ classdef nestapp < matlab.apps.AppBase
                 TEP_ROI(nfile,:) = mean(mean(EEGaux.data(ROIind,:,:), 3, 'omitmissing'), 1, 'omitmissing');
             end
 
-            swin   = 5;
+            SMOOTH_WIN_PTS = 5;       % 5-point moving average (~5 ms at 1 kHz)
             app.TEP2Export = TEP_ROI;
             grandMean = mean(TEP_ROI, 1, 'omitmissing');
             TEP_ROISD = std(TEP_ROI, 1, 1) / sqrt(nFiles);
-            Colr  = rand(1,3);
-            meanx = smoothdata(grandMean,   'movmean', swin);
-            sdx   = smoothdata(TEP_ROISD,  'movmean', swin);
+            co   = app.UIAxes.ColorOrder;
+            idx  = mod(numel(findobj(app.UIAxes, 'Type', 'Line')), size(co, 1)) + 1;
+            Colr = co(idx, :);
+            meanx = smoothdata(grandMean,  'movmean', SMOOTH_WIN_PTS);
+            sdx   = smoothdata(TEP_ROISD, 'movmean', SMOOTH_WIN_PTS);
             xf = [app.EEGtime(1) app.EEGtime  app.EEGtime(end) app.EEGtime(end:-1:1)];
             yf = [meanx(1)-sdx(1)/2 meanx+sdx/2 meanx(end)-sdx(end)/2 meanx(end:-1:1)-sdx(end:-1:1)/2];
 
@@ -1135,9 +1137,9 @@ classdef nestapp < matlab.apps.AppBase
         function EEG_topoplot(app)
             cla(app.UIAxes2)
             BIGEEG = [];
-            IntRad = 0.55;
-            avgType = 'movmean';
-            swin = 5;
+            TOPOPLOT_INTRAD = 0.55;   % EEGLAB default interpolation radius
+            SMOOTH_METHOD   = 'movmean';
+            SMOOTH_WIN_PTS  = 5;      % 5-point moving average (~5 ms at 1 kHz)
             if ~app.EEG_SelectedTEPFiles_Loaded
                 LoadSelecEEGdata(app)
             end
@@ -1151,7 +1153,7 @@ classdef nestapp < matlab.apps.AppBase
                 
             end
             ChansLocs(~commonElectrodsInd) = [];
-            yp = smoothdata(mean(BIGEEG,3,"omitmissing")',avgType,swin)'; % Smooth the EEGdata along subjects
+            yp = smoothdata(mean(BIGEEG,3,"omitmissing")',SMOOTH_METHOD,SMOOTH_WIN_PTS)'; % Smooth the EEGdata along subjects
             timepoint = app.TopoplottimeSpinner.Value;
             Topo_ind = [round(timepoint-app.WindowsizefortimeaveragedTopoplotEditField.Value/2),...
                 round(timepoint+app.WindowsizefortimeaveragedTopoplotEditField.Value/2)];
@@ -1168,7 +1170,7 @@ classdef nestapp < matlab.apps.AppBase
             % Plot into cloned axes
             axes(newAx);  % set as current
             topoplot(mean(Topo,2),ChansLocs,'electrodes','off',...
-                'numcontour',5,'intsquare','on','style','map','conv', 'on', 'intrad',IntRad);axis auto
+                'numcontour',5,'intsquare','on','style','map','conv', 'on', 'intrad',TOPOPLOT_INTRAD);axis auto
             colormap(app.UIAxes2,'hsv')
             % Copy contents back to app UIAxes
             cla(app.UIAxes2);
