@@ -859,7 +859,7 @@ for nfile = 1:nFiles
                     vars = convertContainedStringsToChars(varin);
                     inds = find(strcmp(vars,'[]'));
                     vars([inds,inds-1]) = [];
-                    tepoutput = pop_tesa_peakoutput( EEG, vars{:} ); %#ok<NASGU>
+                    pop_tesa_peakoutput( EEG, vars{:} );
 
             end
 

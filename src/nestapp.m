@@ -583,7 +583,7 @@ classdef nestapp < matlab.apps.AppBase
                 else
                     [~, baseName] = fileparts(e.report.inputFile);
                     try
-                        dateLabel = datestr(e.report.processedAt, 'yyyy-mm-dd HH:MM'); %#ok<DATST>
+                        dateLabel = string(e.report.processedAt, 'yyyy-MM-dd HH:mm');
                     catch
                         dateLabel = '?';
                     end
@@ -723,7 +723,7 @@ classdef nestapp < matlab.apps.AppBase
                 r = e.report;
                 [~, baseName] = fileparts(r.inputFile);
                 try
-                    dStr = datestr(r.processedAt, 'yyyy-mm-dd HH:MM:SS'); %#ok<DATST>
+                    dStr = string(r.processedAt, 'yyyy-MM-dd HH:mm:ss');
                 catch
                     dStr = '?';
                 end
@@ -1429,15 +1429,15 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Button pushed function: SavePipelineButton
-        function SavePipelineButtonPushed(app, event) %#ok<INUSD>
+        function SavePipelineButtonPushed(app, ~)
             startFolder = getpref('nestapp', 'lastPipelineFolder', '');
             [fName, fPath] = uiputfile('*.mat', 'Save Pipeline', ...
                 fullfile(startFolder, 'pipeline.mat'));
             if isequal(fName, 0); return; end   % user cancelled
-            PLItems     = app.SelectedListBox.Items;      %#ok<NASGU>
-            PLItemsData = app.SelectedListBox.ItemsData;  %#ok<NASGU>
-            VarIns      = app.ChangedVal;                 %#ok<NASGU>
-            ParamKeys   = app.stepParamKeys;              %#ok<NASGU>
+            PLItems     = app.SelectedListBox.Items;
+            PLItemsData = app.SelectedListBox.ItemsData;
+            VarIns      = app.ChangedVal;
+            ParamKeys   = app.stepParamKeys;
             save(fullfile(fPath, fName), 'PLItems', 'PLItemsData', 'VarIns', 'ParamKeys');
             setpref('nestapp', 'lastPipelineFolder', fPath);
             pushRecent(app, 'recentPipelines', fullfile(fPath, fName));
@@ -1732,10 +1732,7 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Cell edit callback: UITable
-        function UITableCellEdit(app, event)
-            indices = event.Indices; %#ok<NASGU>
-            newData = event.NewData; %#ok<NASGU>
-
+        function UITableCellEdit(app, ~)
             value = app.SelectedListBox.Value;
             indNum2 = find(ismember(app.SelectedListBox.ItemsData,value));
             app.ChangedVal{indNum2} = app.UITable.Data;
