@@ -37,8 +37,9 @@ for i = 1:numel(stepNames)
     if isempty(reqs); continue; end
     for j = 1:numel(reqs)
         r = reqs(j);
-        % Skip format-specific loaders when no file with that extension selected
-        if ~isempty(r.fileExt) && ~isempty(filePaths) && ~any(strcmpi(exts, r.fileExt))
+        % Skip format-specific loaders when no files are selected or no file of
+        % that format is present in the selection.
+        if ~isempty(r.fileExt) && (isempty(filePaths) || ~any(strcmpi(exts, r.fileExt)))
             continue
         end
         if isempty(which(r.fn))

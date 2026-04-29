@@ -54,11 +54,12 @@ testCase.verifyEqual(numel(names), numel(unique(names)), ...
     'All step names must be unique');
 end
 
-function test_40StepsPresent(testCase)
-% Registry should have 40 steps: the original 39 plus "Remove Bad Trials" added in M1.
+function test_atLeast40StepsPresent(testCase)
+% Registry must have at least 40 steps (39 original + Remove Bad Trials added in M1).
+% Uses >= so adding future steps does not break this test.
 steps = stepRegistry();
-testCase.verifyEqual(numel(steps), 40, ...
-    sprintf('Expected 40 steps, got %d', numel(steps)));
+testCase.verifyGreaterThanOrEqual(numel(steps), 40, ...
+    sprintf('Expected at least 40 steps, got %d', numel(steps)));
 end
 
 % ── defaults field ────────────────────────────────────────────────────────

@@ -123,7 +123,8 @@ for fi = 1:nFiles
         peaks = tepPeakFinder(waveform, EEG.times, compDefs);
     catch ME
         warnings{end+1} = sprintf('%s: peak detection failed — %s', fname, ME.message); %#ok<AGROW>
-        rows = appendNaNRows(rows, fname, opts.roiElectrodes, compDefs);
+        % Pass nRoiFound so the NaN rows still record how many ROI channels were found.
+        rows = appendNaNRows(rows, fname, opts.roiElectrodes, compDefs, nRoiFound);
         continue
     end
 
@@ -168,14 +169,16 @@ end
 
 %% ── local helpers ────────────────────────────────────────────────────────
 
-function rows = appendNaNRows(rows, fname, roiElectrodes, compDefs)
-% Append one NaN-filled row per component for a file that was skipped.
+function rows = appendNaNRows(rows, fname, roiElectrodes, compDefs, nRoiFound)
+% Append one NaN-filled row per component for a file that was skipped or failed.
+% nRoiFound: how many ROI channels were actually found before the failure (default 0).
+if nargin < 5; nRoiFound = 0; end
 roiStr = strjoin(roiElectrodes, ',');
 for ci = 1:numel(compDefs)
     cd = compDefs(ci);
     rows{end+1} = { ...
         fname, roiStr, cd.name, cd.polarity, ...
-        0, NaN, NaN, cd.winStart, cd.winEnd, cd.nomLatency, 0, 0 ...
+        0, NaN, NaN, cd.winStart, cd.winEnd, cd.nomLatency, 0, nRoiFound ...
     }; %#ok<AGROW>
 end
 end

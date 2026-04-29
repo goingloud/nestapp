@@ -44,7 +44,7 @@ for i = 1:numel(suites)
         warning('run_tests: suite directory not found: %s', suites{i});
         continue
     end
-    r = runtests(suites{i}, 'RecurseInSubfolders', false);
+    r = runtests(suites{i});
     results = [results, r]; %#ok<AGROW>
 end
 
