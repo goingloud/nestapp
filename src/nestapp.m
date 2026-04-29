@@ -1162,11 +1162,23 @@ classdef nestapp < matlab.apps.AppBase
             legend(app.UIAxes, 'show', 'Location', 'best');
 
             % Component detection on grand mean (runs regardless of toggle to cache peaks)
-            app.tepPeaks = tepPeakFinder(grandMean, app.EEGtime, app.tepComponentDefs);
-            if app.ShowComponentsButton.Value
-                overlayTEPComponents(app);
+            try
+                app.tepPeaks = tepPeakFinder(grandMean, app.EEGtime, app.tepComponentDefs);
+                if app.ShowComponentsButton.Value
+                    overlayTEPComponents(app);
+                end
+                populateTEPComponentTable(app);
+            catch ME
+                if strcmp(ME.identifier, 'tepPeakFinder:noTESA')
+                    uialert(app.UIFigure, ...
+                        ['TESA not found. Add TESA to the MATLAB path to enable ' ...
+                         'component detection (Show Components / Extract Peaks).'], ...
+                        'TESA Required');
+                    app.ShowComponentsButton.Value = false;
+                else
+                    rethrow(ME);
+                end
             end
-            populateTEPComponentTable(app);
         end
         
         function EEG_topoplot(app)
