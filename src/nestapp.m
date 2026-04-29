@@ -201,6 +201,12 @@ classdef nestapp < matlab.apps.AppBase
         tepComponentDefs = struct([]) % component window definitions used by tepPeakFinder
         allPipelineReports = {}    % cell array of report entry structs from current session
         loadedReports      = {}    % cell array of report entry structs loaded from disk
+
+        % Tab Analysis
+        AnalysisTab
+        ExtractPeaksCSVButton
+        AnalysisStatusLabel
+        AnalysisSelectionLabel
     end
 
     methods (Access = private)
@@ -879,50 +885,41 @@ classdef nestapp < matlab.apps.AppBase
             % right (x:651-867 file selection). Bottom strip (y:0-165) holds controls.
             % TEP window slider lives above UIAxes; topoplot controls sit right of UIAxes2.
 
-            % Left action column — bottom strip (x:5-145)
-            app.PLOTTEPButton.Position                = p([5 130 140 30]);
-            app.ShowComponentsButton.Position         = p([5 104 140 23]);
-            app.EditComponentWindowsButton.Position   = p([5 78 140 23]);
-            app.ExportTEPFigureButton.Position        = p([5 52 140 23]);
-            app.PlotEEGdataButton.Position            = p([5 26 108 23]);
+            % Left action column — bottom-aligned with ReLoad button (y=7)
+            % TOPOPLOT joins this group as the lowest button
+            app.PLOTTEPButton.Position                = p([5 88 140 30]);
+            app.ShowComponentsButton.Position         = p([5 61 140 23]);
+            app.ExportTEPFigureButton.Position        = p([5 34 140 23]);
+            app.TOPOPLOTButton.Position               = p([5 7 140 23]);
 
             % Center-left controls — bottom strip (x:152-340)
-            app.PlottingModeButtonGroup.Position  = p([152 88 150 67]);
+            % PlottingModeButtonGroup sits above the single-row topoplot controls
+            app.PlottingModeButtonGroup.Position  = p([152 36 150 67]);
             app.NewFigureButton.Position          = p([11 21 83 22]);
             app.AddtocurrentFigureButton.Position = p([11 -1 135 22]);
-            app.EEGDatasetDropDownLabel.Position  = p([152 58 75 22]);
-            app.EEGDatasetDropDown.Position       = p([230 58 100 22]);
+            % Topoplot time and window on one line — 3-digit fields
+            app.TopoplottimeSpinnerLabel.Position = p([152 10 35 22]);
+            app.TopoplottimeSpinner.Position      = p([189 10 52 22]);
+            app.WindowsizeforTopoplotLabel.Position = p([245 10 35 22]);
+            app.WindowsizefortimeaveragedTopoplotEditField.Position = p([282 10 52 22]);
 
             % Center column — TEP window slider above the TEP plot
-            app.TEPWindowSliderLabel.Position     = p([669 420 85 16]);
-            app.TEPWindowSlider.Position          = p([669 388 183 3]);
-            app.UIAxes.Position                   = p([340 319 308 186]);
-            app.TEPComponentTable.Position        = p([340 215 308 104]);
-            app.TEPComponentTable.ColumnWidth     = num2cell(round([80, 100, 128] * sX));
-
-            % Center column — topoplot with controls to its right
-            app.UIAxes2.Position                  = p([340 65 200 148]);
-            app.TOPOPLOTButton.Position           = p([543 167 104 44]);
-            app.TopoplottimeSpinnerLabel.Position = p([543 145 103 20]);
-            app.TopoplottimeSpinner.Position      = p([543 120 103 22]);
-            app.WindowsizeforTopoplotLabel.Position = p([543 90 103 26]);
-            app.WindowsizefortimeaveragedTopoplotEditField.Position = p([543 65 70 22]);
-            app.Slider.Position                   = p([340 48 200 3]);
+            % TEP plot (60%) and topoplot (40%) of 448px available — slider in gap
+            app.UIAxes.Position                   = p([340 230 308 270]);
+            app.TEPWindowSliderLabel.Position     = p([380 204 130 16]);
+            app.TEPWindowSlider.Position          = p([380 193 268 3]);
+            app.UIAxes2.Position                  = p([340 7 308 179]);
 
             % Head image (electrode map) — unchanged
             app.Image2.Position                   = p([-1 165 350 336]);
 
-            % Right column — top: export/output; bottom: data selection (prototype layout)
-            app.ExportTEPDataButton.Position      = p([669 468 183 23]);
-            app.TEPvarNameEditFieldLabel.Position = p([669 438 80 22]);
-            app.TEPvarNameEditField.Position      = p([754 438 98 22]);
-            app.UseCurrentlyCleanedDataCheckBox.Position = p([671 325 180 22]);
-            app.SelectDatatoVisulaizeTEPsPanel.Position  = p([651 230 208 90]);
+            % Right column — data selection
+            app.SelectDatatoVisulaizeTEPsPanel.Position  = p([651 406 208 90]);
             app.FolderEditField_2Label.Position   = p([1 41 40 22]);
             app.FolderEditField_2.Position        = p([49 41 145 22]);
             app.SelectDataButton_2.Position       = p([13 10 183 23]);
-            app.FilesListBoxLabel.Position        = p([740 220 30 22]);
-            app.FilesListBox.Position             = p([669 71 183 149]);
+            app.FilesListBoxLabel.Position        = p([740 382 30 22]);
+            app.FilesListBox.Position             = p([669 71 183 306]);
             app.SelectAllCheckBox.Position        = p([670 46 71 22]);
             app.DontfindcommonelectrodesCheckBox.Position = p([670 28 180 22]);
             app.ReLoadAvailableElectrodesButton.Position  = p([686 7 153 23]);
@@ -997,6 +994,16 @@ classdef nestapp < matlab.apps.AppBase
             app.AF8Button.Position   = p([245 419 25 23]);
             app.PO1Button.Position   = p([133 212 25 23]);
             app.PO6Button.Position   = p([243 215 25 23]);
+
+            %% Analysis Tab
+            app.TEPComponentTable.Position    = p([10 290 330 148]);
+            app.TEPComponentTable.ColumnWidth = num2cell(round([80, 100, 128] * sX));
+            app.EditComponentWindowsButton.Position = p([10 260 200 25]);
+            app.ExportTEPDataButton.Position  = p([450 400 220 28]);
+            app.TEPvarNameEditFieldLabel.Position = p([450 370 60 22]);
+            app.TEPvarNameEditField.Position  = p([515 370 155 22]);
+            app.ExtractPeaksCSVButton.Position = p([10 175 200 32]);
+            app.AnalysisStatusLabel.Position  = p([10 148 847 22]);
 
             %% Reports Tab
             app.ReportsListBoxLabel.Position    = p([5 472 205 22]);
@@ -1749,16 +1756,13 @@ classdef nestapp < matlab.apps.AppBase
                 LoadLabels(app);
                 findTEPelecs(app);
                 plotTEP(app)
-                app.Slider.Limits = [app.EEGtime(1) app.EEGtime(end)];
                 app.TEPWindowSlider.Limits = [app.EEGtime(1) app.EEGtime(end)];
                 app.TEPCreated = true;
                 app.TEPWindowSlider.Value = app.DefaulTEPxLim;
-                
-                app.ExportTEPDataButton.Enable = 'on';
-                app.TEPvarNameEditField.Enable = 'on';
+                app.ExportTEPDataButton.Enable    = 'on';
+                app.TEPvarNameEditFieldLabel.Enable = 'on';
+                app.TEPvarNameEditField.Enable    = 'on';
             end
-            
-            % app.Slider.Value = 
         end
 
         % Value changed function: UseCurrentlyCleanedDataCheckBox
@@ -1795,13 +1799,6 @@ classdef nestapp < matlab.apps.AppBase
             else
                 app.FolderEditField_2.Value = '';
             end
-
-        end
-
-        % Value changing function: Slider
-        function SliderValueChanging(app, event)
-            changingValue = event.Value;
-            app.TopoplottimeSpinner.Value = round(changingValue);
 
         end
 
@@ -2050,6 +2047,103 @@ classdef nestapp < matlab.apps.AppBase
                 'winEnd',     {28,     50,     65,     90,     140,    260});
         end
 
+        % ── Analysis Tab callbacks ────────────────────────────────────────
+
+        % Button pushed function: ExtractPeaksCSVButton
+        function ExtractPeaksCSVButtonPushed(app, ~)
+        % Extract peaks across all selected files and save as CSV.
+            findTEPelecs(app);   % refresh ROI from current electrode button state
+            if isempty(app.ROIelecsLabels)
+                uialert(app.UIFigure, ...
+                    'No ROI electrodes selected. Choose electrodes on the Visualizing tab.', ...
+                    'Extract Peaks');
+                return
+            end
+            if isempty(app.SelectedFilesforTEP)
+                uialert(app.UIFigure, ...
+                    'No files selected. Select .set files on the Visualizing tab.', ...
+                    'Extract Peaks');
+                return
+            end
+            if isempty(which('tesa_peakanalysis'))
+                uialert(app.UIFigure, ...
+                    'TESA toolbox not found on path. Cannot run peak extraction.', ...
+                    'Extract Peaks');
+                return
+            end
+
+            [fname, fpath] = uiputfile('*.csv', 'Save TEP Peaks CSV', 'tep_peaks.csv');
+            if isequal(fname, 0); return; end
+            csvPath = fullfile(fpath, fname);
+
+            filePaths = cellfun(@(f) fullfile(app.PathofSelectedFilesforTEP, f), ...
+                app.SelectedFilesforTEP, 'UniformOutput', false);
+
+            d = uiprogressdlg(app.UIFigure, ...
+                'Title',          'Extracting TEP Peaks', ...
+                'Message',        'Starting...', ...
+                'Cancelable',     'off', ...
+                'ShowPercentage', 'on');
+
+            try
+                [results, warnings] = batchTEPExtract(filePaths, app.ROIelecsLabels, ...
+                    'compDefs',    app.tepComponentDefs, ...
+                    'csvPath',     csvPath, ...
+                    'progressFcn', @(i,n) updateExtractionProgress(d, i, n, filePaths));
+            catch ME
+                if isvalid(d); close(d); end
+                uialert(app.UIFigure, ME.message, 'Extraction Error');
+                return
+            end
+            if isvalid(d); close(d); end
+
+            nRows = height(results);
+            if isempty(warnings)
+                app.AnalysisStatusLabel.Text = sprintf('Extracted %d rows → %s', nRows, fname);
+            else
+                app.AnalysisStatusLabel.Text = sprintf( ...
+                    'Extracted %d rows → %s  (%d warning(s))', nRows, fname, numel(warnings));
+                uialert(app.UIFigure, strjoin(warnings, newline), 'Extraction Warnings');
+            end
+
+            function updateExtractionProgress(dlg, iFile, nFiles, fps)
+                [~, nm] = fileparts(fps{iFile});
+                dlg.Value   = (iFile - 1) / nFiles;
+                dlg.Message = sprintf('File %d / %d  —  %s', iFile, nFiles, nm);
+                drawnow limitrate
+            end
+        end
+
+        % Selection changed function: TabGroup
+        function TabGroupSelectionChanged(app, event)
+        % Refresh the Analysis tab selection summary whenever it becomes active.
+            if event.NewValue == app.AnalysisTab
+                updateAnalysisSelectionSummary(app);
+            end
+        end
+
+        function updateAnalysisSelectionSummary(app)
+        % Update the read-only summary label on the Analysis tab.
+            findTEPelecs(app);   % refresh ROI from current electrode button state
+            nFiles = numel(app.SelectedFilesforTEP);
+            nROI   = numel(app.ROIelecsLabels);
+            if nFiles == 0 && nROI == 0
+                app.AnalysisSelectionLabel.Text = ...
+                    'Select files and ROI electrodes on the Visualizing tab.';
+                return
+            end
+            fileStr = sprintf('%d file(s) selected', nFiles);
+            if nROI == 0
+                roiStr = 'No ROI electrodes selected';
+            elseif nROI <= 6
+                roiStr = sprintf('ROI: %s', strjoin(app.ROIelecsLabels, ', '));
+            else
+                roiStr = sprintf('ROI: %s … (%d electrodes total)', ...
+                    strjoin(app.ROIelecsLabels(1:6), ', '), nROI);
+            end
+            app.AnalysisSelectionLabel.Text = sprintf('%s          %s', fileStr, roiStr);
+        end
+
     end
 
     % Component initialization
@@ -2090,6 +2184,10 @@ classdef nestapp < matlab.apps.AppBase
             uimenu(mSettings, 'Text', 'Preferences...', ...
                 'MenuSelectedFcn', createCallbackFcn(app, @openPreferencesMenu, true));
 
+            mTools = uimenu(app.UIFigure, 'Text', 'Tools');
+            uimenu(mTools, 'Text', 'Browse Raw EEG...', ...
+                'MenuSelectedFcn', createCallbackFcn(app, @PlotEEGdataButtonPushed, true));
+
             mHelp = uimenu(app.UIFigure, 'Text', 'Help');
             uimenu(mHelp, 'Text', 'About nestapp', ...
                 'MenuSelectedFcn', createCallbackFcn(app, @showAboutMenu, true));
@@ -2106,6 +2204,7 @@ classdef nestapp < matlab.apps.AppBase
             app.TabGroup = uitabgroup(app.UIFigure);
             app.TabGroup.AutoResizeChildren = 'off';
             app.TabGroup.Position = [1 20 867 529];
+            app.TabGroup.SelectionChangedFcn = createCallbackFcn(app, @TabGroupSelectionChanged, true);
 
             % Create CleaningTab
             app.CleaningTab = uitab(app.TabGroup);
@@ -2273,7 +2372,7 @@ classdef nestapp < matlab.apps.AppBase
             xlabel(app.UIAxes, 'Time')
             ylabel(app.UIAxes, 'TEP')
             app.UIAxes.TickDir = 'both';
-            app.UIAxes.Position = [340 319 308 186];
+            app.UIAxes.Position = [340 230 308 270];
 
             % Create UIAxes2
             app.UIAxes2 = uiaxes(app.VisualizingTab);
@@ -2283,33 +2382,19 @@ classdef nestapp < matlab.apps.AppBase
             app.UIAxes2.YAxisLocation = 'origin';
             app.UIAxes2.YTick = [];
             app.UIAxes2.ZTick = [];
-            app.UIAxes2.Position = [340 65 200 148];
-
-            % Create TEPComponentTable
-            app.TEPComponentTable = uitable(app.VisualizingTab);
-            app.TEPComponentTable.ColumnName = {'Component', 'Latency (ms)', 'Amplitude (µV)'};
-            app.TEPComponentTable.ColumnWidth = {80, 100, 128};
-            app.TEPComponentTable.RowName = {};
-            app.TEPComponentTable.Enable = 'on';
-            app.TEPComponentTable.Position = [340 215 308 104];
+            app.UIAxes2.Position = [340 7 308 179];
 
             % Create ShowComponentsButton
             app.ShowComponentsButton = uibutton(app.VisualizingTab, 'state');
             app.ShowComponentsButton.ValueChangedFcn = createCallbackFcn(app, @ShowComponentsButtonValueChanged, true);
             app.ShowComponentsButton.Text = 'Show Components';
-            app.ShowComponentsButton.Position = [5 104 140 23];
-
-            % Create EditComponentWindowsButton
-            app.EditComponentWindowsButton = uibutton(app.VisualizingTab, 'push');
-            app.EditComponentWindowsButton.ButtonPushedFcn = createCallbackFcn(app, @EditComponentWindowsButtonPushed, true);
-            app.EditComponentWindowsButton.Text = 'Edit Windows...';
-            app.EditComponentWindowsButton.Position = [5 78 140 23];
+            app.ShowComponentsButton.Position = [5 61 140 23];
 
             % Create PLOTTEPButton
             app.PLOTTEPButton = uibutton(app.VisualizingTab, 'push');
             app.PLOTTEPButton.ButtonPushedFcn = createCallbackFcn(app, @PLOTTEPButtonPushed, true);
             app.PLOTTEPButton.Enable = 'off';
-            app.PLOTTEPButton.Position = [5 130 140 30];
+            app.PLOTTEPButton.Position = [5 88 140 30];
             app.PLOTTEPButton.Text = 'PLOT TEP';
 
             % Create SelectDatatoVisulaizeTEPsPanel
@@ -2317,7 +2402,7 @@ classdef nestapp < matlab.apps.AppBase
             app.SelectDatatoVisulaizeTEPsPanel.AutoResizeChildren = 'off';
             app.SelectDatatoVisulaizeTEPsPanel.BorderType = 'none';
             app.SelectDatatoVisulaizeTEPsPanel.Title = 'Select Data to Visualize TEPs';
-            app.SelectDatatoVisulaizeTEPsPanel.Position = [651 230 208 90];
+            app.SelectDatatoVisulaizeTEPsPanel.Position = [651 406 208 90];
 
             % Create FolderEditField_2Label
             app.FolderEditField_2Label = uilabel(app.SelectDatatoVisulaizeTEPsPanel);
@@ -2343,11 +2428,12 @@ classdef nestapp < matlab.apps.AppBase
             app.UseCurrentlyCleanedDataCheckBox.Text = 'Use Currently Cleaned Data';
             app.UseCurrentlyCleanedDataCheckBox.FontWeight = 'bold';
             app.UseCurrentlyCleanedDataCheckBox.Position = [671 325 180 22];
+            app.UseCurrentlyCleanedDataCheckBox.Visible = 'off';
 
             % Create FilesListBoxLabel
             app.FilesListBoxLabel = uilabel(app.VisualizingTab);
             app.FilesListBoxLabel.HorizontalAlignment = 'right';
-            app.FilesListBoxLabel.Position = [740 220 30 22];
+            app.FilesListBoxLabel.Position = [740 382 30 22];
             app.FilesListBoxLabel.Text = 'Files';
 
             % Create FilesListBox
@@ -2355,7 +2441,7 @@ classdef nestapp < matlab.apps.AppBase
             app.FilesListBox.Items = {};
             app.FilesListBox.Multiselect = 'on';
             app.FilesListBox.ValueChangedFcn = createCallbackFcn(app, @FilesListBoxValueChanged, true);
-            app.FilesListBox.Position = [669 71 183 149];
+            app.FilesListBox.Position = [669 71 183 306];
             app.FilesListBox.Value = {};
 
             % Create Image2
@@ -2363,35 +2449,29 @@ classdef nestapp < matlab.apps.AppBase
             app.Image2.Position = [-1 165 350 336];
             app.Image2.ImageSource = fullfile(pathToMLAPP, 'Head.png');
 
-            % Create Slider
-            app.Slider = uislider(app.VisualizingTab);
-            app.Slider.ValueChangingFcn = createCallbackFcn(app, @SliderValueChanging, true);
-            app.Slider.Position = [340 48 200 3];
-            app.Slider.Value = 60;
-
             % Create WindowsizeforTopoplotLabel
             app.WindowsizeforTopoplotLabel = uilabel(app.VisualizingTab);
             app.WindowsizeforTopoplotLabel.HorizontalAlignment = 'center';
-            app.WindowsizeforTopoplotLabel.Position = [543 90 103 26];
-            app.WindowsizeforTopoplotLabel.Text = {'Window size for'; ' time averaged'; ' Topoplot'};
+            app.WindowsizeforTopoplotLabel.Position = [245 10 35 22];
+            app.WindowsizeforTopoplotLabel.Text = 'Win';
 
             % Create WindowsizefortimeaveragedTopoplotEditField
             app.WindowsizefortimeaveragedTopoplotEditField = uieditfield(app.VisualizingTab, 'numeric');
             app.WindowsizefortimeaveragedTopoplotEditField.ValueDisplayFormat = '%.0f';
-            app.WindowsizefortimeaveragedTopoplotEditField.Position = [543 65 70 22];
+            app.WindowsizefortimeaveragedTopoplotEditField.Position = [282 10 52 22];
 
             % Create TOPOPLOTButton
             app.TOPOPLOTButton = uibutton(app.VisualizingTab, 'push');
             app.TOPOPLOTButton.ButtonPushedFcn = createCallbackFcn(app, @TOPOPLOTButtonPushed, true);
             app.TOPOPLOTButton.Enable = 'off';
-            app.TOPOPLOTButton.Position = [543 167 104 44];
+            app.TOPOPLOTButton.Position = [5 7 140 23];
             app.TOPOPLOTButton.Text = 'TOPOPLOT';
 
             % Create ExportTEPFigureButton
             app.ExportTEPFigureButton = uibutton(app.VisualizingTab, 'push');
             app.ExportTEPFigureButton.ButtonPushedFcn = createCallbackFcn(app, @ExportTEPFigureButtonPushed, true);
             app.ExportTEPFigureButton.Enable = 'off';
-            app.ExportTEPFigureButton.Position = [5 52 140 23];
+            app.ExportTEPFigureButton.Position = [5 34 140 23];
             app.ExportTEPFigureButton.Text = 'Export TEP Figure';
 
             % Create PlottingModeButtonGroup
@@ -2399,7 +2479,7 @@ classdef nestapp < matlab.apps.AppBase
             app.PlottingModeButtonGroup.AutoResizeChildren = 'off';
             app.PlottingModeButtonGroup.BorderType = 'none';
             app.PlottingModeButtonGroup.Title = 'Plotting Mode';
-            app.PlottingModeButtonGroup.Position = [152 88 150 67];
+            app.PlottingModeButtonGroup.Position = [152 36 150 67];
 
             % Create NewFigureButton
             app.NewFigureButton = uiradiobutton(app.PlottingModeButtonGroup);
@@ -3065,70 +3145,128 @@ classdef nestapp < matlab.apps.AppBase
             % Create TEPWindowSliderLabel
             app.TEPWindowSliderLabel = uilabel(app.VisualizingTab);
             app.TEPWindowSliderLabel.HorizontalAlignment = 'right';
-            app.TEPWindowSliderLabel.Position = [669 420 85 16];
+            app.TEPWindowSliderLabel.Position = [380 204 130 16];
             app.TEPWindowSliderLabel.Text = 'TEP Window';
 
             % Create TEPWindowSlider
             app.TEPWindowSlider = uislider(app.VisualizingTab, 'range');
             app.TEPWindowSlider.Limits = [-100 300];
             app.TEPWindowSlider.ValueChangingFcn = createCallbackFcn(app, @TEPWindowSliderValueChanging, true);
-            app.TEPWindowSlider.Position = [669 388 183 3];
+            app.TEPWindowSlider.Position = [380 193 268 3];
             app.TEPWindowSlider.Value = [-50 300];
 
             % Create TopoplottimeSpinnerLabel
             app.TopoplottimeSpinnerLabel = uilabel(app.VisualizingTab);
             app.TopoplottimeSpinnerLabel.HorizontalAlignment = 'right';
-            app.TopoplottimeSpinnerLabel.Position = [543 145 103 20];
-            app.TopoplottimeSpinnerLabel.Text = 'Topoplot time';
+            app.TopoplottimeSpinnerLabel.Position = [152 10 35 22];
+            app.TopoplottimeSpinnerLabel.Text = 'Time';
 
             % Create TopoplottimeSpinner
             app.TopoplottimeSpinner = uispinner(app.VisualizingTab);
             app.TopoplottimeSpinner.RoundFractionalValues = 'on';
             app.TopoplottimeSpinner.ValueDisplayFormat = '%.0f';
             app.TopoplottimeSpinner.ValueChangedFcn = createCallbackFcn(app, @TopoplottimeSpinnerValueChanged, true);
-            app.TopoplottimeSpinner.Position = [543 120 103 22];
+            app.TopoplottimeSpinner.Position = [189 10 52 22];
             app.TopoplottimeSpinner.Value = 60;
 
-            % Create EEGDatasetDropDownLabel
+            % Create AnalysisTab
+            app.AnalysisTab = uitab(app.TabGroup);
+            app.AnalysisTab.AutoResizeChildren = 'off';
+            app.AnalysisTab.Title = 'Analysis';
+
+            % Analysis tab — current selection summary panel (top)
+            selPanel = uipanel(app.AnalysisTab, 'Title', 'Current Selection', ...
+                'AutoResizeChildren', 'off', ...
+                'Position', [10 455 847 65]);
+            app.AnalysisSelectionLabel = uilabel(selPanel, ...
+                'Position', [10 8 820 38], ...
+                'Text', 'Select files and ROI electrodes on the Visualizing tab.', ...
+                'WordWrap', 'on', 'FontSize', 11);
+
+            % Analysis tab — component windows section
+            uilabel(app.AnalysisTab, 'Position', [10 440 200 18], ...
+                'Text', 'COMPONENT WINDOWS', 'FontWeight', 'bold', 'FontSize', 10);
+
+            % TEPComponentTable — moved from Visualizing tab
+            app.TEPComponentTable = uitable(app.AnalysisTab);
+            app.TEPComponentTable.ColumnName  = {'Component', 'Latency (ms)', 'Amplitude (µV)'};
+            app.TEPComponentTable.ColumnWidth = {80, 100, 128};
+            app.TEPComponentTable.RowName     = {};
+            app.TEPComponentTable.Enable      = 'on';
+            app.TEPComponentTable.Position    = [10 290 330 148];
+
+            % EditComponentWindowsButton — moved from Visualizing tab
+            app.EditComponentWindowsButton = uibutton(app.AnalysisTab, 'push');
+            app.EditComponentWindowsButton.ButtonPushedFcn = createCallbackFcn(app, @EditComponentWindowsButtonPushed, true);
+            app.EditComponentWindowsButton.Text     = 'Edit Component Windows...';
+            app.EditComponentWindowsButton.Position = [10 260 200 25];
+
+            % Analysis tab — workspace export section (moved from Visualizing)
+            uilabel(app.AnalysisTab, 'Position', [450 440 300 18], ...
+                'Text', 'WORKSPACE EXPORT', 'FontWeight', 'bold', 'FontSize', 10);
+
+            app.ExportTEPDataButton = uibutton(app.AnalysisTab, 'push');
+            app.ExportTEPDataButton.ButtonPushedFcn = createCallbackFcn(app, @ExportTEPDataButtonPushed, true);
+            app.ExportTEPDataButton.Enable   = 'off';
+            app.ExportTEPDataButton.Text     = 'Export TEP to Workspace';
+            app.ExportTEPDataButton.Position = [450 400 220 28];
+
+            app.TEPvarNameEditFieldLabel = uilabel(app.AnalysisTab);
+            app.TEPvarNameEditFieldLabel.HorizontalAlignment = 'right';
+            app.TEPvarNameEditFieldLabel.Enable   = 'off';
+            app.TEPvarNameEditFieldLabel.Position = [450 370 60 22];
+            app.TEPvarNameEditFieldLabel.Text     = 'Variable:';
+
+            app.TEPvarNameEditField = uieditfield(app.AnalysisTab, 'text');
+            app.TEPvarNameEditField.ValueChangedFcn = createCallbackFcn(app, @TEPvarNameEditFieldValueChanged, true);
+            app.TEPvarNameEditField.Enable   = 'off';
+            app.TEPvarNameEditField.Position = [515 370 155 22];
+            app.TEPvarNameEditField.Value    = 'TEPdata';
+
+            % Analysis tab — batch extraction section (new)
+            uilabel(app.AnalysisTab, 'Position', [10 235 200 18], ...
+                'Text', 'BATCH EXTRACTION', 'FontWeight', 'bold', 'FontSize', 10);
+            uilabel(app.AnalysisTab, 'Position', [10 215 600 18], ...
+                'Text', ['Extract peak latency and amplitude from each file using the selected ' ...
+                    'ROI and component windows. Results saved as CSV for import into R/SPSS/Excel.'], ...
+                'WordWrap', 'on', 'FontSize', 9, 'FontColor', [0.4 0.4 0.4]);
+
+            app.ExtractPeaksCSVButton = uibutton(app.AnalysisTab, 'push');
+            app.ExtractPeaksCSVButton.ButtonPushedFcn = createCallbackFcn(app, @ExtractPeaksCSVButtonPushed, true);
+            app.ExtractPeaksCSVButton.Text    = 'Extract Peaks  →  CSV';
+            app.ExtractPeaksCSVButton.Position = [10 175 200 32];
+            app.ExtractPeaksCSVButton.Tooltip = ...
+                'Run peak detection across all selected files and save results as a CSV table';
+
+            app.AnalysisStatusLabel = uilabel(app.AnalysisTab);
+            app.AnalysisStatusLabel.Position   = [10 148 847 22];
+            app.AnalysisStatusLabel.Text       = 'Ready.';
+            app.AnalysisStatusLabel.FontSize   = 10;
+            app.AnalysisStatusLabel.FontColor  = [0.4 0.4 0.4];
+
+            % Create EEGDatasetDropDownLabel (kept for PlotEEGdataButtonPushed callback)
             app.EEGDatasetDropDownLabel = uilabel(app.VisualizingTab);
             app.EEGDatasetDropDownLabel.HorizontalAlignment = 'right';
             app.EEGDatasetDropDownLabel.Position = [152 58 75 22];
             app.EEGDatasetDropDownLabel.Text = 'EEG Dataset';
+            app.EEGDatasetDropDownLabel.Visible = 'off';
 
-            % Create EEGDatasetDropDown
+            % Create EEGDatasetDropDown (kept for PlotEEGdataButtonPushed; hidden)
             app.EEGDatasetDropDown = uidropdown(app.VisualizingTab);
             app.EEGDatasetDropDown.Items = {'Select a file'};
             app.EEGDatasetDropDown.ValueChangedFcn = createCallbackFcn(app, @EEGDatasetDropDownValueChanged, true);
             app.EEGDatasetDropDown.Enable = 'off';
             app.EEGDatasetDropDown.Position = [230 58 100 22];
             app.EEGDatasetDropDown.Value = 'Select a file';
+            app.EEGDatasetDropDown.Visible = 'off';
 
-            % Create PlotEEGdataButton
+            % Create PlotEEGdataButton (hidden; triggered via Tools menu)
             app.PlotEEGdataButton = uibutton(app.VisualizingTab, 'push');
             app.PlotEEGdataButton.ButtonPushedFcn = createCallbackFcn(app, @PlotEEGdataButtonPushed, true);
-            app.PlotEEGdataButton.Enable = 'off';
+            app.PlotEEGdataButton.Enable  = 'off';
+            app.PlotEEGdataButton.Visible = 'off';
             app.PlotEEGdataButton.Position = [5 26 108 23];
             app.PlotEEGdataButton.Text = 'Plot EEG data';
-
-            % Create ExportTEPDataButton — right column, below files listbox
-            app.ExportTEPDataButton = uibutton(app.VisualizingTab, 'push');
-            app.ExportTEPDataButton.ButtonPushedFcn = createCallbackFcn(app, @ExportTEPDataButtonPushed, true);
-            app.ExportTEPDataButton.Enable = 'off';
-            app.ExportTEPDataButton.Position = [669 468 183 23];
-            app.ExportTEPDataButton.Text = 'Export TEP Data';
-
-            % Create TEPvarNameEditFieldLabel — right column, below Export TEP Data
-            app.TEPvarNameEditFieldLabel = uilabel(app.VisualizingTab);
-            app.TEPvarNameEditFieldLabel.HorizontalAlignment = 'right';
-            app.TEPvarNameEditFieldLabel.Enable = 'off';
-            app.TEPvarNameEditFieldLabel.Position = [669 438 80 22];
-            app.TEPvarNameEditFieldLabel.Text = 'TEP var Name';
-
-            % Create TEPvarNameEditField
-            app.TEPvarNameEditField = uieditfield(app.VisualizingTab, 'text');
-            app.TEPvarNameEditField.ValueChangedFcn = createCallbackFcn(app, @TEPvarNameEditFieldValueChanged, true);
-            app.TEPvarNameEditField.Enable = 'off';
-            app.TEPvarNameEditField.Position = [754 438 98 22];
 
             % Create ReportsTab
             app.ReportsTab = uitab(app.TabGroup);
