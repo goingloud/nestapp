@@ -1409,7 +1409,7 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Value changed function: StepsListBox
-        function StepsListBoxValueChanged(app, event)
+        function StepsListBoxValueChanged(app, ~)
             value = app.StepsListBox.Value;
             ind = find(ismember(app.StepsListBox.Items,value));
             app.InfoTextArea.Value = string(app.info{ind});
@@ -1417,13 +1417,13 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Button pushed function: AddButton
-        function AddButtonPushed(app, event)
+        function AddButtonPushed(app, ~)
             stepName = app.StepsListBox.Value;
             appendStep(app, stepName);
         end
 
         % Button pushed function: MoveUpButton
-        function MoveUpButtonPushed(app, event)
+        function MoveUpButtonPushed(app, ~)
             ind = find(ismember(app.SelectedListBox.ItemsData, app.SelectedListBox.Value));
             moveStep(app, ind, -1);
         end
@@ -1448,19 +1448,19 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Button pushed function: RemoveButton
-        function RemoveButtonPushed(app, event)
+        function RemoveButtonPushed(app, ~)
             ind = find(ismember(app.SelectedListBox.ItemsData, app.SelectedListBox.Value));
             removeStep(app, ind);
         end
 
         % Button pushed function: MoveDownButton
-        function MoveDownButtonPushed(app, event)
+        function MoveDownButtonPushed(app, ~)
             ind = find(ismember(app.SelectedListBox.ItemsData, app.SelectedListBox.Value));
             moveStep(app, ind, +1);
         end
 
         % Button pushed function: LoadPipelineButton
-        function LoadPipelineButtonPushed(app, event)
+        function LoadPipelineButtonPushed(app, ~)
             startFolder = getpref('nestapp', 'lastPipelineFolder', '');
             [pName,pPath] = uigetfile('*.mat', 'Load Pipeline', startFolder);
             pipeline = load([pPath,pName],'-mat');
@@ -1524,7 +1524,7 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Button pushed function: SelectDataButton
-        function SelectDataButtonPushed(app, event)
+        function SelectDataButtonPushed(app, ~)
             try
                 startFolder = getpref('nestapp', 'lastDataFolder', '');
                 [app.file,app.path] = uigetfile( ...
@@ -1649,7 +1649,7 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Button pushed function: RunAnalysisButton
-        function RunAnalysisButtonPushed(app, event)
+        function RunAnalysisButtonPushed(app, ~)
             app.RunAnalysisButton.Text = {'Run';'Analysis'};
             app.needchanloc = 1;
             try
@@ -1670,7 +1670,7 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Value changed function: TextArea
-        function TextAreaValueChanged(app, event)
+        function TextAreaValueChanged(app, ~)
             value = app.TextArea.Value;
             value(strcmp(value,''))=[];
             if app.convert
@@ -1704,7 +1704,7 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Button pushed function: DefaultValueButton
-        function DefaultValueButtonPushed(app, event)
+        function DefaultValueButtonPushed(app, ~)
             ind2 = find(ismember(app.SelectedListBox.ItemsData,app.SelectedListBox.Value));
             ind1 = find(ismember(app.StepsListBox.Items,app.SelectedListBox.Items{ind2}));
             app.ChangedVal{ind2}    = app.DefaultsVal{ind1};
@@ -1741,7 +1741,7 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Value changed function: SelectedListBox
-        function SelectedListBoxValueChanged(app, event)
+        function SelectedListBoxValueChanged(app, ~)
             value = app.SelectedListBox.Value;
             indNum2 = find(ismember(app.SelectedListBox.ItemsData,value));
             ItemName = app.SelectedListBox.Items{indNum2};
@@ -1758,7 +1758,7 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Button pushed function: PLOTTEPButton
-        function PLOTTEPButtonPushed(app, event)
+        function PLOTTEPButtonPushed(app, ~)
             if ~CheckifanyFileSelected(app)
                 warning('Please select at least a file to plot the TEP!');
             else
@@ -1775,7 +1775,7 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Value changed function: UseCurrentlyCleanedDataCheckBox
-        function UseCurrentlyCleanedDataCheckBoxValueChanged(app, event)
+        function UseCurrentlyCleanedDataCheckBoxValueChanged(app, ~)
             value = app.UseCurrentlyCleanedDataCheckBox.Value;
             if value
                 if ~isempty(app.path) && ~isempty(app.cleanedName)
@@ -1802,7 +1802,7 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Value changed function: FolderEditField_2
-        function FolderEditField_2ValueChanged(app, event)
+        function FolderEditField_2ValueChanged(app, ~)
             if ~isempty(app.cleanedName) && ~isempty(app.path)
                 app.FolderEditField_2.Value = app.path;
             else
@@ -1812,7 +1812,7 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Button pushed function: SelectDataButton_2
-        function SelectDataButton_2Pushed(app, event)
+        function SelectDataButton_2Pushed(app, ~)
             try
                 [app.TEPfiles,app.PathofSelectedFilesforTEP] = uigetfile( ...
                     {'*.set',...
@@ -1865,14 +1865,14 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Button pushed function: TOPOPLOTButton
-        function TOPOPLOTButtonPushed(app, event)
+        function TOPOPLOTButtonPushed(app, ~)
             if CheckifanyFileSelected(app)
                 EEG_topoplot(app)
             end
         end
 
         % Value changed function: SelectAllCheckBox
-        function SelectAllCheckBoxValueChanged(app, event)
+        function SelectAllCheckBoxValueChanged(app, ~)
             value = app.SelectAllCheckBox.Value;
             if value
                 app.SelectedFilesforTEP = app.TEPfiles;
@@ -1885,7 +1885,7 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Value changed function: DontfindcommonelectrodesCheckBox
-        function DontfindcommonelectrodesCheckBoxValueChanged(app, event)
+        function DontfindcommonelectrodesCheckBoxValueChanged(app, ~)
             value = app.DontfindcommonelectrodesCheckBox.Value;
             if ~value
                 app.ReLoadAvailableElectrodesButton.Enable = 1;
@@ -1895,7 +1895,7 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Button pushed function: ReLoadAvailableElectrodesButton
-        function ReLoadAvailableElectrodesButtonPushed(app, event)
+        function ReLoadAvailableElectrodesButtonPushed(app, ~)
             if CheckifanyFileSelected(app)
                 LoadLabels(app);
             end
@@ -1903,7 +1903,7 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Button pushed function: ExportTEPFigureButton
-        function ExportTEPFigureButtonPushed(app, event)
+        function ExportTEPFigureButtonPushed(app, ~)
             if ~app.TEPCreated
                 uialert(app.UIFigure, 'Please plot a TEP first.', 'No figure');
                 return
@@ -1932,13 +1932,11 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Value changed function: EEGDatasetDropDown
-        function EEGDatasetDropDownValueChanged(app, event)
-            value = app.EEGDatasetDropDown.Value;
-            
+        function EEGDatasetDropDownValueChanged(~, ~)
         end
 
         % Button pushed function: PlotEEGdataButton
-        function PlotEEGdataButtonPushed(app, event)
+        function PlotEEGdataButtonPushed(app, ~)
             subInd = strcmpi(app.SelectedFilesforTEP, app.EEGDatasetDropDown.Value);
             if CheckifanyFileSelected(app)
                 if ~app.EEG_SelectedTEPFiles_Loaded
@@ -1951,14 +1949,12 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Button pushed function: ExportTEPDataButton
-        function ExportTEPDataButtonPushed(app, event)
+        function ExportTEPDataButtonPushed(app, ~)
             assignin('base', app.TEPvarNameEditField.Value, app.TEP2Export)
         end
 
         % Value changed function: TEPvarNameEditField
-        function TEPvarNameEditFieldValueChanged(app, event)
-            value = app.TEPvarNameEditField.Value;
-
+        function TEPvarNameEditFieldValueChanged(~, ~)
         end
 
         % Value changed function: ShowComponentsButton
