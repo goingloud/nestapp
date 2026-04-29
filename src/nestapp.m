@@ -996,14 +996,14 @@ classdef nestapp < matlab.apps.AppBase
             app.PO6Button.Position   = p([243 215 25 23]);
 
             %% Analysis Tab
-            app.TEPComponentTable.Position    = p([10 290 330 148]);
+            app.TEPComponentTable.Position    = p([10 203 330 148]);
             app.TEPComponentTable.ColumnWidth = num2cell(round([80, 100, 128] * sX));
-            app.EditComponentWindowsButton.Position = p([10 260 200 25]);
-            app.ExportTEPDataButton.Position  = p([450 400 220 28]);
-            app.TEPvarNameEditFieldLabel.Position = p([450 370 60 22]);
-            app.TEPvarNameEditField.Position  = p([515 370 155 22]);
-            app.ExtractPeaksCSVButton.Position = p([10 175 200 32]);
-            app.AnalysisStatusLabel.Position  = p([10 148 847 22]);
+            app.EditComponentWindowsButton.Position = p([10 173 200 25]);
+            app.ExportTEPDataButton.Position  = p([450 313 220 28]);
+            app.TEPvarNameEditFieldLabel.Position = p([450 283 60 22]);
+            app.TEPvarNameEditField.Position  = p([515 283 155 22]);
+            app.ExtractPeaksCSVButton.Position = p([10 88 200 32]);
+            app.AnalysisStatusLabel.Position  = p([10 61 847 22]);
 
             %% Reports Tab
             app.ReportsListBoxLabel.Position    = p([5 472 205 22]);
@@ -3177,14 +3177,14 @@ classdef nestapp < matlab.apps.AppBase
             % Analysis tab — current selection summary panel (top)
             selPanel = uipanel(app.AnalysisTab, 'Title', 'Current Selection', ...
                 'AutoResizeChildren', 'off', ...
-                'Position', [10 455 847 65]);
+                'Position', [10 368 847 65]);
             app.AnalysisSelectionLabel = uilabel(selPanel, ...
                 'Position', [10 8 820 38], ...
                 'Text', 'Select files and ROI electrodes on the Visualizing tab.', ...
                 'WordWrap', 'on', 'FontSize', 11);
 
             % Analysis tab — component windows section
-            uilabel(app.AnalysisTab, 'Position', [10 440 200 18], ...
+            uilabel(app.AnalysisTab, 'Position', [10 353 200 18], ...
                 'Text', 'COMPONENT WINDOWS', 'FontWeight', 'bold', 'FontSize', 10);
 
             % TEPComponentTable — moved from Visualizing tab
@@ -3193,40 +3193,40 @@ classdef nestapp < matlab.apps.AppBase
             app.TEPComponentTable.ColumnWidth = {80, 100, 128};
             app.TEPComponentTable.RowName     = {};
             app.TEPComponentTable.Enable      = 'on';
-            app.TEPComponentTable.Position    = [10 290 330 148];
+            app.TEPComponentTable.Position    = [10 203 330 148];
 
             % EditComponentWindowsButton — moved from Visualizing tab
             app.EditComponentWindowsButton = uibutton(app.AnalysisTab, 'push');
             app.EditComponentWindowsButton.ButtonPushedFcn = createCallbackFcn(app, @EditComponentWindowsButtonPushed, true);
             app.EditComponentWindowsButton.Text     = 'Edit Component Windows...';
-            app.EditComponentWindowsButton.Position = [10 260 200 25];
+            app.EditComponentWindowsButton.Position = [10 173 200 25];
 
             % Analysis tab — workspace export section (moved from Visualizing)
-            uilabel(app.AnalysisTab, 'Position', [450 440 300 18], ...
+            uilabel(app.AnalysisTab, 'Position', [450 353 300 18], ...
                 'Text', 'WORKSPACE EXPORT', 'FontWeight', 'bold', 'FontSize', 10);
 
             app.ExportTEPDataButton = uibutton(app.AnalysisTab, 'push');
             app.ExportTEPDataButton.ButtonPushedFcn = createCallbackFcn(app, @ExportTEPDataButtonPushed, true);
             app.ExportTEPDataButton.Enable   = 'off';
             app.ExportTEPDataButton.Text     = 'Export TEP to Workspace';
-            app.ExportTEPDataButton.Position = [450 400 220 28];
+            app.ExportTEPDataButton.Position = [450 313 220 28];
 
             app.TEPvarNameEditFieldLabel = uilabel(app.AnalysisTab);
             app.TEPvarNameEditFieldLabel.HorizontalAlignment = 'right';
             app.TEPvarNameEditFieldLabel.Enable   = 'off';
-            app.TEPvarNameEditFieldLabel.Position = [450 370 60 22];
+            app.TEPvarNameEditFieldLabel.Position = [450 283 60 22];
             app.TEPvarNameEditFieldLabel.Text     = 'Variable:';
 
             app.TEPvarNameEditField = uieditfield(app.AnalysisTab, 'text');
             app.TEPvarNameEditField.ValueChangedFcn = createCallbackFcn(app, @TEPvarNameEditFieldValueChanged, true);
             app.TEPvarNameEditField.Enable   = 'off';
-            app.TEPvarNameEditField.Position = [515 370 155 22];
+            app.TEPvarNameEditField.Position = [515 283 155 22];
             app.TEPvarNameEditField.Value    = 'TEPdata';
 
             % Analysis tab — batch extraction section (new)
-            uilabel(app.AnalysisTab, 'Position', [10 235 200 18], ...
+            uilabel(app.AnalysisTab, 'Position', [10 148 200 18], ...
                 'Text', 'BATCH EXTRACTION', 'FontWeight', 'bold', 'FontSize', 10);
-            uilabel(app.AnalysisTab, 'Position', [10 215 600 18], ...
+            uilabel(app.AnalysisTab, 'Position', [10 128 600 18], ...
                 'Text', ['Extract peak latency and amplitude from each file using the selected ' ...
                     'ROI and component windows. Results saved as CSV for import into R/SPSS/Excel.'], ...
                 'WordWrap', 'on', 'FontSize', 9, 'FontColor', [0.4 0.4 0.4]);
@@ -3234,12 +3234,12 @@ classdef nestapp < matlab.apps.AppBase
             app.ExtractPeaksCSVButton = uibutton(app.AnalysisTab, 'push');
             app.ExtractPeaksCSVButton.ButtonPushedFcn = createCallbackFcn(app, @ExtractPeaksCSVButtonPushed, true);
             app.ExtractPeaksCSVButton.Text    = 'Extract Peaks  →  CSV';
-            app.ExtractPeaksCSVButton.Position = [10 175 200 32];
+            app.ExtractPeaksCSVButton.Position = [10 88 200 32];
             app.ExtractPeaksCSVButton.Tooltip = ...
                 'Run peak detection across all selected files and save results as a CSV table';
 
             app.AnalysisStatusLabel = uilabel(app.AnalysisTab);
-            app.AnalysisStatusLabel.Position   = [10 148 847 22];
+            app.AnalysisStatusLabel.Position   = [10 61 847 22];
             app.AnalysisStatusLabel.Text       = 'Ready.';
             app.AnalysisStatusLabel.FontSize   = 10;
             app.AnalysisStatusLabel.FontColor  = [0.4 0.4 0.4];
