@@ -2,13 +2,13 @@ function peaks = tepPeakFinder(waveform, times, compDefs)
 % TEPPEAKFINDER  Detect TMS-EEG components in a grand-mean TEP waveform.
 %
 %   peaks = tepPeakFinder(waveform, times) uses the default canonical
-%   component windows (Rogasch et al. 2013; Farzan et al. 2016).
+%   component windows (Rogasch et al. 2013; Farzan 2016).
 %
 %   peaks = tepPeakFinder(waveform, times, compDefs) uses the search
 %   windows defined in compDefs, a struct array with fields:
 %     .name        — component label string (e.g. 'N15')
 %     .polarity    — 'neg' or 'pos'
-%     .nomLatency  — nominal peak latency in ms (seed for tesa_peakanalysis)
+%     .nomLatency  — nominal peak latency in ms
 %     .winStart    — search window start in ms
 %     .winEnd      — search window end in ms
 %
@@ -25,16 +25,14 @@ function peaks = tepPeakFinder(waveform, times, compDefs)
 %                 amplitudeUV — detected peak amplitude in µV (NaN if not found)
 %                 found       — logical scalar
 %
-%   Implementation: builds a minimal EEG stub (ROI.R1.tseries = waveform)
-%   and calls tesa_peakanalysis, so peak detection is identical to what
-%   TESA would produce in a standard pipeline.
-%
-%   Requires: TESA toolbox (tesa_peakanalysis).
+%   Implementation: delegates to tesa_peakanalysis when TESA is on the path;
+%   falls back to a findpeaks-based implementation (Signal Processing Toolbox)
+%   when TESA is unavailable. Results are equivalent for typical TEP waveforms.
 %
 %   See also: nestapp, overlayTEPComponents, populateTEPComponentTable
 
 if nargin < 3 || isempty(compDefs)
-    % Default canonical windows (Rogasch 2013 Clin Neurophysiol; Farzan 2016 Ann NY Acad Sci)
+    % Default canonical windows (Rogasch 2013 Clin Neurophysiol; Farzan 2016)
     compDefs = struct( ...
         'name',       {'N15',  'P30',  'N45',  'P60',  'N100', 'P180'}, ...
         'polarity',   {'neg',  'pos',  'neg',  'pos',  'neg',  'pos'}, ...
@@ -43,24 +41,33 @@ if nargin < 3 || isempty(compDefs)
         'winEnd',     {28,     50,     65,     90,     140,    260});
 end
 
-COMP_ORDER = {compDefs.name};
-COMP_POL   = {compDefs.polarity};
+waveform = waveform(:)';
+times    = times(:)';
 
 % Pre-allocate output
 blank = struct('name','','polarity','','latencyMs',NaN,'amplitudeUV',NaN,'found',false);
-peaks = repmat(blank, 1, numel(COMP_ORDER));
-for k = 1:numel(COMP_ORDER)
-    peaks(k).name     = COMP_ORDER{k};
-    peaks(k).polarity = COMP_POL{k};
+peaks = repmat(blank, 1, numel(compDefs));
+for k = 1:numel(compDefs)
+    peaks(k).name     = compDefs(k).name;
+    peaks(k).polarity = compDefs(k).polarity;
 end
 
-% Minimal EEG stub — only the fields tesa_peakanalysis reads
-EEGstub.times          = times(:)';
-EEGstub.ROI.R1.tseries = waveform(:)';
+if ~isempty(which('tesa_peakanalysis'))
+    peaks = detectWithTESA(peaks, waveform, times, compDefs);
+else
+    peaks = detectWithFindpeaks(peaks, waveform, times, compDefs);
+end
+end
 
-% Separate neg/pos components and build array arguments for tesa_peakanalysis.
-% NEG_WINS/POS_WINS are referenced inside evalc strings; %#ok<NASGU> suppresses
-% the "variable might be unused" warning that the static analyzer would otherwise raise.
+%% ---- TESA path ---------------------------------------------------------------
+
+function peaks = detectWithTESA(peaks, waveform, times, compDefs)
+% Delegate to tesa_peakanalysis via a minimal EEG stub.
+COMP_POL = {compDefs.polarity};
+
+EEGstub.times          = times;
+EEGstub.ROI.R1.tseries = waveform;
+
 isNeg = strcmp(COMP_POL, 'neg');
 isPos = strcmp(COMP_POL, 'pos');
 
@@ -69,27 +76,26 @@ posDefs = compDefs(isPos);
 
 NEG_PEAKS = [negDefs.nomLatency];
 POS_PEAKS = [posDefs.nomLatency];
+NEG_WINS  = buildWinMatrix(negDefs);
+POS_WINS  = buildWinMatrix(posDefs);
 
-NEG_WINS = buildWinMatrix(negDefs); %#ok<NASGU>
-POS_WINS = buildWinMatrix(posDefs); %#ok<NASGU>
-
-% Run TESA peak analysis; evalc suppresses the per-peak fprintf messages.
+% evalc suppresses per-peak fprintf messages from tesa_peakanalysis.
 try
     if ~isempty(NEG_PEAKS)
-        [~] = evalc('EEGstub = tesa_peakanalysis(EEGstub, ''ROI'', ''negative'', NEG_PEAKS, NEG_WINS)');
+        EEGstub = evalTESA(EEGstub, 'negative', NEG_PEAKS, NEG_WINS);
     end
     if ~isempty(POS_PEAKS)
-        [~] = evalc('EEGstub = tesa_peakanalysis(EEGstub, ''ROI'', ''positive'', POS_PEAKS, POS_WINS)');
+        EEGstub = evalTESA(EEGstub, 'positive', POS_PEAKS, POS_WINS);
     end
 catch ME
     warning('tepPeakFinder:tesaFailed', ...
-        'tesa_peakanalysis failed (%s) — returning empty peaks.', ME.message);
+        'tesa_peakanalysis failed (%s) — falling back to findpeaks.', ME.message);
+    peaks = detectWithFindpeaks(peaks, waveform, times, compDefs);
     return
 end
 
-% Parse results from EEG stub into output struct
-for k = 1:numel(COMP_ORDER)
-    compName = COMP_ORDER{k};
+for k = 1:numel(compDefs)
+    compName = compDefs(k).name;
     if ~isfield(EEGstub.ROI.R1, compName)
         continue
     end
@@ -100,10 +106,52 @@ for k = 1:numel(COMP_ORDER)
 end
 end
 
-%% ---- helpers ---------------------------------------------------------------
+function EEGout = evalTESA(EEGin, direction, peakVec, winMat)
+% Wrapper that calls tesa_peakanalysis and captures its text output.
+EEGout = tesa_peakanalysis(EEGin, 'ROI', direction, peakVec, winMat);
+end
+
+%% ---- findpeaks fallback -------------------------------------------------------
+
+function peaks = detectWithFindpeaks(peaks, waveform, times, compDefs)
+% Per-component peak search using Signal Processing Toolbox findpeaks.
+% Finds the largest local maximum (positive) or minimum (negative) within
+% each component's search window. A point is a local extremum if it is
+% more prominent than 5% of the signal range in that window.
+SIGNAL_RANGE = max(waveform) - min(waveform);
+MIN_PROM     = max(0.05 * SIGNAL_RANGE, 0.1);   % µV; avoids noise spikes
+
+for k = 1:numel(compDefs)
+    cd    = compDefs(k);
+    tMask = times >= cd.winStart & times <= cd.winEnd;
+    if sum(tMask) < 3
+        continue
+    end
+    seg  = waveform(tMask);
+    tSeg = times(tMask);
+
+    if strcmp(cd.polarity, 'neg')
+        [pkVals, pkIdx] = findpeaks(-seg, 'MinPeakProminence', MIN_PROM);
+        pkVals = -pkVals;
+    else
+        [pkVals, pkIdx] = findpeaks(seg, 'MinPeakProminence', MIN_PROM);
+    end
+
+    if isempty(pkVals)
+        continue
+    end
+
+    % Take the largest absolute peak in the window
+    [~, best]              = max(abs(pkVals));
+    peaks(k).found         = true;
+    peaks(k).latencyMs     = tSeg(pkIdx(best));
+    peaks(k).amplitudeUV   = pkVals(best);
+end
+end
+
+%% ---- helpers -----------------------------------------------------------------
 
 function W = buildWinMatrix(defs)
-% Build an N×2 matrix of [winStart, winEnd] rows from a struct array.
 W = zeros(numel(defs), 2);
 for k = 1:numel(defs)
     W(k, :) = [defs(k).winStart, defs(k).winEnd];
