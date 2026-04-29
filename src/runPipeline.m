@@ -85,6 +85,14 @@ nSteps = numel(app.steps2run) / 2;
 allSummaries = {};
 allReports   = {};
 
+% Dependency check: verify required plugins are on the path before touching any files.
+filePaths = cellfun(@(f) fullfile(app.path, f), app.file, 'UniformOutput', false);
+[depsOk, depsMsg] = checkStepDependencies(app.SelectedListBox.Items, filePaths);
+if ~depsOk
+    uialert(app.UIFigure, depsMsg, 'Missing Dependencies', 'Icon', 'error');
+    return
+end
+
 % Pre-flight overwrite check: when EEGLAB dialogs are suppressed the normal
 % "Dataset info" prompt that would warn about overwrites is also gone.
 % Warn once here, before any file is touched, so the user can cancel cleanly.
