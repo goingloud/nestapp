@@ -579,7 +579,8 @@ for nfile = 1:nFiles
                         data2D = reshape(EEG.data(EEG.icachansind,:,:), numel(EEG.icachansind), []);
                         totalVar = sum(var(data2D, 0, 2));
                         if totalVar > 0
-                            pendingICAStats.compVarPct = (var(act2D, 0, 2) / totalVar * 100)';
+                            % Cast to double: EEG.data may be single, making var() single.
+                            pendingICAStats.compVarPct = double((var(act2D, 0, 2) / totalVar * 100)');
                         end
                     end
                     if isfield(EEG,'etc') && isfield(EEG.etc,'ic_classification') && ...
@@ -978,7 +979,8 @@ for nfile = 1:nFiles
 
                     hasVars = isfield(cl, 'compVars') && numel(cl.compVars) >= numel(cl.compClass);
                     if hasVars && nRejTESA > 0
-                        rejPct         = cl.compVars(rejIdx);
+                        % Cast to double: TESA compVars may be single when EEG.data is single.
+                        rejPct         = double(cl.compVars(rejIdx));
                         rnd.varRemoved = sum(rejPct);
                         rnd.varMin     = min(rejPct);
                         rnd.varMax     = max(rejPct);
