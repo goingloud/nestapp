@@ -68,7 +68,12 @@ lines{end+1} = 'ICA';
 if report.ica.nComponents > 0
     nComp = report.ica.nComponents;
     nRej  = report.ica.nRejected;
-    nKept = report.ica.nKept;
+    % nKept added in M3; fall back for reports saved before that field existed.
+    if isfield(report.ica, 'nKept')
+        nKept = report.ica.nKept;
+    else
+        nKept = nComp - nRej;
+    end
     lines{end+1} = sprintf('  Identified: %d components', nComp);
     if nRej > 0
         hasVar   = ~isnan(report.ica.varRemoved);
