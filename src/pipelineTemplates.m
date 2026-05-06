@@ -113,6 +113,13 @@ ov{4}.hicutoff          = 40;    % LPF at 40 Hz
 ov{6}.FlatlineCriterion = 4;     % match Delorme 2023 ASR parameters
 ov{6}.ChannelCriterion  = 0.85;
 ov{7}.ref               = '[]';  % average reference
+% Step 10 — ICLabel thresholds: 0.8 is the practical threshold for
+%   resting-state; the step default of 0.9 is too strict and commonly
+%   flags nothing on real data.  Heart added because cardiac artifacts
+%   are frequent in resting-state recordings.
+ov{10}.Muscle = [0.8, 1];
+ov{10}.Eye    = [0.8, 1];
+ov{10}.Heart  = [0.9, 1];
 ov{13}.savenew          = 'resting';
 t.overrides = ov;
 templates(end+1) = t;
@@ -150,6 +157,11 @@ ov{4}.hicutoff          = 0;
 % Step 5 — match Delorme 2023 ASR parameters exactly
 ov{5}.FlatlineCriterion = 4;
 ov{5}.ChannelCriterion  = 0.85;
+% Step 8 — ICLabel thresholds: 0.8 practical threshold; 0.9 default is too
+%   strict and commonly flags nothing.  Heart added for cardiac artifacts.
+ov{8}.Muscle = [0.8, 1];
+ov{8}.Eye    = [0.8, 1];
+ov{8}.Heart  = [0.9, 1];
 % Step 11 — write output file
 ov{11}.savenew          = 'minimal';
 t.overrides = ov;
