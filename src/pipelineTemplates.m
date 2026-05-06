@@ -66,65 +66,203 @@ ov{6}.interpolation = 'cubic';
 ov{9}.timelim = [-1, 1];
 % Step 12 — average re-reference (empty string = average reference in EEGLAB)
 ov{12}.ref = '[]';
+% Step 16 — Round 2: activate all artifact detectors with default thresholds
+%           (detectors default to 'off'; enabling them here makes the template
+%           consistent with the middle-of-range validation pipeline).
+ov{16}.blink      = 'on';
+ov{16}.move       = 'on';
+ov{16}.muscle     = 'on';
+ov{16}.elecNoise  = 'on';
 t.overrides = ov;
 templates(end+1) = t;
 
 %% ---- Resting-State EEG --------------------------------------------------
 % Continuous-data pipeline per the PREP pipeline (Bigdely-Shamlo 2015) and
-% standard EEGLAB recommendations.  Key decisions:
-%   - Data stays continuous throughout cleaning; ICA trained on the full
-%     recording gives better component stability than on short epochs.
-%   - Average re-reference applied before ICA so the unmixing matrix is
-%     learned on the intended reference (EEGLAB FAQ).
+% standard EEGLAB recommendations, updated with structural improvements from
+% Delorme 2023 (doi:10.1038/s41598-023-27528-0).  Key decisions:
+%   - ASR (pop_clean_rawdata) replaces pop_rejchan: removes bad channels AND
+%     bad continuous data segments in one pass.
+%   - Channel interpolation runs AFTER ICA so the decomposition is not
+%     trained on synthetic data.
+%   - Average re-reference retained (before ICA) per EEGLAB FAQ and PREP —
+%     resting-state differs from Delorme's ERP context here.
+%   - LPF at 40 Hz retained — reduces muscle noise entering ICA for
+%     typical alpha/beta/theta resting-state analyses.
 %   - CleanLine removes line noise via multi-taper decomposition, preserving
 %     spectral content better than a notch filter.
-%   - Epoching is a downstream analysis step, not part of cleaning — it is
-%     deliberately omitted here.
+%   - Epoching is a downstream analysis step, not part of cleaning.
 t = blankTemplate();
 t.name = 'Resting-State EEG';
 t.steps = { ...
     'Load Data', ...
     'Load Channel Location', ...
+    'Remove un-needed Channels', ...
     'Frequency Filter', ...
     'Frequency Filter (CleanLine)', ...
-    'Remove Bad Channels', ...
-    'Interpolate Channels', ...
+    'Automatic Cleaning Data', ...
     'Re-Reference', ...
     'Run ICA', ...
     'Label ICA Components', ...
     'Flag ICA Components for Rejection', ...
     'Remove Flagged ICA Components', ...
+    'Interpolate Channels', ...
     'Save New Set'};
 ov = repmat({struct()}, 1, numel(t.steps));
-ov{3}.locutoff = 0.5;   % HPF at 0.5 Hz (wider than default 1 Hz for resting-state)
-ov{3}.hicutoff = 40;    % LPF at 40 Hz (removes high-freq noise before ICA)
-ov{7}.ref      = '[]';  % average reference
+ov{4}.locutoff          = 0.5;   % HPF at 0.5 Hz
+ov{4}.hicutoff          = 40;    % LPF at 40 Hz
+ov{6}.FlatlineCriterion = 4;     % match Delorme 2023 ASR parameters
+ov{6}.ChannelCriterion  = 0.85;
+ov{7}.ref               = '[]';  % average reference
+ov{13}.savenew          = 'resting';
 t.overrides = ov;
 templates(end+1) = t;
 
-%% ---- Minimal (HPF + ICA + bad channel removal) --------------------------
-% The smallest pipeline that meets basic publication quality standards.
-% Includes average re-referencing and a single ICA pass for blink/muscle
-% removal — both are required for credible EEG reporting.  No line noise
-% removal, no bad-epoch rejection, and no epoching are included; add those
-% steps manually if the recording requires them.
+%% ---- Minimal (Delorme 2023) -----------------------------------------------
+% Minimal pipeline based on Delorme 2023 (Sci Rep, "EEG is better left alone",
+% doi:10.1038/s41598-023-27528-0).  Key decisions:
+%   - HPF at 0.5 Hz only; no LPF (Delorme 2023 omits it — unnecessary and
+%     may remove real broadband content before ICA).
+%   - ASR (pop_clean_rawdata) removes bad channels AND bad continuous data
+%     segments in one pass; pop_rejchan only removes channels.
+%   - Channel interpolation runs AFTER ICA so the decomposition is not
+%     trained on synthetic data.
+%   - No explicit re-reference — omitted per Delorme 2023.
+%   - ICA uses FastICA (Delorme used Picard; omitted here to avoid the
+%     additional dependency).
 t = blankTemplate();
-t.name = 'Minimal (HPF + ICA + bad channels)';
+t.name = 'Minimal (Delorme 2023)';
 t.steps = { ...
     'Load Data', ...
     'Load Channel Location', ...
+    'Remove un-needed Channels', ...
     'Frequency Filter', ...
-    'Remove Bad Channels', ...
-    'Interpolate Channels', ...
-    'Re-Reference', ...
+    'Automatic Cleaning Data', ...
     'Run ICA', ...
     'Label ICA Components', ...
     'Flag ICA Components for Rejection', ...
     'Remove Flagged ICA Components', ...
+    'Interpolate Channels', ...
     'Save New Set'};
 ov = repmat({struct()}, 1, numel(t.steps));
-ov{3}.locutoff = 0.5;   % HPF at 0.5 Hz
-ov{6}.ref      = '[]';  % average reference
+% Step 4 — HPF only; hicutoff=0 disables the low-pass filter
+ov{4}.locutoff          = 0.5;
+ov{4}.hicutoff          = 0;
+% Step 5 — match Delorme 2023 ASR parameters exactly
+ov{5}.FlatlineCriterion = 4;
+ov{5}.ChannelCriterion  = 0.85;
+% Step 11 — write output file
+ov{11}.savenew          = 'minimal';
+t.overrides = ov;
+templates(end+1) = t;
+
+%% ---- TMS-EEG / TEP — Conservative ---------------------------------------
+% Same 19-step TESA pipeline with thresholds biased toward keeping data:
+%   - Higher bad-channel SD threshold rejects only extreme outliers.
+%   - Fewer ICA components in Round 1 (10) preserves more signal variance.
+%   - Higher TMS-muscle threshold in both rounds is less aggressive about
+%     flagging borderline early-peak components.
+%   - Higher epoch amplitude threshold (1500 µV) keeps more trials.
+% Use this variant when data quality is known to be good or when you want
+% to establish an upper bound on how much cleaning is beneficial.
+t = blankTemplate();
+t.name = 'TMS-EEG / TEP — Conservative';
+t.steps = { ...
+    'Load Data', ...
+    'Load Channel Location', ...
+    'Remove un-needed Channels', ...
+    'Find TMS Pulses (TESA)', ...
+    'Remove TMS Artifacts (TESA)', ...
+    'Interpolate Missing Data (TESA)', ...
+    'Re-Sample', ...
+    'Frequency Filter (TESA)', ...
+    'Epoching', ...
+    'Remove Bad Channels', ...
+    'Interpolate Channels', ...
+    'Re-Reference', ...
+    'Run TESA ICA', ...
+    'Remove ICA Components (TESA)', ...
+    'Run TESA ICA', ...
+    'Remove ICA Components (TESA)', ...
+    'Remove Baseline', ...
+    'Remove Bad Epoch', ...
+    'Save New Set'};
+ov = repmat({struct()}, 1, numel(t.steps));
+ov{6}.interpolation     = 'cubic';
+ov{9}.timelim           = [-1, 1];
+% Step 10 — higher SD threshold; only the worst channels removed
+ov{10}.threshold        = 8;
+ov{12}.ref              = '[]';
+% Step 14 — Round 1: higher TMS-muscle threshold (fewer components removed)
+ov{14}.tmsMuscleThresh  = 12;
+% Step 16 — Round 2: all detectors on, thresholds raised vs defaults
+ov{16}.blink            = 'on';
+ov{16}.move             = 'on';
+ov{16}.muscle           = 'on';
+ov{16}.elecNoise        = 'on';
+ov{16}.blinkThresh      = 3.5;
+ov{16}.moveThresh       = 3.0;
+ov{16}.muscleThresh     = 0.8;
+ov{16}.elecNoiseThresh  = 6.0;
+ov{16}.tmsMuscleThresh  = 12;
+% Step 18 — high amplitude threshold: only extreme artefact epochs removed
+ov{18}.threshold        = 1500;
+% Step 19 — set output suffix so files are saved to disk automatically
+ov{19}.savenew          = 'conservative';
+t.overrides = ov;
+templates(end+1) = t;
+
+%% ---- TMS-EEG / TEP — Aggressive -----------------------------------------
+% Same 19-step TESA pipeline with thresholds biased toward removing artefact:
+%   - Lower bad-channel SD threshold flags borderline noisy channels.
+%   - More ICA components in Round 1 (25) captures subtler artefact sources.
+%   - Lower TMS-muscle threshold in both rounds flags more early-peak comps.
+%   - Lower epoch amplitude threshold (500 µV) discards more contaminated trials.
+% Use this variant to establish a lower bound (over-cleaned) or when the
+% recording is known to have heavy artefact contamination.
+t = blankTemplate();
+t.name = 'TMS-EEG / TEP — Aggressive';
+t.steps = { ...
+    'Load Data', ...
+    'Load Channel Location', ...
+    'Remove un-needed Channels', ...
+    'Find TMS Pulses (TESA)', ...
+    'Remove TMS Artifacts (TESA)', ...
+    'Interpolate Missing Data (TESA)', ...
+    'Re-Sample', ...
+    'Frequency Filter (TESA)', ...
+    'Epoching', ...
+    'Remove Bad Channels', ...
+    'Interpolate Channels', ...
+    'Re-Reference', ...
+    'Run TESA ICA', ...
+    'Remove ICA Components (TESA)', ...
+    'Run TESA ICA', ...
+    'Remove ICA Components (TESA)', ...
+    'Remove Baseline', ...
+    'Remove Bad Epoch', ...
+    'Save New Set'};
+ov = repmat({struct()}, 1, numel(t.steps));
+ov{6}.interpolation     = 'cubic';
+ov{9}.timelim           = [-1, 1];
+% Step 10 — lower SD threshold; borderline noisy channels removed
+ov{10}.threshold        = 3;
+ov{12}.ref              = '[]';
+% Step 14 — Round 1: lower TMS-muscle threshold (more components removed)
+ov{14}.tmsMuscleThresh  = 5;
+% Step 16 — Round 2: all detectors on, thresholds lowered vs defaults
+ov{16}.blink            = 'on';
+ov{16}.move             = 'on';
+ov{16}.muscle           = 'on';
+ov{16}.elecNoise        = 'on';
+ov{16}.blinkThresh      = 1.5;
+ov{16}.moveThresh       = 1.5;
+ov{16}.muscleThresh     = 0.4;
+ov{16}.elecNoiseThresh  = 2.5;
+ov{16}.tmsMuscleThresh  = 5;
+% Step 18 — low amplitude threshold: contaminated trials discarded aggressively
+ov{18}.threshold        = 500;
+% Step 19 — set output suffix so files are saved to disk automatically
+ov{19}.savenew          = 'aggressive';
 t.overrides = ov;
 templates(end+1) = t;
 
