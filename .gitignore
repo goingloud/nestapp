@@ -12,6 +12,7 @@ data/
 results/
 *.mat
 !exemplar_pipeline.mat
+!src/templates/*.mat
 
 # EEGLAB bundle (not versioned)
 eeglab*/
