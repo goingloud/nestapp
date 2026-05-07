@@ -380,27 +380,62 @@ classdef nestapp < matlab.apps.AppBase
                 return
             end
             [pFolder, ~, ~] = fileparts(pPath);
-            % Temporarily set the file so LoadPipelineButtonPushed can read it.
-            % We call the loader directly rather than through the button to avoid
-            % opening the file dialog again.
             try
-                pipeline = load(pPath, '-mat');
-                app.SelectedListBox.Items     = pipeline.PLItems;
-                app.SelectedListBox.ItemsData = pipeline.PLItemsData;
-                app.ChangedVal                = pipeline.VarIns;
-                app.UITable.Data              = [];
-                if isfield(pipeline, 'ParamKeys')
-                    app.stepParamKeys = pipeline.ParamKeys;
-                else
-                    % Trigger the old-format upgrade path
-                    LoadPipelineButtonPushed(app, []);
-                    return
-                end
+                loadPipelineData(app, pPath);
                 setpref('nestapp', 'lastPipelineFolder', pFolder);
                 pushRecent(app, 'recentPipelines', pPath);
                 buildRecentPipelinesMenu(app);
             catch err
                 uialert(app.UIFigure, err.message, 'Load Error', 'Icon', 'error');
+            end
+        end
+
+        function loadPipelineData(app, fullPath)
+        % LOADPIPELINEDATA  Load pipeline state from a .mat into the app.
+        %   Handles both current-format files (ParamKeys saved) and
+        %   old-format files (raw keys in VarIns{k}.var), upgrading the
+        %   latter to friendly names automatically.
+            pipeline = load(fullPath, '-mat');
+            app.SelectedListBox.Items     = pipeline.PLItems;
+            app.SelectedListBox.ItemsData = pipeline.PLItemsData;
+            app.ChangedVal                = pipeline.VarIns;
+            app.UITable.Data              = [];
+            if isfield(pipeline, 'ParamKeys')
+                app.stepParamKeys = pipeline.ParamKeys;
+            else
+                reg = stepRegistry();
+                app.stepParamKeys = cell(numel(pipeline.PLItems), 1);
+                for k = 1:numel(pipeline.PLItems)
+                    stepName = pipeline.PLItems{k};
+                    regIdx   = find(strcmp({reg.name}, stepName), 1);
+                    T        = app.ChangedVal{k};
+                    nRows    = height(T);
+                    rawKeys  = cell(nRows, 1);
+                    for row = 1:nRows
+                        rawKey = char(T.var{row});
+                        rawKeys{row} = rawKey;
+                        if ~isempty(regIdx)
+                            pIdx = find(strcmp({reg(regIdx).params.key}, rawKey), 1);
+                            if ~isempty(pIdx)
+                                p = reg(regIdx).params(pIdx);
+                                if isempty(p.unit)
+                                    T.var{row} = string(p.friendlyName);
+                                else
+                                    T.var{row} = string([p.friendlyName, ' (', p.unit, ')']);
+                                end
+                                if isscalar(T.val{row}) && strcmp(string(T.val{row}), '[]')
+                                    if ~isempty(p.placeholder)
+                                        T.val{row} = string(p.placeholder);
+                                    else
+                                        T.val{row} = "(not set)";
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    app.stepParamKeys{k} = rawKeys;
+                    app.ChangedVal{k}    = T;
+                end
             end
         end
 
@@ -1476,65 +1511,17 @@ classdef nestapp < matlab.apps.AppBase
         % Button pushed function: LoadPipelineButton
         function LoadPipelineButtonPushed(app, ~)
             startFolder = getpref('nestapp', 'lastPipelineFolder', '');
-            [pName,pPath] = uigetfile('*.mat', 'Load Pipeline', startFolder);
-            pipeline = load([pPath,pName],'-mat');
-            app.SelectedListBox.Items    = pipeline.PLItems;
-            app.SelectedListBox.ItemsData= pipeline.PLItemsData;
-            app.ChangedVal               = pipeline.VarIns;
-            app.UITable.Data             = [];
-
-            % Restore or rebuild stepParamKeys.
-            % New-format files have ParamKeys saved directly.
-            % Old-format files have raw EEGLAB keys in VarIns{k}.var — upgrade them
-            % to friendly names while extracting the raw keys into stepParamKeys.
-            if isfield(pipeline, 'ParamKeys')
-                app.stepParamKeys = pipeline.ParamKeys;
-            else
-                reg = stepRegistry();
-                app.stepParamKeys = cell(numel(pipeline.PLItems), 1);
-                for k = 1:numel(pipeline.PLItems)
-                    stepName = pipeline.PLItems{k};
-                    regIdx   = find(strcmp({reg.name}, stepName), 1);
-                    T        = app.ChangedVal{k};
-                    nRows    = height(T);
-                    rawKeys  = cell(nRows, 1);
-                    for row = 1:nRows
-                        rawKey = char(T.var{row});
-                        rawKeys{row} = rawKey;
-                        if ~isempty(regIdx)
-                            pIdx = find(strcmp({reg(regIdx).params.key}, rawKey), 1);
-                            if ~isempty(pIdx)
-                                p = reg(regIdx).params(pIdx);
-                                % Upgrade label: raw key → friendly name (unit)
-                                if isempty(p.unit)
-                                    T.var{row} = string(p.friendlyName);
-                                else
-                                    T.var{row} = string([p.friendlyName, ' (', p.unit, ')']);
-                                end
-                                % Upgrade value: '[]' → descriptive placeholder
-                                if isscalar(T.val{row}) && strcmp(string(T.val{row}), '[]')
-                                    if ~isempty(p.placeholder)
-                                        T.val{row} = string(p.placeholder);
-                                    else
-                                        T.val{row} = "(not set)";
-                                    end
-                                end
-                            end
-                        end
-                    end
-                    app.stepParamKeys{k} = rawKeys;
-                    app.ChangedVal{k}    = T;
-                end
-            end
-            if ~isequal(pPath, 0)
-                setpref('nestapp', 'lastPipelineFolder', pPath);
-                pushRecent(app, 'recentPipelines', fullfile(pPath, pName));
-                buildRecentPipelinesMenu(app);
-                [~, nm, ~] = fileparts(pName);
-                app.pipelineName  = nm;
-                app.pipelineDirty = false;
-                updateStatusBar(app);
-            end
+            [pName, pPath] = uigetfile('*.mat', 'Load Pipeline', startFolder);
+            if isequal(pName, 0); return; end
+            fullPath = fullfile(pPath, pName);
+            loadPipelineData(app, fullPath);
+            setpref('nestapp', 'lastPipelineFolder', pPath);
+            pushRecent(app, 'recentPipelines', fullPath);
+            buildRecentPipelinesMenu(app);
+            [~, nm, ~] = fileparts(pName);
+            app.pipelineName  = nm;
+            app.pipelineDirty = false;
+            updateStatusBar(app);
         end
 
         % Button pushed function: SelectDataButton
@@ -1587,13 +1574,33 @@ classdef nestapp < matlab.apps.AppBase
         % Menu selected function: Load Template...
         function LoadTemplateMenuSelected(app, ~)
         % LOADTEMPLATEMENUSELECTED  Show a template picker and load the chosen template.
-        %   Clears the current pipeline (without confirmation) and populates
-        %   the step list from the template, applying any parameter overrides.
-            templates = pipelineTemplates();
-            if isempty(templates); return; end
+        %   Reads template .mat files from src/templates/ — the same format
+        %   as user-saved pipelines.  No override logic runs at runtime.
+            srcDir      = fileparts(which('nestapp'));
+            templateDir = fullfile(srcDir, 'templates');
+            files = dir(fullfile(templateDir, '*.mat'));
+            if isempty(files)
+                uialert(app.UIFigure, ...
+                    'No template files found in src/templates/.  Run buildTemplates() to generate them.', ...
+                    'Templates');
+                return
+            end
 
-            % Build a small modal picker
-            names = {templates.name};
+            % Read templateName from each file for the picker list.
+            n     = numel(files);
+            names = cell(n, 1);
+            paths = cell(n, 1);
+            for i = 1:n
+                paths{i} = fullfile(files(i).folder, files(i).name);
+                try
+                    tmp      = load(paths{i}, 'templateName');
+                    names{i} = tmp.templateName;
+                catch
+                    [~, names{i}] = fileparts(files(i).name);
+                end
+            end
+
+            % Modal picker
             dlg = uifigure('Name', 'Load Template', ...
                 'Position', [300 300 320 200], ...
                 'WindowStyle', 'modal', 'Resize', 'off');
@@ -1612,51 +1619,15 @@ classdef nestapp < matlab.apps.AppBase
                 idx = find(strcmp(names, lb.Value), 1);
                 close(dlg);
                 if isempty(idx); return; end
-                t = templates(idx);
-
-                % Clear pipeline without confirmation
                 clearSteps(app);
                 clc
-
-                % Add each step and apply overrides
-                for si = 1:numel(t.steps)
-                    stepLabel = t.steps{si};
-                    if ~any(strcmp(app.StepsListBox.Items, stepLabel))
-                        warning('nestapp:template', ...
-                            'Template step "%s" not found in registry — skipped.', stepLabel);
-                        continue
-                    end
-                    appendStep(app, stepLabel);
-                    pos = numel(app.SelectedListBox.Items);
-
-                    % Apply parameter overrides for this step
-                    if si <= numel(t.overrides) && ~isempty(fieldnames(t.overrides{si}))
-                        ov = t.overrides{si};
-                        ovFields = fieldnames(ov);
-                        keys = app.stepParamKeys{pos};
-                        T    = app.ChangedVal{pos};
-                        for fi = 1:numel(ovFields)
-                            rawKey = ovFields{fi};
-                            row = find(strcmp(keys, rawKey), 1);
-                            if isempty(row); continue; end
-                            v = ov.(rawKey);
-                            if isnumeric(v)
-                                T.val{row} = string(mat2str(v));
-                            else
-                                T.val{row} = string(v);
-                            end
-                        end
-                        app.ChangedVal{pos} = T;
-                    end
-                end
-
-                app.pipelineName  = t.name;
+                loadPipelineData(app, paths{idx});
+                app.pipelineName  = names{idx};
                 app.pipelineDirty = true;
                 updateStatusBar(app);
-                % Show the first step's params if any steps were added
-                if ~isempty(app.SelectedListBox.Items) && ~isempty(app.SelectedListBox.Items{1})
+                if ~isempty(app.SelectedListBox.Items)
                     app.SelectedListBox.Value = app.SelectedListBox.ItemsData{1};
-                    app.UITable.Data = app.ChangedVal{1};
+                    app.UITable.Data          = app.ChangedVal{1};
                     styleParamTable(app);
                 end
             end
