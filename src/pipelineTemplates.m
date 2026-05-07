@@ -14,10 +14,14 @@ function templates = pipelineTemplates()
 %   Adding a template: append one block below following the existing
 %   pattern and ensure every step name matches an entry in stepRegistry.
 %
+%   Overrides are applied with ovSet() rather than by hardcoded step index.
+%   This means adding or removing a step from a template never silently
+%   mis-applies a parameter to the wrong step.
+%
 %   Pipeline designs follow published best practices:
 %     TMS-EEG  — Rogasch et al. 2017 (NeuroImage), TESA toolbox documentation
-%     Resting  — Bigdely-Shamlo et al. 2015 (PREP), EEGLAB tutorials
-%     Minimal  — EEGLAB standard cleaning recommendations
+%     Resting  — Bigdely-Shamlo et al. 2015 (PREP), Delorme 2023 (Sci Rep)
+%     Minimal  — Delorme 2023 (Sci Rep, doi:10.1038/s41598-023-27528-0)
 %
 %   See also: stepRegistry, nestapp
 
@@ -55,24 +59,20 @@ t.steps = { ...
     'Remove Baseline', ...
     'Remove Bad Epoch', ...
     'Save New Set'};
-ov = repmat({struct()}, 1, numel(t.steps));
-% Step 6 — cubic interpolation of removed TMS window (TESA paper recommends
-%           cubic; default is linear which is less accurate for the artifact
-%           boundary).
-ov{6}.interpolation = 'cubic';
-% Step 9 — epoch window: [-1, 1] s gives 1 s pre-stim baseline and captures
-%           all standard TEP components (N15 through P180) plus the 500-1000 ms
-%           post-stim window required by the background-restoration quality metric.
-ov{9}.timelim = [-1, 1];
-% Step 12 — average re-reference (empty string = average reference in EEGLAB)
-ov{12}.ref = '[]';
-% Step 16 — Round 2: activate all artifact detectors with default thresholds
-%           (detectors default to 'off'; enabling them here makes the template
-%           consistent with the middle-of-range validation pipeline).
-ov{16}.blink      = 'on';
-ov{16}.move       = 'on';
-ov{16}.muscle     = 'on';
-ov{16}.elecNoise  = 'on';
+ov = blankOverrides(t.steps);
+% Cubic interpolation of TMS window (TESA paper recommends cubic; default
+% linear is less accurate at the artifact boundary).
+ov = ovSet(ov, t.steps, 'Interpolate Missing Data (TESA)', 'interpolation', 'cubic');
+% Epoch window: [-1 1] s captures N15–P180 and provides 1 s pre-stim baseline.
+ov = ovSet(ov, t.steps, 'Epoching', 'timelim', [-1, 1]);
+% Average re-reference.
+ov = ovSet(ov, t.steps, 'Re-Reference', 'ref', '[]');
+% Round 2 — activate all artifact detectors (all default to 'off').
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'blink',     'on', 2);
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'move',      'on', 2);
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'muscle',    'on', 2);
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'elecNoise', 'on', 2);
+ov = ovSet(ov, t.steps, 'Save New Set', 'savenew', 'tesa');
 t.overrides = ov;
 templates(end+1) = t;
 
@@ -107,20 +107,20 @@ t.steps = { ...
     'Remove Flagged ICA Components', ...
     'Interpolate Channels', ...
     'Save New Set'};
-ov = repmat({struct()}, 1, numel(t.steps));
-ov{4}.locutoff          = 0.5;   % HPF at 0.5 Hz
-ov{4}.hicutoff          = 40;    % LPF at 40 Hz
-ov{6}.FlatlineCriterion = 4;     % match Delorme 2023 ASR parameters
-ov{6}.ChannelCriterion  = 0.85;
-ov{7}.ref               = '[]';  % average reference
-% Step 10 — ICLabel thresholds: 0.8 is the practical threshold for
-%   resting-state; the step default of 0.9 is too strict and commonly
-%   flags nothing on real data.  Heart added because cardiac artifacts
-%   are frequent in resting-state recordings.
-ov{10}.Muscle = [0.8, 1];
-ov{10}.Eye    = [0.8, 1];
-ov{10}.Heart  = [0.9, 1];
-ov{13}.savenew          = 'resting';
+ov = blankOverrides(t.steps);
+ov = ovSet(ov, t.steps, 'Frequency Filter', 'locutoff', 0.5);  % HPF at 0.5 Hz
+ov = ovSet(ov, t.steps, 'Frequency Filter', 'hicutoff', 40);   % LPF at 40 Hz
+% ASR parameters matching Delorme 2023.
+ov = ovSet(ov, t.steps, 'Automatic Cleaning Data', 'FlatlineCriterion', 4);
+ov = ovSet(ov, t.steps, 'Automatic Cleaning Data', 'ChannelCriterion',  0.85);
+ov = ovSet(ov, t.steps, 'Re-Reference', 'ref', '[]');
+% ICLabel thresholds: 0.8 is the practical threshold for resting-state; the
+% step default of 0.9 is too strict and commonly flags nothing on real data.
+% Heart added because cardiac artifacts are frequent in resting-state.
+ov = ovSet(ov, t.steps, 'Flag ICA Components for Rejection', 'Muscle', [0.8, 1]);
+ov = ovSet(ov, t.steps, 'Flag ICA Components for Rejection', 'Eye',    [0.8, 1]);
+ov = ovSet(ov, t.steps, 'Flag ICA Components for Rejection', 'Heart',  [0.9, 1]);
+ov = ovSet(ov, t.steps, 'Save New Set', 'savenew', 'resting');
 t.overrides = ov;
 templates(end+1) = t;
 
@@ -150,27 +150,23 @@ t.steps = { ...
     'Remove Flagged ICA Components', ...
     'Interpolate Channels', ...
     'Save New Set'};
-ov = repmat({struct()}, 1, numel(t.steps));
-% Step 4 — HPF only; hicutoff=0 disables the low-pass filter
-ov{4}.locutoff          = 0.5;
-ov{4}.hicutoff          = 0;
-% Step 5 — match Delorme 2023 ASR parameters exactly
-ov{5}.FlatlineCriterion = 4;
-ov{5}.ChannelCriterion  = 0.85;
-% Step 8 — ICLabel thresholds: 0.8 practical threshold; 0.9 default is too
-%   strict and commonly flags nothing.  Heart added for cardiac artifacts.
-ov{8}.Muscle = [0.8, 1];
-ov{8}.Eye    = [0.8, 1];
-ov{8}.Heart  = [0.9, 1];
-% Step 11 — write output file
-ov{11}.savenew          = 'minimal';
+ov = blankOverrides(t.steps);
+ov = ovSet(ov, t.steps, 'Frequency Filter', 'locutoff', 0.5);  % HPF only
+ov = ovSet(ov, t.steps, 'Frequency Filter', 'hicutoff', 0);    % 0 = no LPF
+% ASR parameters matching Delorme 2023.
+ov = ovSet(ov, t.steps, 'Automatic Cleaning Data', 'FlatlineCriterion', 4);
+ov = ovSet(ov, t.steps, 'Automatic Cleaning Data', 'ChannelCriterion',  0.85);
+% ICLabel: 0.8 practical threshold; 0.9 default commonly flags nothing.
+ov = ovSet(ov, t.steps, 'Flag ICA Components for Rejection', 'Muscle', [0.8, 1]);
+ov = ovSet(ov, t.steps, 'Flag ICA Components for Rejection', 'Eye',    [0.8, 1]);
+ov = ovSet(ov, t.steps, 'Flag ICA Components for Rejection', 'Heart',  [0.9, 1]);
+ov = ovSet(ov, t.steps, 'Save New Set', 'savenew', 'minimal');
 t.overrides = ov;
 templates(end+1) = t;
 
 %% ---- TMS-EEG / TEP — Conservative ---------------------------------------
 % Same 19-step TESA pipeline with thresholds biased toward keeping data:
 %   - Higher bad-channel SD threshold rejects only extreme outliers.
-%   - Fewer ICA components in Round 1 (10) preserves more signal variance.
 %   - Higher TMS-muscle threshold in both rounds is less aggressive about
 %     flagging borderline early-peak components.
 %   - Higher epoch amplitude threshold (1500 µV) keeps more trials.
@@ -198,35 +194,33 @@ t.steps = { ...
     'Remove Baseline', ...
     'Remove Bad Epoch', ...
     'Save New Set'};
-ov = repmat({struct()}, 1, numel(t.steps));
-ov{6}.interpolation     = 'cubic';
-ov{9}.timelim           = [-1, 1];
-% Step 10 — higher SD threshold; only the worst channels removed
-ov{10}.threshold        = 8;
-ov{12}.ref              = '[]';
-% Step 14 — Round 1: higher TMS-muscle threshold (fewer components removed)
-ov{14}.tmsMuscleThresh  = 12;
-% Step 16 — Round 2: all detectors on, thresholds raised vs defaults
-ov{16}.blink            = 'on';
-ov{16}.move             = 'on';
-ov{16}.muscle           = 'on';
-ov{16}.elecNoise        = 'on';
-ov{16}.blinkThresh      = 3.5;
-ov{16}.moveThresh       = 3.0;
-ov{16}.muscleThresh     = 0.8;
-ov{16}.elecNoiseThresh  = 6.0;
-ov{16}.tmsMuscleThresh  = 12;
-% Step 18 — high amplitude threshold: only extreme artefact epochs removed
-ov{18}.threshold        = 1500;
-% Step 19 — set output suffix so files are saved to disk automatically
-ov{19}.savenew          = 'conservative';
+ov = blankOverrides(t.steps);
+ov = ovSet(ov, t.steps, 'Interpolate Missing Data (TESA)', 'interpolation', 'cubic');
+ov = ovSet(ov, t.steps, 'Epoching',           'timelim',       [-1, 1]);
+% Higher SD threshold — only the worst channels removed.
+ov = ovSet(ov, t.steps, 'Remove Bad Channels', 'threshold',    8);
+ov = ovSet(ov, t.steps, 'Re-Reference',        'ref',          '[]');
+% Round 1 — higher TMS-muscle threshold (fewer components removed).
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'tmsMuscleThresh', 12, 1);
+% Round 2 — all detectors on, thresholds raised vs defaults.
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'blink',          'on', 2);
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'move',           'on', 2);
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'muscle',         'on', 2);
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'elecNoise',      'on', 2);
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'blinkThresh',    3.5,  2);
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'moveThresh',     3.0,  2);
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'muscleThresh',   0.8,  2);
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'elecNoiseThresh',6.0,  2);
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'tmsMuscleThresh',12,   2);
+% High amplitude threshold — only extreme artefact epochs removed.
+ov = ovSet(ov, t.steps, 'Remove Bad Epoch', 'threshold', 1500);
+ov = ovSet(ov, t.steps, 'Save New Set',     'savenew',   'conservative');
 t.overrides = ov;
 templates(end+1) = t;
 
 %% ---- TMS-EEG / TEP — Aggressive -----------------------------------------
 % Same 19-step TESA pipeline with thresholds biased toward removing artefact:
 %   - Lower bad-channel SD threshold flags borderline noisy channels.
-%   - More ICA components in Round 1 (25) captures subtler artefact sources.
 %   - Lower TMS-muscle threshold in both rounds flags more early-peak comps.
 %   - Lower epoch amplitude threshold (500 µV) discards more contaminated trials.
 % Use this variant to establish a lower bound (over-cleaned) or when the
@@ -253,35 +247,63 @@ t.steps = { ...
     'Remove Baseline', ...
     'Remove Bad Epoch', ...
     'Save New Set'};
-ov = repmat({struct()}, 1, numel(t.steps));
-ov{6}.interpolation     = 'cubic';
-ov{9}.timelim           = [-1, 1];
-% Step 10 — lower SD threshold; borderline noisy channels removed
-ov{10}.threshold        = 3;
-ov{12}.ref              = '[]';
-% Step 14 — Round 1: lower TMS-muscle threshold (more components removed)
-ov{14}.tmsMuscleThresh  = 5;
-% Step 16 — Round 2: all detectors on, thresholds lowered vs defaults
-ov{16}.blink            = 'on';
-ov{16}.move             = 'on';
-ov{16}.muscle           = 'on';
-ov{16}.elecNoise        = 'on';
-ov{16}.blinkThresh      = 1.5;
-ov{16}.moveThresh       = 1.5;
-ov{16}.muscleThresh     = 0.4;
-ov{16}.elecNoiseThresh  = 2.5;
-ov{16}.tmsMuscleThresh  = 5;
-% Step 18 — low amplitude threshold: contaminated trials discarded aggressively
-ov{18}.threshold        = 500;
-% Step 19 — set output suffix so files are saved to disk automatically
-ov{19}.savenew          = 'aggressive';
+ov = blankOverrides(t.steps);
+ov = ovSet(ov, t.steps, 'Interpolate Missing Data (TESA)', 'interpolation', 'cubic');
+ov = ovSet(ov, t.steps, 'Epoching',           'timelim',       [-1, 1]);
+% Lower SD threshold — borderline noisy channels removed.
+ov = ovSet(ov, t.steps, 'Remove Bad Channels', 'threshold',    3);
+ov = ovSet(ov, t.steps, 'Re-Reference',        'ref',          '[]');
+% Round 1 — lower TMS-muscle threshold (more components removed).
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'tmsMuscleThresh', 5,   1);
+% Round 2 — all detectors on, thresholds lowered vs defaults.
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'blink',          'on', 2);
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'move',           'on', 2);
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'muscle',         'on', 2);
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'elecNoise',      'on', 2);
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'blinkThresh',    1.5,  2);
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'moveThresh',     1.5,  2);
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'muscleThresh',   0.4,  2);
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'elecNoiseThresh',2.5,  2);
+ov = ovSet(ov, t.steps, 'Remove ICA Components (TESA)', 'tmsMuscleThresh',5,    2);
+% Low amplitude threshold — contaminated trials discarded aggressively.
+ov = ovSet(ov, t.steps, 'Remove Bad Epoch', 'threshold', 500);
+ov = ovSet(ov, t.steps, 'Save New Set',     'savenew',   'aggressive');
 t.overrides = ov;
 templates(end+1) = t;
 
 end
 
-%% ---- helpers ---------------------------------------------------------------
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Local helpers
 
 function t = blankTemplate()
 t = struct('name', '', 'steps', {{}}, 'overrides', {{}});
+end
+
+function ov = blankOverrides(steps)
+ov = repmat({struct()}, 1, numel(steps));
+end
+
+function ov = ovSet(ov, steps, stepName, field, value, occurrence)
+% OVSET  Set an override field identified by step name, not position.
+%
+%   ov = ovSet(ov, steps, stepName, field, value)
+%   ov = ovSet(ov, steps, stepName, field, value, occurrence)
+%
+%   occurrence selects which match to use when a step appears more than
+%   once (e.g. two ICA rounds).  1 = first (default), 2 = second, etc.
+%   Errors loudly if stepName is not found, so mis-spellings are caught
+%   immediately rather than silently writing to the wrong step.
+    if nargin < 6; occurrence = 1; end
+    idx = find(strcmp(steps, stepName));
+    if isempty(idx)
+        error('pipelineTemplates:badStep', ...
+              'Step "%s" not found in template.', stepName);
+    end
+    if occurrence < 1 || occurrence > numel(idx)
+        error('pipelineTemplates:badOccurrence', ...
+              'Step "%s" has %d occurrence(s); requested %d.', ...
+              stepName, numel(idx), occurrence);
+    end
+    ov{idx(occurrence)}.(field) = value;
 end
