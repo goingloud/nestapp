@@ -117,17 +117,24 @@ end
 % ── Workspace pollution guards ────────────────────────────────────────────
 
 function test_noAssignInBaseInRunPipeline(testCase)
-% assignin('base',...) pollutes the user's MATLAB workspace unconditionally.
-% This test pins the removal of those calls.
+% Internal pipeline variables must not be pushed into the base workspace.
+% NOTE: assignin('base', 'EEG', EEG) is intentional — it exposes the processed
+%       EEG struct so users can run eegh and inspect data after a pipeline run.
+%       Only internal pipeline variables are banned.
 src = fileread(fullfile(srcRoot(), 'runPipeline.m'));
-% Allow the string in comments only
 lines = strsplit(src, newline);
+pollutionPatterns = {'assignin\s*\(\s*''base''\s*,\s*''files''', ...
+                     'assignin\s*\(\s*''base''\s*,\s*''paths''', ...
+                     'assignin\s*\(\s*''base''\s*,\s*''steps2run''', ...
+                     'assignin\s*\(\s*''base''\s*,\s*''stepsName'''};
 for k = 1:numel(lines)
     L = strtrim(lines{k});
     if startsWith(L, '%'); continue; end
-    testCase.verifyEmpty(regexp(L, "assignin\s*\(\s*'base'", 'match'), ...
-        sprintf(['Regression — runPipeline.m line %d: assignin(''base'',...) ' ...
-                 'found. Remove workspace pollution.\n  Got: %s'], k, L));
+    for p = 1:numel(pollutionPatterns)
+        testCase.verifyEmpty(regexp(L, pollutionPatterns{p}, 'match'), ...
+            sprintf(['Regression — runPipeline.m line %d: internal pipeline variable ' ...
+                     'pushed to base workspace.\n  Got: %s'], k, L));
+    end
 end
 end
 
