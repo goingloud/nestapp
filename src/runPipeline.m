@@ -715,6 +715,12 @@ for nfile = 1:nFiles
                     % on the feedback of blink threhsolds for individual components
                     % in the command window.
                     vars = convertContainedStringsToChars(varin);
+                    % 'comps' was removed in TESA 1.1.1; strip it from any
+                    % pipelines saved with the old default.
+                    compsIdx = find(strcmpi(vars, 'comps'), 1);
+                    if ~isempty(compsIdx)
+                        vars([compsIdx, compsIdx+1]) = [];
+                    end
                     ind1 = find(strcmpi(vars,'plotTimeX'));
                     TP = vars{ind1+1};
                     if TP(1) ~= EEG.times(1) && TP(2) ~= EEG.times(end)
