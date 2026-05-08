@@ -67,6 +67,15 @@ else
                     end
                 end
                 % Non-scalar string arrays (e.g. ["TP9" "TP10"]) pass through unchanged.
+            elseif iscell(v) && ~isempty(v)
+                % A cell arises when a numeric vector was entered one value per
+                % TextArea line (e.g. "-500" / "-10" instead of "-500 -10").
+                % If every element is a scalar number, collapse to a row vector.
+                nums = cellfun(@(c) str2double(string(c)), v(:));
+                if all(~isnan(nums))
+                    v = nums(:)';
+                end
+                % Non-numeric cells (channel name lists etc.) pass through unchanged.
             end
             inputvals{2*j} = v;
         end
