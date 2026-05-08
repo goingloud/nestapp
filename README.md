@@ -99,21 +99,6 @@ Open **Settings → Preferences** to configure:
 
 ---
 
-## Running the test suite
-
-```matlab
-% Unit and regression tests (no EEGLAB required, < 1 minute):
-run_nestapp       % ensures src/ is on the path
-runtests('tests/unit')
-runtests('tests/regression')
-
-% Or use the bundled runner:
-run_tests         % unit + regression
-run_tests('all')  % includes integration tests (requires EEGLAB)
-```
-
----
-
 ## Contributors
 
 **Aref Pariz** — original application (v1.0, 2023), developed at the Royal Institute for Mental Health in Dr. Sara Tremblay's lab ([NESTLAB](https://www.nest-lab.ca/)) and Dr. Jeremie Lefebvre's Lab, University of Ottawa.
