@@ -1051,7 +1051,7 @@ classdef nestapp < matlab.apps.AppBase
                 eeglab('nogui');
             end
             for nfile = 1:numel(app.SelectedFilesforTEP)
-                EEGaux = pop_loadset(app.SelectedFilesforTEP(nfile),app.PathofSelectedFilesforTEP);
+                EEGaux = pop_loadset('filename', app.SelectedFilesforTEP{nfile}, 'filepath', app.PathofSelectedFilesforTEP);
                 app.EEGofAllSelectedFiles{nfile} = EEGaux;
                 app.EEGtime = EEGaux.times;
             end
@@ -1126,9 +1126,7 @@ classdef nestapp < matlab.apps.AppBase
             app.TEP2Export = TEP_ROI;
             grandMean = mean(TEP_ROI, 1, 'omitmissing');
             TEP_ROISD = std(TEP_ROI, 1, 1) / sqrt(nFiles);
-            co   = app.UIAxes.ColorOrder;
-            idx  = mod(numel(findobj(app.UIAxes, 'Type', 'Line')), size(co, 1)) + 1;
-            Colr = co(idx, :);
+            co    = app.UIAxes.ColorOrder;
             meanx = smoothdata(grandMean,  'movmean', SMOOTH_WIN_PTS);
             sdx   = smoothdata(TEP_ROISD, 'movmean', SMOOTH_WIN_PTS);
             xf = [app.EEGtime(1) app.EEGtime  app.EEGtime(end) app.EEGtime(end:-1:1)];
@@ -1143,16 +1141,32 @@ classdef nestapp < matlab.apps.AppBase
 
             if app.NewFigureButton.Value
                 cla(app.UIAxes, 'reset');
+                Colr = co(1, :);
                 hold(app.UIAxes, 'on');
-                fill(app.UIAxes, xf, yf, Colr(1,:), 'FaceAlpha', 0.5, 'LineStyle', 'none', 'HandleVisibility', 'off');
-                plot(app.UIAxes, app.EEGtime, meanx, 'Color', Colr(1,:), 'LineWidth', 2, 'DisplayName', dispName);
+                fill(app.UIAxes, xf, yf, Colr, 'FaceAlpha', 0.5, 'LineStyle', 'none', 'HandleVisibility', 'off');
+                plot(app.UIAxes, app.EEGtime, meanx, 'Color', Colr, 'LineWidth', 2, 'DisplayName', dispName);
                 hold(app.UIAxes, 'off');
                 xlim(app.UIAxes, app.DefaulTEPxLim);
             elseif app.AddtocurrentFigureButton.Value
+                % Only count main TEP lines (HandleVisibility='on') to determine next color.
+                mainLines = findobj(app.UIAxes, 'Type', 'Line', 'HandleVisibility', 'on');
+                if isempty(mainLines)
+                    usedColors = zeros(0, 3);
+                else
+                    usedColors = reshape([mainLines.Color], 3, [])';
+                end
+                Colr = co(1, :);
+                for k = 1:size(co, 1)
+                    candidate = co(k, :);
+                    if ~any(all(abs(usedColors - candidate) < 1e-6, 2))
+                        Colr = candidate;
+                        break;
+                    end
+                end
                 prevYLim = ylim(app.UIAxes);
                 hold(app.UIAxes, 'on');
-                fill(app.UIAxes, xf, yf, Colr(1,:), 'FaceAlpha', 0.5, 'LineStyle', 'none', 'HandleVisibility', 'off');
-                plot(app.UIAxes, app.EEGtime, meanx, 'Color', Colr(1,:), 'LineWidth', 2, 'DisplayName', dispName);
+                fill(app.UIAxes, xf, yf, Colr, 'FaceAlpha', 0.5, 'LineStyle', 'none', 'HandleVisibility', 'off');
+                plot(app.UIAxes, app.EEGtime, meanx, 'Color', Colr, 'LineWidth', 2, 'DisplayName', dispName);
                 xlim(app.UIAxes, app.DefaulTEPxLim);
                 % Expand y-axis to accommodate new data; never shrink existing range
                 newYLim = ylim(app.UIAxes);

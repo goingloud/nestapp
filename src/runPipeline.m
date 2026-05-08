@@ -229,11 +229,10 @@ for nfile = 1:nFiles
                     vars([inds, inds+1]) =[];
                     fname='';
                     if strcmp(IFN,'yes')
-                        fname = [app.path,fileName];
-                        fname = fname(1:end-numel(fileFormat)-1);
-                        fname = replace(fname,' ','_');
-                        fname = replace(fname,'-','_');
-                        fname = strcat(fname,'_');
+                        [fdir, fbase, ~] = fileparts(fullfile(app.path, fileName));
+                        fbase = replace(fbase, ' ', '_');
+                        fbase = replace(fbase, '-', '_');
+                        fname = fullfile(fdir, [fbase, '_']);
                     end
                     ind1 = find(strcmp(vars,'savenew'));
                     if ~strcmp(vars{ind1+1},'[]') %|| ~isempty(vars{ind+1})
@@ -373,27 +372,25 @@ for nfile = 1:nFiles
                     EEG = eeg_checkset( EEG );
                 case 'Remove Baseline'
                     %% Remove Baseline Offset
-
-                    % The DC offset may cause problem in analyzing and cleaning data. So, it's
-                    % better to remove it before other steps. However if we want to study the
-                    % ERP, it is recomended to do not remove it, since it may affect the
-                    % results.
                     vars = convertContainedStringsToChars(varin);
-                    ind = find(strcmp(vars,'[]'), 1);
-                    if ~isempty(ind)
-                        timerange=vars{1,2}; % Default [] -> all
-                        if ~strcmp(timerange,'[]')
-                            timerange = str2double(timerange);
-                            EEG = pop_rmbase( EEG, timerange);
-                        end
-                    else
-                        timerange=vars{1,2}; % Default [] -> all
-                        pointrange=vars{1,4}; % Default [] -> all
-                        chanlist=vars{1,6}; % Default [] -> all
-                        pointrange = str2double(pointrange);
-                        EEG = pop_rmbase( EEG, timerange, pointrange, chanlist);
+                    timerange = vars{2};   % value paired with 'timerange' key
+                    % Resolve placeholder '[]' to an actual empty array, which
+                    % tells pop_rmbase to use the full pre-stimulus period.
+                    if ischar(timerange) && strcmp(timerange, '[]')
+                        timerange = [];
+                    elseif ischar(timerange) || isstring(timerange)
+                        % String that survived conversion (e.g. '-500') — eval it.
+                        timerange = str2num(char(timerange)); %#ok<ST2NM>
                     end
-                    EEG = eeg_checkset( EEG );
+                    % Clamp numeric range to actual epoch boundaries — prevents
+                    % "Bad time range" when the last sample falls at e.g. 999.8 ms
+                    % rather than exactly 1000 ms due to sampling rate.
+                    if isnumeric(timerange) && numel(timerange) == 2
+                        timerange(1) = max(timerange(1), EEG.times(1));
+                        timerange(2) = min(timerange(2), EEG.times(end));
+                    end
+                    EEG = pop_rmbase(EEG, timerange);
+                    EEG = eeg_checkset(EEG);
 
                 case 'De-Trend Epoch'
                     %%  DeTrending Epochs
