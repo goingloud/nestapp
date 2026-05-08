@@ -144,6 +144,12 @@ classdef nestapp < matlab.apps.AppBase
         ReportsTextArea                 matlab.ui.control.TextArea
         ExportReportsCSVButton          matlab.ui.control.Button
         CopyMethodsButton               matlab.ui.control.Button
+        % Analysis tab — static elements not auto-resized by MATLAB
+        AnalysisSelPanel                matlab.ui.container.Panel
+        AnalysisCompWindowsLabel        matlab.ui.control.Label
+        AnalysisWorkspaceLabel          matlab.ui.control.Label
+        AnalysisBatchLabel              matlab.ui.control.Label
+        AnalysisBatchDescLabel          matlab.ui.control.Label
     end
 
     properties (Access = private)
@@ -1002,14 +1008,20 @@ classdef nestapp < matlab.apps.AppBase
             app.PO6Button.Position   = p([243 215 25 23]);
 
             %% Analysis Tab
-            app.TEPComponentTable.Position    = p([10 225 360 178]);
-            app.TEPComponentTable.ColumnWidth = {'auto', 'auto', 'auto'};
+            app.AnalysisSelPanel.Position          = p([10 430 847 55]);
+            app.AnalysisSelectionLabel.Position    = p([10 5 820 32]);
+            app.AnalysisCompWindowsLabel.Position  = p([10 407 300 18]);
+            app.TEPComponentTable.Position         = p([10 225 360 178]);
+            app.TEPComponentTable.ColumnWidth      = {'auto', 'auto', 'auto'};
             app.EditComponentWindowsButton.Position = p([10 196 220 25]);
-            app.ExportTEPDataButton.Position  = p([450 374 220 28]);
-            app.TEPvarNameEditFieldLabel.Position = p([450 348 60 22]);
-            app.TEPvarNameEditField.Position  = p([515 348 155 22]);
-            app.ExtractPeaksCSVButton.Position = p([450 254 220 32]);
-            app.AnalysisStatusLabel.Position  = p([10 15 847 22]);
+            app.AnalysisWorkspaceLabel.Position    = p([450 407 380 18]);
+            app.ExportTEPDataButton.Position       = p([450 374 220 28]);
+            app.TEPvarNameEditFieldLabel.Position  = p([450 348 60 22]);
+            app.TEPvarNameEditField.Position       = p([515 348 155 22]);
+            app.AnalysisBatchLabel.Position        = p([450 313 380 18]);
+            app.AnalysisBatchDescLabel.Position    = p([450 291 380 18]);
+            app.ExtractPeaksCSVButton.Position     = p([450 254 220 32]);
+            app.AnalysisStatusLabel.Position       = p([10 15 847 22]);
 
             %% Reports Tab
             app.ReportsListBoxLabel.Position    = p([5 472 205 22]);
@@ -3151,16 +3163,16 @@ classdef nestapp < matlab.apps.AppBase
             app.AnalysisTab.Title = 'Analysis';
 
             % Analysis tab — current selection summary panel (near top)
-            selPanel = uipanel(app.AnalysisTab, 'Title', 'Current Selection', ...
+            app.AnalysisSelPanel = uipanel(app.AnalysisTab, 'Title', 'Current Selection', ...
                 'AutoResizeChildren', 'off', ...
                 'Position', [10 430 847 55]);
-            app.AnalysisSelectionLabel = uilabel(selPanel, ...
+            app.AnalysisSelectionLabel = uilabel(app.AnalysisSelPanel, ...
                 'Position', [10 5 820 32], ...
                 'Text', 'Select files and ROI electrodes on the Visualizing tab.', ...
                 'WordWrap', 'on', 'FontSize', 11);
 
             % Analysis tab — LEFT column: component windows
-            uilabel(app.AnalysisTab, 'Position', [10 407 300 18], ...
+            app.AnalysisCompWindowsLabel = uilabel(app.AnalysisTab, 'Position', [10 407 300 18], ...
                 'Text', 'COMPONENT WINDOWS', 'FontWeight', 'bold', 'FontSize', 10);
 
             % TEPComponentTable — taller to show all 6 components without scrolling
@@ -3177,7 +3189,7 @@ classdef nestapp < matlab.apps.AppBase
             app.EditComponentWindowsButton.Position = [10 196 220 25];
 
             % Analysis tab — RIGHT column: workspace export + batch extraction grouped
-            uilabel(app.AnalysisTab, 'Position', [450 407 380 18], ...
+            app.AnalysisWorkspaceLabel = uilabel(app.AnalysisTab, 'Position', [450 407 380 18], ...
                 'Text', 'WORKSPACE EXPORT', 'FontWeight', 'bold', 'FontSize', 10);
 
             app.ExportTEPDataButton = uibutton(app.AnalysisTab, 'push');
@@ -3198,9 +3210,9 @@ classdef nestapp < matlab.apps.AppBase
             app.TEPvarNameEditField.Position = [515 348 155 22];
             app.TEPvarNameEditField.Value    = 'TEPdata';
 
-            uilabel(app.AnalysisTab, 'Position', [450 313 380 18], ...
+            app.AnalysisBatchLabel = uilabel(app.AnalysisTab, 'Position', [450 313 380 18], ...
                 'Text', 'BATCH EXTRACTION', 'FontWeight', 'bold', 'FontSize', 10);
-            uilabel(app.AnalysisTab, 'Position', [450 291 380 18], ...
+            app.AnalysisBatchDescLabel = uilabel(app.AnalysisTab, 'Position', [450 291 380 18], ...
                 'Text', ['Extract peak latency and amplitude from each file. ' ...
                     'Results saved as CSV for import into R/SPSS/Excel.'], ...
                 'WordWrap', 'on', 'FontSize', 9, 'FontColor', [0.4 0.4 0.4]);
