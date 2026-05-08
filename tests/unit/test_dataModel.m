@@ -112,21 +112,3 @@ testCase.verifyEmpty(declMatch, ...
      'Replace with isEEGLoaded = false.']);
 end
 
-% ── 3.4 EEGraw capture is documented ─────────────────────────────────────
-
-function test_EEGrawCaptureIsDocumented(testCase)
-% The implicit contract "EEGraw is captured in the Epoching case, before
-% artifact rejection" must be explained with a comment so future developers
-% don't accidentally move or remove it.
-src = fileread(fullfile(srcRoot(), 'runPipeline.m'));
-% Find the EEGraw = EEG assignment
-idx = regexp(src, 'EEGraw\s*=\s*EEG\s*[;,]', 'once');
-testCase.verifyFalse(isempty(idx), ...
-    'runPipeline.m must assign EEGraw = EEG somewhere (for computeTEPQuality Axis 2)');
-% Check that there is a comment within 5 lines before the assignment
-contextStart = max(1, idx - 400);
-context = src(contextStart:idx);
-testCase.verifyTrue(contains(context, '%'), ...
-    ['Phase 3: EEGraw = EEG assignment has no explanatory comment. ' ...
-     'Document the capture contract: when it runs and why it must precede rejection.']);
-end

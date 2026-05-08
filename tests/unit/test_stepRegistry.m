@@ -121,15 +121,17 @@ end
 
 function test_allTemplateStepNamesInRegistry(testCase)
 % Every step referenced by a template must exist in the registry.
-steps     = stepRegistry();
-allNames  = {steps.name};
-templates = pipelineTemplates();
-for ti = 1:numel(templates)
-    t = templates(ti);
-    for si = 1:numel(t.steps)
-        testCase.verifyTrue(ismember(t.steps{si}, allNames), ...
+steps    = stepRegistry();
+allNames = {steps.name};
+r        = fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))));
+matFiles = dir(fullfile(r, 'src', 'templates', '*.mat'));
+testCase.verifyFalse(isempty(matFiles), 'No template .mat files found in src/templates/');
+for fi = 1:numel(matFiles)
+    data = load(fullfile(matFiles(fi).folder, matFiles(fi).name));
+    for si = 1:numel(data.PLItems)
+        testCase.verifyTrue(ismember(data.PLItems{si}, allNames), ...
             sprintf('Template "%s" step "%s" not in stepRegistry', ...
-                t.name, t.steps{si}));
+                data.templateName, data.PLItems{si}));
     end
 end
 end
