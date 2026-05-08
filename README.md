@@ -112,7 +112,7 @@ The Analysis tab works on the files and ROI selected in the Visualizing tab — 
 
 After clicking **PLOT TEP** in the Visualizing tab, the table populates automatically with the detected latency and amplitude of the six canonical TEP components (N15, P30, N45, P60, N100, P180). Components not found in the current waveform are shown as —.
 
-**Edit Component Windows** opens a dialog to adjust the search window for each component. **Reset Defaults** restores the canonical windows from Beck et al. Changes are applied immediately to the current plot.
+**Edit Component Windows** opens a dialog to adjust the search window for each component. **Reset Defaults** restores the canonical windows from Beck et al. (2024, *Hum Brain Mapp*, 45:e70048). Changes are applied immediately to the current plot.
 
 ### Exporting data
 
