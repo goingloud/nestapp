@@ -1608,6 +1608,22 @@ classdef nestapp < matlab.apps.AppBase
         function RunAnalysisButtonPushed(app, ~)
             app.RunAnalysisButton.Text = {'Run';'Analysis'};
             app.needchanloc = 1;
+            % Silently initialise EEGLAB if its plugins aren't on the path yet.
+            % eeglab('nogui') adds every installed plugin subdirectory to the path;
+            % without it, the first pipeline run in a fresh MATLAB session fails
+            % with a "missing plugin" error.
+            global PLUGINLIST %#ok<TLEV>
+            if isempty(PLUGINLIST)
+                try
+                    evalc('eeglab nogui');
+                catch ME
+                    uialert(app.UIFigure, ...
+                        ['EEGLAB could not be initialised: ' ME.message newline ...
+                         'Verify the EEGLAB path in Preferences.'], ...
+                        'EEGLAB Init Failed', 'Icon', 'error');
+                    return
+                end
+            end
             try
                 runPipeline(app);
             catch err
