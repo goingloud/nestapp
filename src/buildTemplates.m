@@ -17,23 +17,56 @@ if ~exist(outDir, 'dir')
 end
 
 %% 1 — TMS-EEG / TEP (TESA)
-% Two-round FastICA pipeline per Rogasch et al. 2017 and the TESA toolbox.
-% Round 1 removes TMS-evoked muscle artifact; Round 2 removes ocular,
-% movement, residual muscle, and electrode noise after the cleaner signal
-% is available.
+% Two-round FastICA pipeline per Rogasch et al. 2017, restructured to match
+% the TESA User Manual step order precisely:
+%   - Bad channels removed before epoching (manual step 5)
+%   - Full-epoch demean before any ICA (manual step 7)
+%   - Bad trial removal before Round 1 ICA (manual step 11)
+%   - TMS artifact re-cut before each ICA round (manual steps 12, 17)
+%   - Cut extended to 15 ms + re-interpolated after Round 1 (manual steps 14-15)
+%   - Bandpass + 60 Hz bandstop placed between ICA rounds (manual step 16)
+%   - Final TMS interpolation after Round 2 ICA (manual step 19)
+%   - Re-reference after channel interpolation (manual step 21)
 steps = { ...
     'Load Data', 'Load Channel Location', 'Remove un-needed Channels', ...
-    'Find TMS Pulses (TESA)', 'Remove TMS Artifacts (TESA)', ...
-    'Interpolate Missing Data (TESA)', 'Re-Sample', 'Frequency Filter (TESA)', ...
-    'Epoching', 'Remove Bad Channels', 'Interpolate Channels', 'Re-Reference', ...
+    'Find TMS Pulses (TESA)', 'Remove Bad Channels', ...
+    'Epoching', 'Remove Baseline', ...
+    'Remove TMS Artifacts (TESA)', 'Interpolate Missing Data (TESA)', 'Re-Sample', ...
+    'Remove Bad Epoch', ...
+    'Remove TMS Artifacts (TESA)', ...
     'Run TESA ICA', 'Remove ICA Components (TESA)', ...
+    'Remove TMS Artifacts (TESA)', 'Interpolate Missing Data (TESA)', ...
+    'Frequency Filter (TESA)', 'Frequency Filter (TESA)', ...
+    'Remove TMS Artifacts (TESA)', ...
     'Run TESA ICA', 'Remove ICA Components (TESA)', ...
-    'Remove Baseline', 'Remove Bad Epoch', 'Save New Set'};
+    'Interpolate Missing Data (TESA)', ...
+    'Interpolate Channels', 'Re-Reference', ...
+    'Remove Baseline', 'Save New Set'};
 ovs = emptyOvs(steps);
-ovs = setOv(ovs, steps, 'Interpolate Missing Data (TESA)', 'interpolation', 'cubic');
-ovs = setOv(ovs, steps, 'Epoching',     'timelim', [-1, 1]);
-ovs = setOv(ovs, steps, 'Re-Reference', 'ref',     '[]');
-% Round 2 only: enable all detectors (default 'off').
+ovs = setOv(ovs, steps, 'Epoching', 'timelim', [-1, 1]);
+% Demean over full epoch before ICA (manual step 7: subtract mean of entire epoch).
+ovs = setOv(ovs, steps, 'Remove Baseline', 'timerange', [-1000 1000], 1);
+% TMS artifact cut windows: default [-2 10] ms for occurrences 1-2,
+% extended to [-2 15] ms after Round 1 (occurrences 3-4).
+ovs = setOv(ovs, steps, 'Remove TMS Artifacts (TESA)', 'cutTimesTMS', [-2 15], 3);
+ovs = setOv(ovs, steps, 'Remove TMS Artifacts (TESA)', 'cutTimesTMS', [-2 15], 4);
+% Interpolation: narrow window pre-downsample (~5 samples at 5 kHz),
+% wider window post-downsample (5 samples at 1 kHz).
+ovs = setOv(ovs, steps, 'Interpolate Missing Data (TESA)', 'interpolation', 'cubic', 1);
+ovs = setOv(ovs, steps, 'Interpolate Missing Data (TESA)', 'interpWin',     [1 1],   1);
+ovs = setOv(ovs, steps, 'Interpolate Missing Data (TESA)', 'interpolation', 'cubic', 2);
+ovs = setOv(ovs, steps, 'Interpolate Missing Data (TESA)', 'interpWin',     [5 5],   2);
+ovs = setOv(ovs, steps, 'Interpolate Missing Data (TESA)', 'interpolation', 'cubic', 3);
+ovs = setOv(ovs, steps, 'Interpolate Missing Data (TESA)', 'interpWin',     [5 5],   3);
+% Filters between ICA rounds (manual step 16): occ 1 = bandpass, occ 2 = bandstop.
+% Bandpass uses defaults (1-80 Hz, order 4).
+ovs = setOv(ovs, steps, 'Frequency Filter (TESA)', 'type', 'bandstop', 2);
+ovs = setOv(ovs, steps, 'Frequency Filter (TESA)', 'high', 58,         2);
+ovs = setOv(ovs, steps, 'Frequency Filter (TESA)', 'low',  62,         2);
+ovs = setOv(ovs, steps, 'Frequency Filter (TESA)', 'ord',  2,          2);
+% Re-reference after channel interpolation so the montage is complete (manual step 21).
+ovs = setOv(ovs, steps, 'Re-Reference', 'ref', '[]');
+% Round 2 ICA: all artifact detectors on; Round 1 default (tmsMuscle only) is correct.
 ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'blink',     'on', 2);
 ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'move',      'on', 2);
 ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'muscle',    'on', 2);
