@@ -1068,6 +1068,7 @@ for nfile = 1:nFiles
     if isstruct(EEG) && isfield(EEG, 'history')
         EEG.history = [EEG.history, newline, ...
             buildHistoryEntry(app.steps2run, app.pipelineName)];
+        assignin('base', 'EEG', EEG);
     end
 
     writeSessionLog(pathName, fileName, stepLog);
