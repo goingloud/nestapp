@@ -15,19 +15,34 @@
 | Signal Processing Toolbox | any recent |
 | Statistics and Machine Learning Toolbox | any recent |
 
-FastICA must be on your MATLAB path before running the app.
+**EEGLAB** — download from [eeglab.org](https://eeglab.org/) and unzip anywhere on your machine. nestapp will add it to the MATLAB path automatically once you set the folder in Preferences (see below).
+
+**TESA** — install from inside EEGLAB via **File → Manage EEGLAB extensions**. Search for TESA and install. TESA lives inside the EEGLAB plugins folder, so no separate path setup is needed after that.
+
+**FastICA** — download from [research.ics.aalto.fi/ica/fastica](http://research.ics.aalto.fi/ica/fastica/) and add the folder to your MATLAB path (Home tab → Set Path → Add Folder). FastICA must be on the path before launching nestapp.
 
 ---
 
 ## Getting started
 
-1. Clone or download this repository.
-2. Open MATLAB and navigate to the project root.
-3. Run the entry point:
+**First-time setup (do this once):**
+
+1. Install EEGLAB, TESA, and FastICA as described above.
+2. Add FastICA to your MATLAB path via **Home → Set Path → Add Folder**, then save.
+3. Clone or download this repository and open MATLAB in the project root.
+4. Run the entry point:
    ```matlab
    run_nestapp
    ```
-4. The first time you run, open **Settings → Preferences** and point the app to your EEGLAB installation folder.
+5. Open **Settings → Preferences** and set the EEGLAB installation folder. nestapp will add EEGLAB to the path automatically on every launch after this.
+
+**Typical workflow:**
+
+1. **File → Load Template** to start from a ready-made pipeline, or build one from scratch in the Cleaning tab.
+2. Select your data files and press **Run Analysis**.
+3. Review the per-file summary in the **Reports** tab.
+4. Load the processed files in the **Visualizing** tab to inspect TEPs and topographies.
+5. Switch to the **Analysis** tab to view detected TEP components and export peak data to CSV.
 
 ---
 
@@ -62,17 +77,24 @@ FastICA must be on your MATLAB path before running the app.
 1. Select the data files to process (`.set`, `.vhdr`, `.cnt`, `.cdt`).
 2. Press **Run Analysis**. A progress dialog shows the current file and step; processing can be cancelled between steps.
 
-After the run, the **Reports tab** opens automatically with a per-file summary including channel counts, trial retention, and ICA statistics.
+After the run, the **Reports** tab opens automatically with a per-file summary including channel counts, trial retention, and ICA statistics.
 
-### Pipeline provenance in EEG.history
+### Pipeline provenance
 
-Every processed file has the pipeline steps and parameters written into `EEG.history`, so the full processing record is visible when a researcher types `EEG` at the MATLAB prompt and is preserved inside the saved `.set` file.
+Every processed file has the full pipeline — steps, parameters, and a timestamp — written into `EEG.history` and preserved inside the saved `.set` file. After a run, the final processed dataset is available in the MATLAB base workspace. To inspect the processing record:
+
+```matlab
+EEG.history      % full log as a string
+eegh             % browse interactively using EEGLAB's history viewer
+```
 
 ---
 
 ## Visualizing tab
 
-- Select one or more processed `.set` files.
+The Visualizing tab works on processed `.set` files — either output from a nestapp pipeline run or any EEGLAB-compatible epoched dataset.
+
+- Select one or more `.set` files.
 - Click electrode buttons to define the region of interest (ROI).
 - **PLOT TEP** plots the trial-averaged waveform with a shaded SEM band. Multiple files can be overlaid on the same axes.
 - **Show Components** detects and overlays the six canonical TEP components (N15, P30, N45, P60, N100, P180) with latency and amplitude labels.
@@ -82,9 +104,27 @@ Every processed file has the pipeline steps and parameters written into `EEG.his
 
 ---
 
+## Analysis tab
+
+The Analysis tab works on the files and ROI selected in the Visualizing tab — set those up first, then switch here.
+
+### TEP component table
+
+After clicking **PLOT TEP** in the Visualizing tab, the table populates automatically with the detected latency and amplitude of the six canonical TEP components (N15, P30, N45, P60, N100, P180). Components not found in the current waveform are shown as —.
+
+**Edit Component Windows** opens a dialog to adjust the search window for each component. **Reset Defaults** restores the canonical windows from Rogasch et al. (2013) and Farzan et al. (2016). Changes are applied immediately to the current plot.
+
+### Exporting data
+
+**Export TEP to Workspace** saves the grand-mean ROI waveform as a MATLAB variable. Set the variable name in the field next to the button before clicking.
+
+**Extract Peaks → CSV** runs batch peak extraction across all selected files and saves a long-format CSV suitable for import into R, SPSS, or Excel. Each row is one file × component combination, with columns for latency, amplitude, search window, trial count, and ROI channel list. Any extraction warnings (missing electrodes, failed detections) are listed in an alert after the run.
+
+---
+
 ## Reports tab
 
-After each pipeline run, a summary report is added to the **Reports** tab. Reports can be browsed, copied as methods text, and exported as CSV for multi-subject summaries.
+After each pipeline run, a summary report is added to the **Reports** tab. Each report shows channel counts, trial retention, and ICA component statistics for one file. Reports can be browsed, copied as a ready-to-paste methods paragraph, and exported as CSV for multi-subject batch summaries.
 
 ---
 
