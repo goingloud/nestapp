@@ -126,6 +126,9 @@ for nfile = 1:nFiles
     fileReport = initPipelineReport(fullfile(pathName, fileName));
     % ICA stats captured before pop_subcomp/pop_tesa_compselect (indices invalid after removal).
     pendingICAStats = struct();
+    % Snapshot of EEG.history length before this file's pipeline runs,
+    % used to identify new commands added during the run for ALLCOM sync.
+    histLenBefore = 0;
 
     % In below loop, all assigned steps will be evaluated.
     for Step=app.nstep:dstep:numel(app.steps2run)
@@ -878,6 +881,11 @@ for nfile = 1:nFiles
                 % Channel counts
                 if strcmp(stepName, 'Load Data')
                     fileReport.channels.original = EEG.nbchan;
+                    % Snapshot history length after load so the ALLCOM sync
+                    % below only pushes commands added by this pipeline run.
+                    if isfield(EEG, 'history')
+                        histLenBefore = numel(EEG.history);
+                    end
                 end
                 fileReport.channels.final = EEG.nbchan;
                 if nChanAfter < nChanBefore
@@ -1069,6 +1077,19 @@ for nfile = 1:nFiles
         EEG.history = [EEG.history, newline, ...
             buildHistoryEntry(app.steps2run, app.pipelineName)];
         assignin('base', 'EEG', EEG);
+
+        % Sync new history lines to ALLCOM so that eegh works from the
+        % MATLAB command window without requiring the EEGLAB GUI.
+        % Only lines added during this pipeline run are pushed (the
+        % pre-existing .set history is excluded via histLenBefore).
+        newHist = EEG.history(histLenBefore + 1 : end);
+        newLines = strtrim(strsplit(newHist, newline));
+        newLines = newLines(~cellfun('isempty', newLines));
+        global ALLCOM; %#ok<TLEV>
+        if ~iscell(ALLCOM); ALLCOM = {}; end
+        for li = 1:numel(newLines)
+            ALLCOM = [{newLines{li}}, ALLCOM{:}]; %#ok<CCAT1>
+        end
     end
 
     writeSessionLog(pathName, fileName, stepLog);
