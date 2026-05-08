@@ -143,4 +143,4 @@ Open **Settings → Preferences** to configure:
 
 **Aref Pariz** — original application (v1.0, 2023), developed at the Royal Institute for Mental Health in Dr. Sara Tremblay's lab ([NESTLAB](https://www.nest-lab.ca/)) and Dr. Jeremie Lefebvre's Lab, University of Ottawa.
 
-**Wesley Dunne** — v2.0 enhancements: pipeline architecture, progress reporting, ICA tracking, pipeline reports, TEP visualisation improvements, pipeline templates, UI improvements, test suite.
+**Wesley Dunne** — v2.0 (2025): extended the application from a cleaning tool into a full analysis suite. Contributions include a rewritten pipeline engine with per-step progress tracking, cancellable runs, and EEG.history provenance logging; automated post-run reports with ICA component tracking, methods-text generation, and batch CSV export; TEP visualisation with canonical component detection (N15–P180), topographic mapping, and batch peak extraction to CSV; three ready-to-use pipeline templates; and a comprehensive test suite.
