@@ -15,3 +15,13 @@
 !src/*.jpg
 !src/templates/
 !src/templates/*.mat
+
+# Tests (develop branch only)
+!tests/
+!tests/unit/
+!tests/unit/*.m
+!tests/integration/
+!tests/integration/*.m
+!tests/regression/
+!tests/regression/*.m
+!tests/*.m
