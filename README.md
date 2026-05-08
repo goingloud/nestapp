@@ -86,20 +86,6 @@ Every processed file has the pipeline steps and parameters written into `EEG.his
 
 After each pipeline run, a summary report is added to the **Reports** tab. Reports can be browsed, copied as methods text, and exported as CSV for multi-subject summaries.
 
-### TEP quality metrics (opt-in)
-
-An experimental five-axis quality vector can be enabled under **Settings → Preferences → Compute TEP quality metrics**. It is off by default. The five axes are:
-
-| Axis | What it measures |
-|---|---|
-| Retention | Fraction of trials and channels that survived cleaning |
-| Artifact Reduction | Early-window (11–30 ms) variance reduction at lateral channels |
-| Background Restoration | Spectral similarity of pre- and post-stimulus background |
-| Reproducibility | Split-half correlation of the 30–80 ms TEP window |
-| AEP-Likeness *(experimental)* | Topographic similarity to the canonical auditory vertex potential |
-
-Axes are reported separately — no composite score is computed.
-
 ---
 
 ## Preferences
@@ -109,7 +95,6 @@ Open **Settings → Preferences** to configure:
 - EEGLAB installation path
 - Default data and pipeline folders
 - Whether to show the Reports tab automatically after each run
-- Whether to compute TEP quality metrics
 - Whether to require confirmation before clearing a pipeline
 
 ---
@@ -133,4 +118,4 @@ run_tests('all')  % includes integration tests (requires EEGLAB)
 
 **Aref Pariz** — original application (v1.0, 2023), developed at the Royal Institute for Mental Health in Dr. Sara Tremblay's lab ([NESTLAB](https://www.nest-lab.ca/)) and Dr. Jeremie Lefebvre's Lab, University of Ottawa.
 
-**Wesley Dunne** — v2.0 enhancements: pipeline architecture, progress reporting, ICA tracking, pipeline reports, TEP visualisation improvements, TEP quality metrics, pipeline templates, UI improvements, test suite.
+**Wesley Dunne** — v2.0 enhancements: pipeline architecture, progress reporting, ICA tracking, pipeline reports, TEP visualisation improvements, pipeline templates, UI improvements, test suite.

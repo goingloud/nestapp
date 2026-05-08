@@ -1,18 +1,17 @@
-*.zip
+# Ignore everything by default
+*
+*/
 
-# markdown
-*.md
+# Explicitly track these files
+!.gitignore
+!LICENSE
+!README.md
+!run_nestapp.m
 
-# MATLAB artifacts
-*.asv
-*.mex*
-
-# Data and output (large files / generated content)
-data/
-results/
-*.mat
-!exemplar_pipeline.mat
+# Source files
+!src/
+!src/*.m
+!src/*.png
+!src/*.jpg
+!src/templates/
 !src/templates/*.mat
-
-# EEGLAB bundle (not versioned)
-eeglab*/

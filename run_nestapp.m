@@ -7,5 +7,4 @@
 
 root = fileparts(mfilename('fullpath'));
 addpath(fullfile(root, 'src'));
-addpath(fullfile(root, 'eeglab2026.0.0'));
 nestapp;
