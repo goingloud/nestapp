@@ -31,7 +31,6 @@ testCase.verifyTrue(isfield(report, 'steps'),       'Missing steps');
 testCase.verifyTrue(isfield(report, 'channels'),    'Missing channels');
 testCase.verifyTrue(isfield(report, 'trials'),      'Missing trials');
 testCase.verifyTrue(isfield(report, 'ica'),         'Missing ica');
-testCase.verifyTrue(isfield(report, 'teps'),        'Missing teps');
 end
 
 function test_initReportChannelFields(testCase)

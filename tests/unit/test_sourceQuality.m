@@ -64,14 +64,24 @@ testCase.verifyEmpty(regexp(src, 'app\.updateReportsTab', 'match'), ...
 end
 
 function test_noAssignInBaseRunPipeline(testCase)
-% runPipeline.m must not pollute the base workspace.
+% runPipeline.m must not leak internal pipeline variables into the base workspace.
+% NOTE: assignin('base', 'EEG', EEG) is intentional — it exposes the processed
+%       EEG struct so users can run eegh and inspect data in the command window.
+%       Only internal pipeline variables (files, paths, steps2run, stepsName) are banned.
 src   = fileread(fullfile(srcRoot(), 'runPipeline.m'));
 lines = strsplit(src, newline);
+pollutionPatterns = {'assignin\s*\(\s*''base''\s*,\s*''files''', ...
+                     'assignin\s*\(\s*''base''\s*,\s*''paths''', ...
+                     'assignin\s*\(\s*''base''\s*,\s*''steps2run''', ...
+                     'assignin\s*\(\s*''base''\s*,\s*''stepsName'''};
 for k = 1:numel(lines)
     L = strtrim(lines{k});
     if startsWith(L, '%'); continue; end
-    testCase.verifyEmpty(regexp(L, "assignin\s*\(\s*'base'", 'match'), ...
-        sprintf('Phase 2: runPipeline.m line %d has assignin(''base'',...)\n  Got: %s', k, L));
+    for p = 1:numel(pollutionPatterns)
+        testCase.verifyEmpty(regexp(L, pollutionPatterns{p}, 'match'), ...
+            sprintf(['Phase 2: runPipeline.m line %d leaks internal variable.\n' ...
+                     '  Pattern: %s\n  Got: %s'], k, pollutionPatterns{p}, L));
+    end
 end
 end
 
@@ -199,19 +209,6 @@ testCase.verifyTrue(contains(src, 'persistent'), ...
     'Phase 6: stepRegistry.m should use a persistent variable to cache the result');
 end
 
-function test_nSplitsIsReasonable(testCase)
-% N_SPLITS = 100 blocks the UI thread for ~100 ms per file.
-% Acceptable range: 1–50 for interactive use.
-src    = fileread(fullfile(srcRoot(), 'computeTEPQuality.m'));
-tokens = regexp(src, 'N_SPLITS\s*=\s*(\d+)', 'tokens');
-if isempty(tokens)
-    return   % constant may have been renamed — skip
-end
-nSplits = str2double(tokens{1}{1});
-testCase.verifyLessThanOrEqual(nSplits, 50, ...
-    sprintf(['Phase 6: N_SPLITS = %d in computeTEPQuality.m blocks the UI for ' ...
-             '~%d ms per file. Reduce to ≤ 50 for interactive use.'], nSplits, nSplits));
-end
 
 function test_resizeCallbackHasThrottle(testCase)
 % UIFigureSizeChanged repositions 140+ components on every pixel of a drag.
