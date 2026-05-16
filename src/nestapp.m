@@ -2430,7 +2430,11 @@ classdef nestapp < matlab.apps.AppBase
             app.ParallelCheckBox.Text = 'Parallel Processing';
             app.ParallelCheckBox.Position = [657 85 201 24];
             app.ParallelCheckBox.Value = false;
-            app.ParallelCheckBox.Enable = license('test', 'Distrib_Computing_Toolbox');
+            if license('test', 'Distrib_Computing_Toolbox')
+                app.ParallelCheckBox.Enable = 'on';
+            else
+                app.ParallelCheckBox.Enable = 'off';
+            end
 
             % Create VisualizingTab
             app.VisualizingTab = uitab(app.TabGroup);

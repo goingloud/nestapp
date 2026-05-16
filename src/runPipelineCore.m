@@ -41,11 +41,23 @@ if getpref('nestapp', 'suppressEEGLABDialogs', true)
 end
 
 % Parallel requires PCT license, no interactive steps, and > 1 file.
-useParallel = opts.parallel && nFiles > 1 && ...
-              license('test', 'Distrib_Computing_Toolbox') && ...
-              ~isInteractivePipeline(spec, opts);
+useParallel = false;
+if opts.parallel
+    if nFiles <= 1
+        fprintf('[nestapp] Parallel mode skipped: only %d file selected (need >1).\n', nFiles);
+    elseif ~license('test', 'Distrib_Computing_Toolbox')
+        fprintf('[nestapp] Parallel mode skipped: Parallel Computing Toolbox not licensed.\n');
+    elseif isInteractivePipeline(spec, opts)
+        interactiveSteps = findInteractiveSteps(spec, opts);
+        fprintf('[nestapp] Parallel mode skipped: interactive step(s) detected: %s\n', ...
+            strjoin(interactiveSteps, ', '));
+    else
+        useParallel = true;
+    end
+end
 
 if useParallel
+    fprintf('[nestapp] Starting parallel run (%d files).\n', nFiles);
     [allReports, allSummaries] = runParallel(spec, filePaths, opts);
 else
     [allReports, allSummaries] = runSerial(spec, filePaths, opts);
@@ -137,7 +149,11 @@ if isempty(pool)
 end
 nWorkers = min(nWorkers, pool.NumWorkers);
 
-% Put EEGLAB on every worker's path.
+% Put nestapp src/ and EEGLAB on every worker's path.
+nestappSrc = fileparts(which('runPipelineCore'));
+if ~isempty(nestappSrc)
+    pctRunOnAll(['addpath(''' strrep(nestappSrc,'\','\\') ''');']);
+end
 eeglabDir = fileparts(which('eeglab'));
 if ~isempty(eeglabDir)
     pctRunOnAll(['addpath(genpath(''' strrep(eeglabDir,'\','\\') '''));']);
@@ -159,11 +175,11 @@ workerOpts.onStepError    = [];
 workerOpts.onPickChanFile = [];
 workerOpts.uiFigure       = [];
 
-% Submit all futures.
-futures(nFiles) = parallel.FevalFuture;
+% Submit one future per file (forward order — MATLAB grows the array by 1 each
+% iteration, which avoids the no-default-constructor issue for FevalFuture).
 for fi = 1:nFiles
     workerOpts.fileIndex = fi;
-    futures(fi) = parfeval(@processOneFile, 2, spec, filePaths{fi}, workerOpts);
+    futures(fi) = parfeval(@processOneFile, 2, spec, filePaths{fi}, workerOpts); %#ok<AGROW>
 end
 
 % Poll until all futures finish or user cancels.
@@ -184,7 +200,9 @@ if isvalid(dlg.fig); close(dlg.fig); end
 % Collect results from finished futures.
 allReports   = {};
 allSummaries = {};
+failedFiles  = {};
 for fi = 1:nFiles
+    [~, fname] = fileparts(filePaths{fi});
     if strcmp(futures(fi).State, 'finished') && isempty(futures(fi).Error)
         [fileReport, ~] = fetchOutputs(futures(fi));
         [pathDir, ~, ~] = fileparts(filePaths{fi});
@@ -192,9 +210,19 @@ for fi = 1:nFiles
         allReports{end+1}   = fileReport;   %#ok<AGROW>
         allSummaries{end+1} = summaryText;  %#ok<AGROW>
     elseif ~isempty(futures(fi).Error)
-        [~, fname] = fileparts(filePaths{fi});
-        warning('nestapp:parallelFileFailed', 'File %s failed: %s', ...
-            fname, futures(fi).Error.message);
+        failedFiles{end+1} = fname; %#ok<AGROW>
+        fprintf('[nestapp] Worker failed on %s: %s\n', fname, futures(fi).Error.message);
+    end
+end
+
+if ~isempty(failedFiles)
+    fprintf('[nestapp] %d/%d files failed in parallel mode.\n', numel(failedFiles), nFiles);
+    if numel(failedFiles) == nFiles
+        % All files failed — surface the first error so the user knows what went wrong.
+        firstErr = futures(find(arrayfun(@(f) ~isempty(f.Error), futures), 1)).Error;
+        error('nestapp:parallelFailed', ...
+            'All %d files failed in parallel mode.\n\nFirst error: %s\n\nCheck that EEGLAB is on the MATLAB path and all pipeline steps are compatible with parallel execution.', ...
+            nFiles, firstErr.message);
     end
 end
 
@@ -209,13 +237,11 @@ end
 function updateParallelProgress(dlg, msg, nBars, nFiles)
 if ~isvalid(dlg.fig); return; end
 slot = mod(msg.fi - 1, nBars) + 1;
-dlg.bars(slot).Value  = msg.si / msg.nSteps;
-dlg.labels(slot).Text = sprintf('File %d \x2014 %s', msg.fi, msg.stepName);
+dlg.labels(slot).Text = sprintf('File %d \x2014 %s  (%d/%d)', msg.fi, msg.stepName, msg.si, msg.nSteps);
 if msg.si == msg.nSteps
     ud       = dlg.fig.UserData;
     ud.nDone = ud.nDone + 1;
     dlg.fig.UserData      = ud;
-    dlg.overallBar.Value  = ud.nDone / nFiles;
     dlg.overallLabel.Text = sprintf('%d / %d files complete', ud.nDone, nFiles);
 end
 end
@@ -224,25 +250,20 @@ end
 %% Parallel progress dialog
 
 function dlg = createParallelDlg(parentFig, nBars, nFiles)
-PAD  = 12;
-figW = 450;
-barW = figW - 2*PAD;
+PAD     = 12;
+figW    = 450;
+barW    = figW - 2*PAD;
+btnH    = 28;
+rowH    = 26;
+headerH = 20;
+overallH = 22;
 
-btnH        = 28;
-overallBarH = 22;
-overallLblH = 18;
-headerH     = 20;
-slotBarH    = 22;
-slotLblH    = 18;
-slotH       = slotBarH + 4 + slotLblH + 10;
+yBtn     = PAD;
+yOverall = yBtn + btnH + PAD;
+yHeader  = yOverall + overallH + 10;
+ySlot1   = yHeader + headerH + 4;
 
-yBtn        = PAD;
-yOverallBar = yBtn + btnH + PAD;
-yOverallLbl = yOverallBar + overallBarH + 4;
-yHeader     = yOverallLbl + overallLblH + PAD;
-ySlot1      = yHeader + headerH + 6;
-
-figH = ySlot1 + nBars * slotH + PAD;
+figH = ySlot1 + nBars * rowH + PAD;
 
 if ~isempty(parentFig) && isvalid(parentFig)
     pPos = parentFig.Position;
@@ -263,28 +284,21 @@ uibutton(dlg.fig, 'push', 'Text', 'Cancel', ...
     'Position', [(figW-100)/2, yBtn, 100, btnH], ...
     'ButtonPushedFcn', @(~,~) setCancelFlag(dlg.fig));
 
-dlg.overallBar = uiprogressbar(dlg.fig, ...
-    'Position', [PAD, yOverallBar, barW, overallBarH], ...
-    'Value', 0);
 dlg.overallLabel = uilabel(dlg.fig, ...
     'Text', sprintf('0 / %d files complete', nFiles), ...
-    'Position', [PAD, yOverallLbl, barW, overallLblH]);
-
-uilabel(dlg.fig, 'Text', 'Worker threads:', ...
     'FontWeight', 'bold', ...
+    'Position', [PAD, yOverall, barW, overallH]);
+
+uilabel(dlg.fig, 'Text', 'Worker status:', ...
+    'FontColor', [0.4 0.4 0.4], ...
     'Position', [PAD, yHeader, barW, headerH]);
 
-dlg.bars   = gobjects(1, nBars);
 dlg.labels = gobjects(1, nBars);
 for i = 1:nBars
-    yBar = ySlot1 + (i-1)*slotH;
-    yLbl = yBar + slotBarH + 4;
-    dlg.bars(i) = uiprogressbar(dlg.fig, ...
-        'Position', [PAD, yBar, barW, slotBarH], ...
-        'Value', 0);
+    y = ySlot1 + (i-1)*rowH;
     dlg.labels(i) = uilabel(dlg.fig, ...
         'Text', sprintf('Worker %d: Idle', i), ...
-        'Position', [PAD, yLbl, barW, slotLblH]);
+        'Position', [PAD, y, barW, rowH - 2]);
 end
 
 drawnow;
@@ -320,23 +334,29 @@ chFile = fullfile(chPath, chName);
 end
 
 function result = isInteractivePipeline(spec, opts)
-% Returns true if any step requires a GUI dialog during execution.
-ALWAYS_INTERACTIVE = {'Visualize EEG Data', 'Remove Bad Trials', ...
-                      'Choose Data Set', 'Remove ICA Components (TESA)'};
-result = false;
+result = ~isempty(findInteractiveSteps(spec, opts));
+end
+
+function steps = findInteractiveSteps(spec, opts)
+% Returns cell array of step names that require GUI dialogs.
+ALWAYS_INTERACTIVE = {'Visualize EEG Data', 'Remove Bad Trials', 'Choose Data Set'};
+steps = {};
 for si = 1:numel(spec)
     name = spec(si).name;
     if any(strcmp(name, ALWAYS_INTERACTIVE))
-        result = true;
-        return
-    end
-    if strcmp(name, 'Load Channel Location')
+        steps{end+1} = name; %#ok<AGROW>
+    elseif strcmp(name, 'Remove ICA Components (TESA)')
+        % Interactive when compCheck is 'on' (opens component selection GUI).
+        p = spec(si).params;
+        if ~isfield(p, 'compCheck') || strcmp(p.compCheck, 'on')
+            steps{end+1} = name; %#ok<AGROW>
+        end
+    elseif strcmp(name, 'Load Channel Location')
         p            = spec(si).params;
         eachFileDiff = isfield(p, 'eachFilediffPath') && strcmp(p.eachFilediffPath, 'yes');
         needChan     = isfield(p, 'needchanloc') && strcmp(p.needchanloc, 'yes');
         if eachFileDiff || (needChan && isempty(opts.chanLocFile))
-            result = true;
-            return
+            steps{end+1} = name; %#ok<AGROW>
         end
     end
 end
