@@ -54,21 +54,21 @@ end
 %% PHASE 2 — Architecture
 % ══════════════════════════════════════════════════════════════════════════
 
-function test_runPipelineNoCircularDep(testCase)
-% runPipeline.m must not call app.updateReportsTab() directly — that creates
+function test_runPipelineCoreNoCircularDep(testCase)
+% runPipelineCore.m must not call app.updateReportsTab() directly — that creates
 % a circular dependency: a standalone function calling back into its caller.
-src = fileread(fullfile(srcRoot(), 'runPipeline.m'));
+src = fileread(fullfile(srcRoot(), 'runPipelineCore.m'));
 testCase.verifyEmpty(regexp(src, 'app\.updateReportsTab', 'match'), ...
-    ['Phase 2: runPipeline.m calls app.updateReportsTab(). ' ...
+    ['Phase 2: runPipelineCore.m calls app.updateReportsTab(). ' ...
      'Pass a reportCallback instead to break the circular dependency.']);
 end
 
-function test_noAssignInBaseRunPipeline(testCase)
-% runPipeline.m must not leak internal pipeline variables into the base workspace.
+function test_noAssignInBaseRunPipelineCore(testCase)
+% runPipelineCore.m must not leak internal pipeline variables into the base workspace.
 % NOTE: assignin('base', 'EEG', EEG) is intentional — it exposes the processed
 %       EEG struct so users can run eegh and inspect data in the command window.
 %       Only internal pipeline variables (files, paths, steps2run, stepsName) are banned.
-src   = fileread(fullfile(srcRoot(), 'runPipeline.m'));
+src   = fileread(fullfile(srcRoot(), 'runPipelineCore.m'));
 lines = strsplit(src, newline);
 pollutionPatterns = {'assignin\s*\(\s*''base''\s*,\s*''files''', ...
                      'assignin\s*\(\s*''base''\s*,\s*''paths''', ...
@@ -79,7 +79,7 @@ for k = 1:numel(lines)
     if startsWith(L, '%'); continue; end
     for p = 1:numel(pollutionPatterns)
         testCase.verifyEmpty(regexp(L, pollutionPatterns{p}, 'match'), ...
-            sprintf(['Phase 2: runPipeline.m line %d leaks internal variable.\n' ...
+            sprintf(['Phase 2: runPipelineCore.m line %d leaks internal variable.\n' ...
                      '  Pattern: %s\n  Got: %s'], k, pollutionPatterns{p}, L));
     end
 end

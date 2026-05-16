@@ -4,12 +4,12 @@ function summaryText = summarizeReports(reports)
 %   summaryText = SUMMARIZEREPORTS(reports)
 %
 %   reports - 1×N cell array of structs returned by initPipelineReport and
-%             populated by runPipeline. N must be >= 2.
+%             populated by runPipelineCore. N must be >= 2.
 %
 %   Returns a formatted char suitable for display in the pipeline report dialog
 %   above the individual per-file reports.
 %
-%   See also: initPipelineReport, exportReport, runPipeline
+%   See also: initPipelineReport, exportReport, runPipelineCore
 
 N = numel(reports);
 lines = {};

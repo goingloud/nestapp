@@ -2,7 +2,7 @@ function steps = stepRegistry()
 % STEPREGISTRY  Returns metadata for all nestapp pipeline steps.
 %
 %   steps = stepRegistry() returns a 1-by-N struct array. Each element:
-%     .name      - exact string matching the switch case in runPipeline.m
+%     .name      - exact string matching the switch case in runPipelineCore.m
 %                  and the StepsListBox item in nestapp.m
 %     .defaults  - struct of default parameter values
 %     .info      - description shown in the Info panel
@@ -15,7 +15,7 @@ function steps = stepRegistry()
 %                    .type         'scalar'|'integer'|'vector'|'logical'|'string'|'stringlist'
 %
 %   To add a step: append one block below, then add the matching case
-%   in runPipeline.m.
+%   in runPipelineCore.m.
 %
 % Copyright (C) 2023  Aref Pariz, University of Ottawa & The Royal
 % Institute for Mental Health, Ottawa, Ontario, Canada.

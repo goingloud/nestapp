@@ -26,7 +26,7 @@ function report = initPipelineReport(inputFile)
 %   Each element of .steps is a struct with fields:
 %     name, chansBefore, chansAfter, trialsBefore, trialsAfter, duration, timestamp
 %
-%   See also: exportReport, runPipeline
+%   See also: exportReport, runPipelineCore
 
 report.inputFile   = inputFile;
 report.processedAt = datetime('now');

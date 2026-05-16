@@ -35,7 +35,7 @@ end
 function test_saveNewSetAssignsFname(testCase)
 % BUG: replace(fname,' ','_') return value was discarded.
 % FIX: fname = replace(fname,' ','_')
-src   = fileread(fullfile(srcRoot(), 'runPipeline.m'));
+src   = fileread(fullfile(srcRoot(), 'runPipelineCore.m'));
 lines = strsplit(src, newline);
 for k = 1:numel(lines)
     L = strtrim(lines{k});
@@ -47,15 +47,14 @@ for k = 1:numel(lines)
 end
 end
 
-function test_noInputCallsInRunPipeline(testCase)
+function test_noInputCallsInRunPipelineCore(testCase)
 % BUG: input('...') calls blocked GUI execution.
 % FIX: replaced with uiconfirm dialogs.
-src = fileread(fullfile(srcRoot(), 'runPipeline.m'));
-% Allow input() only inside comments; bare input( in live code is the bug.
+src = fileread(fullfile(srcRoot(), 'runPipelineCore.m'));
 lines = strsplit(src, newline);
 for k = 1:numel(lines)
     L = strtrim(lines{k});
-    if startsWith(L, '%'); continue; end   % skip comment lines
+    if startsWith(L, '%'); continue; end
     testCase.verifyEmpty(regexp(L, '\binput\s*\(', 'match'), ...
         sprintf(['M0-B4 regression — line %d: input() calls block GUI execution. ' ...
                  'Use uiconfirm instead.\n  Got: %s'], k, L));
@@ -116,12 +115,12 @@ end
 
 % ── Workspace pollution guards ────────────────────────────────────────────
 
-function test_noAssignInBaseInRunPipeline(testCase)
+function test_noAssignInBaseInRunPipelineCore(testCase)
 % Internal pipeline variables must not be pushed into the base workspace.
 % NOTE: assignin('base', 'EEG', EEG) is intentional — it exposes the processed
 %       EEG struct so users can run eegh and inspect data after a pipeline run.
 %       Only internal pipeline variables are banned.
-src = fileread(fullfile(srcRoot(), 'runPipeline.m'));
+src = fileread(fullfile(srcRoot(), 'runPipelineCore.m'));
 lines = strsplit(src, newline);
 pollutionPatterns = {'assignin\s*\(\s*''base''\s*,\s*''files''', ...
                      'assignin\s*\(\s*''base''\s*,\s*''paths''', ...
@@ -132,7 +131,7 @@ for k = 1:numel(lines)
     if startsWith(L, '%'); continue; end
     for p = 1:numel(pollutionPatterns)
         testCase.verifyEmpty(regexp(L, pollutionPatterns{p}, 'match'), ...
-            sprintf(['Regression — runPipeline.m line %d: internal pipeline variable ' ...
+            sprintf(['Regression — runPipelineCore.m line %d: internal pipeline variable ' ...
                      'pushed to base workspace.\n  Got: %s'], k, L));
     end
 end
@@ -140,13 +139,13 @@ end
 
 % ── Circular dependency guard ─────────────────────────────────────────────
 
-function test_runPipelineDoesNotCallUpdateReportsTab(testCase)
-% runPipeline.m must not call app.updateReportsTab() directly.
+function test_runPipelineCoreDoesNotCallUpdateReportsTab(testCase)
+% runPipelineCore.m must not call app.updateReportsTab() directly.
 % That creates a circular import dependency: the standalone function calls
 % back into the nestapp class that invoked it.
-src = fileread(fullfile(srcRoot(), 'runPipeline.m'));
+src = fileread(fullfile(srcRoot(), 'runPipelineCore.m'));
 testCase.verifyEmpty(regexp(src, 'app\.updateReportsTab', 'match'), ...
-    ['Regression — runPipeline.m calls app.updateReportsTab(). ' ...
+    ['Regression — runPipelineCore.m calls app.updateReportsTab(). ' ...
      'Pass a callback instead to break the circular dependency.']);
 end
 
@@ -201,27 +200,27 @@ end
 
 % ── EEG.history provenance ────────────────────────────────────────────────
 
-function test_runPipelineWritesToEEGHistory(testCase)
+function test_runPipelineCoreWritesToEEGHistory(testCase)
 % Pipeline steps must be written to EEG.history so researchers see the
 % processing record when typing EEG at the MATLAB prompt.
-src = fileread(fullfile(srcRoot(), 'runPipeline.m'));
+src = fileread(fullfile(srcRoot(), 'runPipelineCore.m'));
 testCase.verifyTrue(contains(src, 'EEG.history'), ...
-    'runPipeline.m must write to EEG.history for pipeline provenance');
+    'runPipelineCore.m must write to EEG.history for pipeline provenance');
 end
 
 function test_buildHistoryEntryExists(testCase)
 % buildHistoryEntry is the local function that formats the provenance string.
 % Its existence pins the implementation: renaming or deleting it breaks the
 % EEG.history feature.
-src = fileread(fullfile(srcRoot(), 'runPipeline.m'));
+src = fileread(fullfile(srcRoot(), 'runPipelineCore.m'));
 testCase.verifyTrue(contains(src, 'buildHistoryEntry'), ...
-    'runPipeline.m must contain buildHistoryEntry for formatting EEG.history entries');
+    'runPipelineCore.m must contain buildHistoryEntry for formatting EEG.history entries');
 end
 
 function test_buildHistoryEntryIncludesTimestamp(testCase)
 % The provenance entry must include a timestamp so researchers can see when
 % the pipeline ran, not just what steps it contained.
-src = fileread(fullfile(srcRoot(), 'runPipeline.m'));
+src = fileread(fullfile(srcRoot(), 'runPipelineCore.m'));
 idx = strfind(src, 'function entry = buildHistoryEntry');
 testCase.verifyFalse(isempty(idx), 'buildHistoryEntry function must exist');
 window = src(idx(1):min(idx(1)+1500, numel(src)));

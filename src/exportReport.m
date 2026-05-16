@@ -9,7 +9,7 @@ function [summaryText, matPath] = exportReport(report, outputDir)
 %   summaryText - formatted char suitable for uitextarea or uialert
 %   matPath     - full path to saved .mat file, or '' if save failed
 %
-%   See also: initPipelineReport, runPipeline
+%   See also: initPipelineReport, runPipelineCore
 
 if nargin < 2 || isempty(outputDir)
     % Use the user-specified report folder if set, otherwise data folder

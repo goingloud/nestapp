@@ -1101,7 +1101,7 @@ classdef nestapp < matlab.apps.AppBase
 
         function LoadSelecEEGdata(app)
             % Ensure EEGLAB functions are on the path.  eeglab('nogui') is
-            % normally called by runPipeline, but the Visualizing tab can be
+            % normally called by runPipelineCore, but the Visualizing tab can be
             % used independently, so initialise on demand if needed.
             if ~exist('pop_loadset', 'file')
                 eeglab('nogui');
@@ -3357,13 +3357,13 @@ classdef nestapp < matlab.apps.AppBase
         end
     end
 
-    % Public methods callable from external functions (e.g. runPipeline)
+    % Public methods callable from external functions (e.g. runPipelineCore)
     methods (Access = public)
 
         function updateReportsTab(app)
         % UPDATEREPORTSTAB  Public entry point — refreshes the Reports tab.
         %   Delegates to the private implementation. Exposed as public so
-        %   runPipeline.m can call it after each processing run.
+        %   runPipelineCore.m can call it after each processing run.
             updateReportsTabImpl(app);
         end
 
