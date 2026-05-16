@@ -1777,6 +1777,17 @@ classdef nestapp < matlab.apps.AppBase
             updateStatusBar(app);
         end
 
+        % Close request function: UIFigure
+        function UIFigureCloseRequest(app, ~)
+            pool = gcp('nocreate');
+            if ~isempty(pool)
+                nestLog('PAR', 'nestapp closing — shutting down parallel pool (%d workers)', ...
+                    pool.NumWorkers);
+                delete(pool);
+            end
+            delete(app);
+        end
+
         % Size changed function: UIFigure
         function UIFigureSizeChanged(app, ~)
             if isempty(app.originalSize); return; end
@@ -2235,7 +2246,8 @@ classdef nestapp < matlab.apps.AppBase
             app.UIFigure.Position = [100 100 867 549];
             app.UIFigure.Name = 'nestapp — TMS-EEG Processing';
             app.UIFigure.AutoResizeChildren = 'off';
-            app.UIFigure.SizeChangedFcn = createCallbackFcn(app, @UIFigureSizeChanged, true);
+            app.UIFigure.SizeChangedFcn    = createCallbackFcn(app, @UIFigureSizeChanged, true);
+            app.UIFigure.CloseRequestFcn   = createCallbackFcn(app, @UIFigureCloseRequest, true);
 
             % Create menu bar
             mFile = uimenu(app.UIFigure, 'Text', 'File');
@@ -2250,7 +2262,7 @@ classdef nestapp < matlab.apps.AppBase
             uimenu(mFile, 'Text', 'Load Template...', 'Separator', 'on', ...
                 'MenuSelectedFcn', createCallbackFcn(app, @LoadTemplateMenuSelected, true));
             uimenu(mFile, 'Text', 'Exit', 'Separator', 'on', ...
-                'MenuSelectedFcn', @(~,~) delete(app));
+                'MenuSelectedFcn', createCallbackFcn(app, @UIFigureCloseRequest, true));
 
             mSettings = uimenu(app.UIFigure, 'Text', 'Settings');
             uimenu(mSettings, 'Text', 'Preferences...', ...

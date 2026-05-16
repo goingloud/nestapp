@@ -61,6 +61,23 @@ if opts.parallel
     end
 end
 
+% Scrim: same semi-transparent overlay that uialert/uiconfirm show.
+% Blocks nestapp input while the pipeline runs; closed automatically via onCleanup
+% so every exit path (normal return, error throw, cancel) tears it down.
+scrimDlg = [];
+if ~isempty(opts.uiFigure) && isvalid(opts.uiFigure)
+    try
+        scrimDlg = uiprogressdlg(opts.uiFigure, ...
+            'Title',      'Running Pipeline', ...
+            'Message',    sprintf('0 / %d files complete', nFiles), ...
+            'Value',      0, ...
+            'Cancelable', 'off');
+        drawnow;   % render before parpool blocks the thread
+    catch
+    end
+end
+scrimGuard = onCleanup(@() closeIfValid(scrimDlg)); %#ok<NASGU>
+
 % Pool setup before the progress dialog so startup time doesn't inflate
 % the first file's apparent duration.
 nBars = 1;   % serial uses one slot; parallel uses one slot per worker
@@ -110,6 +127,7 @@ end
 % through each file); parallel uses one slot per worker.  Both modes use the
 % same createProgressDlg / updateProgressDlg pair and the same message format.
 dlg = createProgressDlg(opts.uiFigure, nBars, nFiles);
+dlg.scrimDlg = scrimDlg;   % allows sentinel handler to update overall progress
 
 reports   = cell(nFiles, 1);
 cancelled = false;
@@ -118,7 +136,7 @@ if useParallel
     % DataQueue carries per-step progress, log messages, and file-done
     % sentinels from workers — all routed through updateProgressDlg.
     q = parallel.pool.DataQueue;
-    afterEach(q, @(msg) updateProgressDlg(dlg, msg, nBars, nFiles, false, []));
+    afterEach(q, @(msg) updateProgressDlg(dlg, msg, nFiles, false, []));
 
     % Strip all UI handles — workers cannot access graphics objects.
     wOpts = opts;
@@ -144,6 +162,19 @@ if useParallel
             nestLog('PAR', 'Cancel requested — cancelling futures');
             cancel(futures);
             cancelled = true;
+            % Wait for workers to reach a terminal state before closing the
+            % dialog.  cancel() is asynchronous — workers may still be
+            % mid-EEGLAB-call and need time to wind down.
+            t0 = tic;
+            while toc(t0) < 30
+                termStates = {futures.State};
+                if all(strcmp(termStates,'finished') | ...
+                       strcmp(termStates,'failed')   | ...
+                       strcmp(termStates,'cancelled'))
+                    break
+                end
+                pause(0.25); drawnow;
+            end
             break
         end
         states = {futures.State};
@@ -151,10 +182,12 @@ if useParallel
     end
     nestLog('PAR', 'Poll loop exited (cancelled=%d)', cancelled);
 
+    finalStates = {futures.State};
     for fi = 1:nFiles
-        if strcmp(futures(fi).State, 'finished') && isempty(futures(fi).Error)
+        if strcmp(finalStates{fi}, 'finished')
             [reports{fi}, ~] = fetchOutputs(futures(fi));
-        elseif ~isempty(futures(fi).Error)
+        elseif strcmp(finalStates{fi}, 'failed') && ~cancelled
+            % Only log genuine pre-cancel failures; cancel-induced failures are expected.
             [~, fname] = fileparts(filePaths{fi});
             nestLog('PAR', 'Future %d (%s) failed: %s', fi, fname, futures(fi).Error.message);
         end
@@ -169,7 +202,7 @@ else
         % send via DataQueue — so both paths share updateProgressDlg.
         fOpts.progressFcn = @(si, sn) updateProgressDlg(dlg, ...
             struct('fi', fi, 'si', si, 'nSteps', nSteps, 'stepName', sn), ...
-            nBars, nFiles, true, opts.statusBar);
+            nFiles, true, opts.statusBar);
         fOpts.onStepError = @(si, sn, err) uiconfirm(opts.uiFigure, ...
             sprintf('Error at step %d (%s):\n%s\n\nContinue to next step?', si, sn, err.message), ...
             'Step Failed', 'Options', {'Continue','Abort'}, ...
@@ -195,7 +228,7 @@ else
         % (Parallel mode sends this from within processOneFile via progressQueue.)
         updateProgressDlg(dlg, ...
             struct('fi', fi, 'si', 0, 'nSteps', nSteps, 'stepName', 'Done'), ...
-            nBars, nFiles, false, []);
+            nFiles, false, []);
 
         if ~getpref('nestapp', 'hideEEGLABWindow', true)
             eeglab redraw
@@ -217,12 +250,13 @@ end
 allReports   = reports(~cellfun(@isempty, reports));
 allSummaries = summaries(~cellfun(@isempty, summaries));
 
-if useParallel && isempty(allReports) && ~cancelled
+if cancelled
+    % Discard any partially-completed reports — a cancelled run is not a result.
+    error('nestapp:cancelled', 'Pipeline cancelled by user.');
+end
+if useParallel && isempty(allReports)
     error('nestapp:parallelFailed', ...
         'All %d files failed in parallel mode. Check the console log for details.', nFiles);
-end
-if cancelled && isempty(allReports)
-    error('nestapp:cancelled', 'Pipeline cancelled.');
 end
 end
 
@@ -306,7 +340,7 @@ end
 drawnow;
 end
 
-function updateProgressDlg(dlg, msg, ~, nFiles, throwOnCancel, statusBar)
+function updateProgressDlg(dlg, msg, nFiles, throwOnCancel, statusBar)
 % Unified handler for both serial (throwOnCancel=true) and parallel (false).
 % msg format — per-step: struct(fi, si, nSteps, stepName)
 %              sentinel:  struct(fi, si=0, nSteps, stepName='Done')
@@ -316,7 +350,7 @@ function updateProgressDlg(dlg, msg, ~, nFiles, throwOnCancel, statusBar)
 % step message arrives and released when the sentinel arrives.  This avoids
 % the mod-based static assignment that breaks when workers finish at
 % different speeds.
-if nargin < 6; statusBar = []; end
+if nargin < 5; statusBar = []; end
 
 if isfield(msg, 'log')
     fprintf('[%s][%s] %s\n', msg.ts, msg.label, msg.text);
@@ -351,12 +385,19 @@ if msg.si == 0
     dlg.labels(slot).Text = sprintf('File %d \x2014 Done', msg.fi);
     dlg.overallFill.Position(3) = round(barW * nDone / nFiles);
     dlg.overallLabel.Text       = sprintf('%d / %d files complete', nDone, nFiles);
+    if isfield(dlg, 'scrimDlg') && ~isempty(dlg.scrimDlg) && isvalid(dlg.scrimDlg)
+        dlg.scrimDlg.Value   = nDone / nFiles;
+        dlg.scrimDlg.Message = sprintf('%d / %d files complete', nDone, nFiles);
+    end
 else
     % Step starting: claim a slot on this file's first message.
     slot = ud.slotMap(msg.fi);
     if slot == 0
         avail = find(ud.slotAvailable, 1);
-        if isempty(avail); return; end   % shouldn't happen; bail rather than crash
+        if isempty(avail)
+            nestLog('PROG', 'No free slot for file %d (step %d) — dropped', msg.fi, msg.si);
+            return
+        end
         slot = avail;
         ud.slotMap(msg.fi)     = slot;
         ud.slotAvailable(slot) = false;
@@ -465,4 +506,8 @@ answer = uiconfirm(opts.uiFigure, msg, 'Output Files Exist', ...
 if strcmp(answer, 'Cancel')
     error('nestapp:cancelled', 'Run cancelled by user.');
 end
+end
+
+function closeIfValid(d)
+if ~isempty(d) && isvalid(d); close(d); end
 end
