@@ -121,7 +121,8 @@ for nfile = 1:nFiles
     % To avoid any unforseen error, for each data new eeglab window will be
     % used.
     [ALLEEG, EEG, CURRENTSET, ALLCOM] = eeglab('nogui');
-    app.initialVars = who; % Variables available at the begining of the analysis. Will be used to save them.
+    ICA_Rejected_Comp = {};
+    interpElecs       = {};
     pathName=app.path; % Path to data folder
     fileName = app.file{nfile}; % Data name(s) to be analyzed.
 
@@ -210,15 +211,11 @@ for nfile = 1:nFiles
                     mode = varin{1,2};
                     if   strcmpi(fileName(end-2:end),'set')
                         EEG = pop_loadset( [pathName fileName]);
-                        fileFormat = 'set';
                     elseif strcmpi(fileName(end-2:end),'cnt')
-                        fileFormat = 'cnt';
                         EEG = pop_loadcnt([pathName fileName] , 'dataformat', 'int32' );
                     elseif strcmpi(fileName(end-2:end),'cdt')
-                        fileFormat = 'cdt';
                         EEG = loadcurry([pathName fileName], 'CurryLocations', 'False');
                     elseif strcmpi(fileName(end-3:end),'vhdr')
-                        fileFormat = 'vhdr';
                         EEG  = pop_loadbv(pathName , fileName );
                     end
                     EEG.filename=fileName;
@@ -408,11 +405,10 @@ for nfile = 1:nFiles
                     % The default value is to use npoly = 1 but based on the stacked data, some
                     % channels show wronf trend and I used npoly 2.
                     vars = convertContainedStringsToChars(varin);
-                    for elecc=1:size(EEG.data,1)
-                        for epoo=1:size(EEG.data,3)
-                            EEG.data(elecc,:,epoo)=detrend(EEG.data(elecc,:,epoo),vars{1,2});
-                        end
-                    end
+                    [nCh, nT, nEp] = size(EEG.data);
+                    d2 = reshape(permute(EEG.data, [2 1 3]), nT, nCh*nEp);
+                    d2 = detrend(d2, vars{1,2});
+                    EEG.data = permute(reshape(d2, nT, nCh, nEp), [2 1 3]);
                     EEG = eeg_checkset( EEG );
                 case 'TESA De-Trend'
                     vars = convertContainedStringsToChars(varin);
@@ -559,14 +555,8 @@ for nfile = 1:nFiles
                     if strcmp(vars{2},'[]')
                         var_comp=[];
                     end
-                    if ~exist('ICA_Rejected_Comp','var')
-                        Rej = EEG.reject.gcompreject;
-                        ICA_Rejected_Comp{1}=reshape(Rej,1,numel(Rej));
-                    else
-                        Rej = EEG.reject.gcompreject;
-                        Rej = reshape(Rej, 1, numel(Rej));
-                        ICA_Rejected_Comp{end+1}=Rej; %#ok<AGROW> count of ICA rounds unknown at call time
-                    end
+                    Rej = reshape(EEG.reject.gcompreject, 1, []);
+                    ICA_Rejected_Comp{end+1} = Rej; %#ok<AGROW> count of ICA rounds unknown at call time
 
                     % Capture rejection mask and per-component variance BEFORE pop_subcomp.
                     % After removal icaweights loses the rejected rows, making the full
@@ -619,11 +609,7 @@ for nfile = 1:nFiles
                     end
                     
                     EEG = pop_interp(EEG, EEG.chaninfo.removedchans(1:size(EEG.chaninfo.removedchans,2)), method, trange);
-                    if ~exist('interpElecs','var')
-                        interpElecs = EEG.chaninfo.removedchans;
-                    else
-                        interpElecs = [interpElecs;EEG.chaninfo.removedchans]; %#ok<AGROW> accumulates across interpolation rounds
-                    end
+                    interpElecs = [interpElecs; EEG.chaninfo.removedchans]; %#ok<AGROW> accumulates across interpolation rounds
                     EEG.interpElecs = interpElecs;
                     EEG.setname = [EEG.setname '_interp'];
                     EEG.filename=[EEG.setname '.set'];
@@ -1096,9 +1082,7 @@ for nfile = 1:nFiles
         newLines = newLines(~cellfun('isempty', newLines));
         global ALLCOM; %#ok<TLEV>
         if ~iscell(ALLCOM); ALLCOM = {}; end
-        for li = 1:numel(newLines)
-            ALLCOM = [{newLines{li}}, ALLCOM{:}]; %#ok<CCAT1>
-        end
+        ALLCOM = [newLines(:)', ALLCOM];
     end
 
     writeSessionLog(pathName, fileName, stepLog);

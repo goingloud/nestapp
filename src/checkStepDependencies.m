@@ -21,8 +21,8 @@ if nargin < 2
 end
 
 % Build extension set from file paths for format-specific dep filtering.
-exts = unique(lower(cellfun(@(f) ['.' fliplr(strtok(fliplr(f),'.'))] , ...
-    filePaths, 'UniformOutput', false)));
+[~,~,extList] = cellfun(@fileparts, filePaths, 'UniformOutput', false);
+exts = unique(lower(extList));
 
 steps    = stepRegistry();
 nameList = {steps.name};

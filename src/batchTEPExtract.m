@@ -92,8 +92,9 @@ for fi = 1:nFiles
 
     %% Guard: must be epoched
     if ~isstruct(EEG) || ~isfield(EEG,'trials') || EEG.trials < 2
-        warnings{end+1} = sprintf('%s: skipped — not epoched (trials=%d)', ...
-            fname, getfield_safe(EEG, 'trials', 0)); %#ok<AGROW>
+        nTrials = 0;
+        if isstruct(EEG) && isfield(EEG, 'trials'), nTrials = EEG.trials; end
+        warnings{end+1} = sprintf('%s: skipped — not epoched (trials=%d)', fname, nTrials); %#ok<AGROW>
         rows = appendNaNRows(rows, fname, opts.roiElectrodes, compDefs);
         continue
     end
@@ -191,15 +192,6 @@ defs = struct( ...
     'nomLatency', {15,     30,     45,     60,     100,    180}, ...
     'winStart',   {10,     20,     40,     50,     70,     150}, ...
     'winEnd',     {20,     40,     55,     70,     150,    240});
-end
-
-function v = getfield_safe(s, field, default)
-% Return s.(field) if it exists, else default.
-if isstruct(s) && isfield(s, field)
-    v = s.(field);
-else
-    v = default;
-end
 end
 
 function writeCSV(T, csvPath)

@@ -433,7 +433,6 @@ classdef nestapp < matlab.apps.AppBase
                     'Pipeline Warning', 'Icon', 'warning');
             end
 
-            % Rebuild listbox from spec
             n = numel(app.spec);
             items     = cell(1, n);
             itemsData = cell(1, n);
@@ -1447,7 +1446,7 @@ classdef nestapp < matlab.apps.AppBase
 
         % Button pushed function: MoveUpButton
         function MoveUpButtonPushed(app, ~)
-            ind = find(ismember(app.SelectedListBox.ItemsData, app.SelectedListBox.Value));
+            ind = str2double(strrep(app.SelectedListBox.Value, 'Item', ''));
             moveStep(app, ind, -1);
         end
 
@@ -1471,13 +1470,13 @@ classdef nestapp < matlab.apps.AppBase
 
         % Button pushed function: RemoveButton
         function RemoveButtonPushed(app, ~)
-            ind = find(ismember(app.SelectedListBox.ItemsData, app.SelectedListBox.Value));
+            ind = str2double(strrep(app.SelectedListBox.Value, 'Item', ''));
             removeStep(app, ind);
         end
 
         % Button pushed function: MoveDownButton
         function MoveDownButtonPushed(app, ~)
-            ind = find(ismember(app.SelectedListBox.ItemsData, app.SelectedListBox.Value));
+            ind = str2double(strrep(app.SelectedListBox.Value, 'Item', ''));
             moveStep(app, ind, +1);
         end
 
@@ -1646,7 +1645,6 @@ classdef nestapp < matlab.apps.AppBase
                 return
             end
 
-            % Accumulate reports onto app and refresh the Reports tab.
             if numel(allReports) > 1
                 summEntry.text      = summarizeReports(allReports);
                 summEntry.report    = [];
@@ -1671,7 +1669,7 @@ classdef nestapp < matlab.apps.AppBase
         % Value changed function: TextArea
         function TextAreaValueChanged(app, ~)
             if isempty(app.currentParamKey); return; end
-            stepIdx = find(ismember(app.SelectedListBox.ItemsData, app.SelectedListBox.Value), 1);
+            stepIdx = str2double(strrep(app.SelectedListBox.Value, 'Item', ''));
             if isempty(stepIdx) || stepIdx > numel(app.spec); return; end
 
             raw = app.TextArea.Value;
@@ -1690,7 +1688,7 @@ classdef nestapp < matlab.apps.AppBase
         function UITableCellSelection(app, event)
             if isempty(event.Indices); return; end
             row     = event.Indices(1);
-            stepIdx = find(ismember(app.SelectedListBox.ItemsData, app.SelectedListBox.Value), 1);
+            stepIdx = str2double(strrep(app.SelectedListBox.Value, 'Item', ''));
             if isempty(stepIdx) || stepIdx > numel(app.spec); return; end
 
             reg    = stepRegistry();
@@ -1718,7 +1716,7 @@ classdef nestapp < matlab.apps.AppBase
 
         % Button pushed function: DefaultValueButton
         function DefaultValueButtonPushed(app, ~)
-            stepIdx = find(ismember(app.SelectedListBox.ItemsData, app.SelectedListBox.Value), 1);
+            stepIdx = str2double(strrep(app.SelectedListBox.Value, 'Item', ''));
             if isempty(stepIdx) || stepIdx > numel(app.spec); return; end
             reg  = stepRegistry();
             name = app.spec(stepIdx).name;
@@ -1749,7 +1747,7 @@ classdef nestapp < matlab.apps.AppBase
 
         % Cell edit callback: UITable
         function UITableCellEdit(app, event)
-            stepIdx = find(ismember(app.SelectedListBox.ItemsData, app.SelectedListBox.Value), 1);
+            stepIdx = str2double(strrep(app.SelectedListBox.Value, 'Item', ''));
             if isempty(stepIdx) || stepIdx > numel(app.spec); return; end
 
             reg    = stepRegistry();
@@ -1770,7 +1768,7 @@ classdef nestapp < matlab.apps.AppBase
         % Value changed function: SelectedListBox
         function SelectedListBoxValueChanged(app, ~)
             value   = app.SelectedListBox.Value;
-            stepIdx = find(ismember(app.SelectedListBox.ItemsData, value), 1);
+            stepIdx = str2double(strrep(value, 'Item', ''));
             if isempty(stepIdx) || stepIdx > numel(app.spec); return; end
             app.currentParamKey  = '';
             app.currentParamType = '';

@@ -98,18 +98,7 @@ if report.ica.nComponents > 0
         % Per-category summary (totals across all rounds)
         if isfield(report.ica, 'categories') && any(report.ica.categories.nRemoved > 0)
             lines{end+1} = '  By category (all rounds):';
-            cats = report.ica.categories;
-            for ci = 1:numel(cats.names)
-                if cats.nRemoved(ci) > 0
-                    if hasVar && ~multiRound
-                        lines{end+1} = sprintf('    %-12s %d  (%.1f%% ICA var)', ...
-                            [cats.names{ci} ':'], cats.nRemoved(ci), cats.varShare(ci));
-                    else
-                        lines{end+1} = sprintf('    %-12s %d', ...
-                            [cats.names{ci} ':'], cats.nRemoved(ci));
-                    end
-                end
-            end
+            lines = appendCategoryLines(lines, report.ica.categories, hasVar && ~multiRound);
         end
 
         % Per-round detail for multi-round TESA
@@ -124,18 +113,7 @@ if report.ica.nComponents > 0
                     lines{end+1} = sprintf('  Round %d: %d components, %d removed', ...
                         ri, rnd.nComponents, rnd.nRejected);
                 end
-                cats = rnd.categories;
-                for ci = 1:numel(cats.names)
-                    if cats.nRemoved(ci) > 0
-                        if rndHasVar
-                            lines{end+1} = sprintf('    %-12s %d  (%.1f%% ICA var)', ...
-                                [cats.names{ci} ':'], cats.nRemoved(ci), cats.varShare(ci));
-                        else
-                            lines{end+1} = sprintf('    %-12s %d', ...
-                                [cats.names{ci} ':'], cats.nRemoved(ci));
-                        end
-                    end
-                end
+                lines = appendCategoryLines(lines, rnd.categories, rndHasVar);
             end
         end
     else
@@ -278,5 +256,19 @@ try
     save(matPath, 'pipelineReport');
 catch
     matPath = '';
+end
+end
+
+function lines = appendCategoryLines(lines, cats, showVar)
+for ci = 1:numel(cats.names)
+    if cats.nRemoved(ci) > 0
+        if showVar
+            lines{end+1} = sprintf('    %-12s %d  (%.1f%% ICA var)', ...
+                [cats.names{ci} ':'], cats.nRemoved(ci), cats.varShare(ci));
+        else
+            lines{end+1} = sprintf('    %-12s %d', ...
+                [cats.names{ci} ':'], cats.nRemoved(ci));
+        end
+    end
 end
 end

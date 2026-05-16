@@ -52,7 +52,7 @@ for nfile = 1:nFiles
     pathName = [pathDir, filesep];
     fileName = [fileBase, fileExt];
 
-    [ALLEEG, EEG, CURRENTSET, ALLCOM] = eeglab('nogui');
+    ALLEEG = []; EEG = []; CURRENTSET = 0; ALLCOM = {};
 
     % Per-file state reset — prevents ICA state from bleeding between files.
     ICA_Rejected_Comp = {};
@@ -300,11 +300,10 @@ for nfile = 1:nFiles
 
                 case 'De-Trend Epoch'
                     vars = convertContainedStringsToChars(varin);
-                    for elecc=1:size(EEG.data,1)
-                        for epoo=1:size(EEG.data,3)
-                            EEG.data(elecc,:,epoo)=detrend(EEG.data(elecc,:,epoo),vars{1,2});
-                        end
-                    end
+                    [nCh, nT, nEp] = size(EEG.data);
+                    d2 = reshape(permute(EEG.data, [2 1 3]), nT, nCh*nEp);
+                    d2 = detrend(d2, vars{1,2});
+                    EEG.data = permute(reshape(d2, nT, nCh, nEp), [2 1 3]);
                     EEG = eeg_checkset( EEG );
 
                 case 'TESA De-Trend'
@@ -395,8 +394,8 @@ for nfile = 1:nFiles
 
                 case 'Label ICA Components'
                     vars = convertContainedStringsToChars(varin);
-                    version = vars{2};
-                    EEG = pop_iclabel(EEG, version);
+                    iclabelVersion = vars{2};
+                    EEG = pop_iclabel(EEG, iclabelVersion);
                     EEG = eeg_checkset( EEG );
 
                 case 'Flag ICA Components for Rejection'
@@ -630,12 +629,6 @@ for nfile = 1:nFiles
             if isstruct(EEG) && ~isempty(EEG)
                 nChanAfter  = EEG.nbchan;
                 nEpochAfter = size(EEG.data, 3);
-            else
-                nChanAfter  = nChanBefore;
-                nEpochAfter = nEpochBefore;
-            end
-
-            if isstruct(EEG) && ~isempty(EEG)
                 if strcmp(stepName, 'Load Data')
                     fileReport.channels.original = EEG.nbchan;
                 end
@@ -748,6 +741,9 @@ for nfile = 1:nFiles
                         fileReport.ica.categories.varShare = rnd.categories.varShare;
                     end
                 end
+            else
+                nChanAfter  = nChanBefore;
+                nEpochAfter = nEpochBefore;
             end % if isstruct(EEG)
 
             stepRec.name         = stepName;
@@ -755,13 +751,14 @@ for nfile = 1:nFiles
             stepRec.chansAfter   = nChanAfter;
             stepRec.trialsBefore = nEpochBefore;
             stepRec.trialsAfter  = nEpochAfter;
-            stepRec.duration     = toc(t0);
+            elapsed              = toc(t0);
+            stepRec.duration     = elapsed;
             stepRec.timestamp    = datetime('now');
             fileReport.steps{end+1} = stepRec;
 
             stepLog(end+1) = struct( ...
                 'step',        stepName, ...
-                'duration_s',  toc(t0), ...
+                'duration_s',  elapsed, ...
                 'chanBefore',  nChanBefore, ...
                 'chanAfter',   nChanAfter, ...
                 'epochBefore', nEpochBefore, ...
@@ -803,9 +800,7 @@ for nfile = 1:nFiles
         newLines = strtrim(strsplit(newHist, newline));
         newLines = newLines(~cellfun('isempty', newLines));
         if ~iscell(ALLCOM); ALLCOM = {}; end
-        for li = 1:numel(newLines)
-            ALLCOM = [{newLines{li}}, ALLCOM{:}]; %#ok<CCAT1>
-        end
+        ALLCOM = [newLines(:)', ALLCOM];
     end
 
     writeSessionLog(pathName, fileName, stepLog);

@@ -79,8 +79,5 @@ end
 end
 
 function W = buildWinMatrix(defs)
-W = zeros(numel(defs), 2);
-for k = 1:numel(defs)
-    W(k, :) = [defs(k).winStart, defs(k).winEnd];
-end
+W = [[defs.winStart]', [defs.winEnd]'];
 end
