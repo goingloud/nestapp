@@ -40,239 +40,212 @@ if getpref('nestapp', 'suppressEEGLABDialogs', true)
     warnIfOverwriteFiles(spec, filePaths, opts);
 end
 
-% Parallel requires PCT license, no interactive steps, and > 1 file.
+% Parallel guard: requires PCT, no interactive steps, and >1 file.
 useParallel = false;
 if opts.parallel
     if nFiles <= 1
-        fprintf('[nestapp] Parallel mode skipped: only %d file selected (need >1).\n', nFiles);
+        parallelSkipMsg(opts.statusBar, ...
+            sprintf('Parallel mode skipped: only %d file selected (need >1).', nFiles));
     elseif ~license('test', 'Distrib_Computing_Toolbox')
-        fprintf('[nestapp] Parallel mode skipped: Parallel Computing Toolbox not licensed.\n');
-    elseif isInteractivePipeline(spec, opts)
-        interactiveSteps = findInteractiveSteps(spec, opts);
-        fprintf('[nestapp] Parallel mode skipped: interactive step(s) detected: %s\n', ...
-            strjoin(interactiveSteps, ', '));
+        parallelSkipMsg(opts.statusBar, ...
+            'Parallel mode skipped: Parallel Computing Toolbox not licensed.');
     else
-        useParallel = true;
+        interactiveSteps = findInteractiveSteps(spec, opts);
+        if ~isempty(interactiveSteps)
+            parallelSkipMsg(opts.statusBar, ...
+                sprintf('Parallel mode skipped: interactive step(s): %s', ...
+                strjoin(interactiveSteps, ', ')));
+        else
+            useParallel = true;
+        end
     end
 end
 
+% Pool setup before the progress dialog so startup time doesn't inflate
+% the first file's apparent duration.
+nBars = 1;   % serial uses one slot; parallel uses one slot per worker
 if useParallel
-    fprintf('[nestapp] Starting parallel run (%d files).\n', nFiles);
-    [allReports, allSummaries] = runParallel(spec, filePaths, opts);
-else
-    [allReports, allSummaries] = runSerial(spec, filePaths, opts);
+    maxWorkers = getpref('nestapp', 'maxParallelWorkers', 4);
+    nWorkers   = min(nFiles, maxWorkers);
+    nestLog('PAR', 'runPipelineCore: %d files, maxWorkers=%d', nFiles, maxWorkers);
+
+    pool = gcp('nocreate');
+    if isempty(pool)
+        nestLog('PAR', 'No pool — starting parpool(%d)...', nWorkers);
+        t0 = tic; parpool(nWorkers); pool = gcp('nocreate');
+        nestLog('PAR', 'parpool ready (%d workers, %.2fs)', pool.NumWorkers, toc(t0));
+    elseif pool.NumWorkers ~= nWorkers
+        nestLog('PAR', 'Pool size mismatch (%d vs %d) — restarting...', pool.NumWorkers, nWorkers);
+        t0 = tic; delete(pool); parpool(nWorkers); pool = gcp('nocreate');
+        nestLog('PAR', 'New parpool ready (%d workers, %.2fs)', pool.NumWorkers, toc(t0));
+    else
+        nestLog('PAR', 'Reusing pool (%d workers)', pool.NumWorkers);
+    end
+
+    % Propagate paths to workers only (spmd skips the client — avoids
+    % shadowing MATLAB built-ins with EEGLAB subdirectories on the client).
+    % genpath(eeglab) is expensive (~30 s); cache it across calls.
+    persistent cachedNestappSrc cachedEeglabGenpath
+    nestappSrc = fileparts(which('runPipelineCore'));
+    if isempty(cachedEeglabGenpath) || ~strcmp(cachedNestappSrc, nestappSrc)
+        nestLog('PAR', 'Building EEGLAB genpath cache...');
+        t0 = tic;
+        cachedNestappSrc    = nestappSrc;
+        cachedEeglabGenpath = genpath(fileparts(which('eeglab')));
+        nestLog('PAR', 'genpath done (%.2fs)', toc(t0));
+    end
+    eeglabGenpath = cachedEeglabGenpath;
+    nestLog('PAR', 'Propagating paths to workers...');
+    t0 = tic;
+    spmd
+        if ~isempty(nestappSrc),    addpath(nestappSrc);    end
+        if ~isempty(eeglabGenpath), addpath(eeglabGenpath); end
+    end
+    nestLog('PAR', 'spmd done (%.2fs)', toc(t0));
+
+    nBars = min(nFiles, pool.NumWorkers);
 end
-end
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Serial execution
+% Unified N-bar progress dialog.  Serial uses nBars=1 (one slot cycling
+% through each file); parallel uses one slot per worker.  Both modes use the
+% same createProgressDlg / updateProgressDlg pair and the same message format.
+dlg = createProgressDlg(opts.uiFigure, nBars, nFiles);
 
-function [allReports, allSummaries] = runSerial(spec, filePaths, opts)
-nFiles = numel(filePaths);
-nSteps = numel(spec);
-
-allReports   = {};
-allSummaries = {};
-
-dlg = uiprogressdlg(opts.uiFigure, ...
-    'Title',          'Running Pipeline', ...
-    'Message',        'Initialising...', ...
-    'Cancelable',     'on', ...
-    'ShowPercentage', 'on');
-
+reports   = cell(nFiles, 1);
 cancelled = false;
 
-for nfile = 1:nFiles
-    fullPath = filePaths{nfile};
-    [pathDir, ~, ~] = fileparts(fullPath);
-    pathName = [pathDir, filesep];
+if useParallel
+    % DataQueue carries per-step progress, log messages, and file-done
+    % sentinels from workers — all routed through updateProgressDlg.
+    q = parallel.pool.DataQueue;
+    afterEach(q, @(msg) updateProgressDlg(dlg, msg, nBars, nFiles, false, []));
 
-    if dlg.CancelRequested
-        cancelled = true;
-        break
+    % Strip all UI handles — workers cannot access graphics objects.
+    wOpts = opts;
+    wOpts.uiFigure       = [];
+    wOpts.statusBar      = [];
+    wOpts.progressFcn    = [];
+    wOpts.onStepError    = [];
+    wOpts.onPickChanFile = [];
+    wOpts.progressQueue  = q;   % per-step progress + file-done sentinel
+    wOpts.logQueue       = q;   % log msgs share the same queue
+
+    nestLog('PAR', 'Submitting %d futures...', nFiles);
+    for fi = 1:nFiles
+        fOpts           = wOpts;
+        fOpts.fileIndex = fi;
+        futures(fi) = parfeval(@processOneFile, 2, spec, filePaths{fi}, fOpts); %#ok<AGROW>
     end
 
-    % Closures capture dlg, nfile, nFiles, nSteps, opts.statusBar by reference.
-    fileOpts = opts;
-    fileOpts.progressFcn   = @(si, sn) serialProgress(dlg, nfile, si, nFiles, nSteps, sn, opts.statusBar);
-    fileOpts.onStepError   = @(si, sn, err) uiconfirm(opts.uiFigure, ...
-        sprintf('Error at step %d (%s):\n%s\n\nContinue to next step?', si, sn, err.message), ...
-        'Step Failed', 'Options', {'Continue','Abort'}, ...
-        'DefaultOption', 'Continue', 'CancelOption', 'Abort');
-    fileOpts.onPickChanFile = @() pickChanFile(opts.uiFigure);
-    fileOpts.progressQueue  = [];
-    fileOpts.fileIndex      = nfile;
-
-    try
-        [fileReport, ~] = processOneFile(spec, fullPath, fileOpts);
-    catch err
-        if strcmp(err.identifier, 'nestapp:cancelled')
+    % Poll until all futures finish or user cancels.
+    while true
+        pause(0.25); drawnow;
+        if ~isvalid(dlg.fig) || dlg.fig.UserData.cancelRequested
+            nestLog('PAR', 'Cancel requested — cancelling futures');
+            cancel(futures);
             cancelled = true;
             break
         end
-        [~, fname] = fileparts(fullPath);
-        uialert(opts.uiFigure, ...
-            sprintf('File %d (%s) failed:\n%s', nfile, fname, err.message), ...
-            'File Error', 'Icon', 'warning');
-        continue
+        states = {futures.State};
+        if all(strcmp(states, 'finished') | strcmp(states, 'failed')); break; end
+    end
+    nestLog('PAR', 'Poll loop exited (cancelled=%d)', cancelled);
+
+    for fi = 1:nFiles
+        if strcmp(futures(fi).State, 'finished') && isempty(futures(fi).Error)
+            [reports{fi}, ~] = fetchOutputs(futures(fi));
+        elseif ~isempty(futures(fi).Error)
+            [~, fname] = fileparts(filePaths{fi});
+            nestLog('PAR', 'Future %d (%s) failed: %s', fi, fname, futures(fi).Error.message);
+        end
     end
 
-    [summaryText, ~] = exportReport(fileReport, pathName);
-    allSummaries{end+1} = summaryText; %#ok<AGROW>
-    allReports{end+1}   = fileReport;  %#ok<AGROW>
+else
+    for fi = 1:nFiles
+        if dlg.fig.UserData.cancelRequested; cancelled = true; break; end
 
-    if ~getpref('nestapp', 'hideEEGLABWindow', true)
-        eeglab redraw
+        fOpts = opts;
+        % Wrap progressFcn to produce the same message struct that workers
+        % send via DataQueue — so both paths share updateProgressDlg.
+        fOpts.progressFcn = @(si, sn) updateProgressDlg(dlg, ...
+            struct('fi', fi, 'si', si, 'nSteps', nSteps, 'stepName', sn), ...
+            nBars, nFiles, true, opts.statusBar);
+        fOpts.onStepError = @(si, sn, err) uiconfirm(opts.uiFigure, ...
+            sprintf('Error at step %d (%s):\n%s\n\nContinue to next step?', si, sn, err.message), ...
+            'Step Failed', 'Options', {'Continue','Abort'}, ...
+            'DefaultOption', 'Continue', 'CancelOption', 'Abort');
+        fOpts.onPickChanFile = @() pickChanFile(opts.uiFigure);
+        fOpts.progressQueue  = [];   % serial uses progressFcn, not DataQueue
+        fOpts.fileIndex      = fi;
+
+        try
+            [reports{fi}, ~] = processOneFile(spec, filePaths{fi}, fOpts);
+        catch err
+            if strcmp(err.identifier, 'nestapp:cancelled')
+                cancelled = true; break;
+            end
+            [~, fname] = fileparts(filePaths{fi});
+            uialert(opts.uiFigure, ...
+                sprintf('File %d (%s) failed:\n%s', fi, fname, err.message), ...
+                'File Error', 'Icon', 'warning');
+            continue
+        end
+
+        % File-done sentinel: turn the slot green and advance the overall bar.
+        % (Parallel mode sends this from within processOneFile via progressQueue.)
+        updateProgressDlg(dlg, ...
+            struct('fi', fi, 'si', 0, 'nSteps', nSteps, 'stepName', 'Done'), ...
+            nBars, nFiles, false, []);
+
+        if ~getpref('nestapp', 'hideEEGLABWindow', true)
+            eeglab redraw
+        end
+        disp('-----------------Data processed!-----------------')
     end
-    disp('-----------------Data processed!-----------------')
 end
 
-if isvalid(dlg); close(dlg); end
-if cancelled
+if isvalid(dlg.fig); close(dlg.fig); end
+
+% Collect summaries for all successfully processed files.
+summaries = cell(nFiles, 1);
+for fi = 1:nFiles
+    if ~isempty(reports{fi})
+        [pd, ~, ~]    = fileparts(filePaths{fi});
+        [summaries{fi}, ~] = exportReport(reports{fi}, [pd, filesep]);
+    end
+end
+allReports   = reports(~cellfun(@isempty, reports));
+allSummaries = summaries(~cellfun(@isempty, summaries));
+
+if useParallel && isempty(allReports) && ~cancelled
+    error('nestapp:parallelFailed', ...
+        'All %d files failed in parallel mode. Check the console log for details.', nFiles);
+end
+if cancelled && isempty(allReports)
     error('nestapp:cancelled', 'Pipeline cancelled.');
 end
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Parallel execution
+%% Unified progress dialog
+%
+% nBars=1 for serial (one slot cycling through files one at a time);
+% nBars=N for parallel (one slot per worker, all active simultaneously).
+% updateProgressDlg handles both cases identically.
 
-function [allReports, allSummaries] = runParallel(spec, filePaths, opts)
-nFiles     = numel(filePaths);
-maxWorkers = getpref('nestapp', 'maxParallelWorkers', 4);
-nWorkers   = min(nFiles, maxWorkers);
-
-% Start or reuse pool.
-pool = gcp('nocreate');
-if isempty(pool)
-    parpool(nWorkers);
-    pool = gcp('nocreate');
-end
-nWorkers = min(nWorkers, pool.NumWorkers);
-
-% Propagate paths to workers only (spmd, unlike pctRunOnAll, skips the client
-% — avoids shadowing MATLAB built-ins with EEGLAB subdirectories on the client).
-nestappSrc    = fileparts(which('runPipelineCore'));
-eeglabGenpath = genpath(fileparts(which('eeglab')));
-spmd
-    if ~isempty(nestappSrc),    addpath(nestappSrc);    end
-    if ~isempty(eeglabGenpath), addpath(eeglabGenpath); end
-end
-
-nBars = min(nFiles, nWorkers);
-dlg   = createParallelDlg(opts.uiFigure, nBars, nFiles);
-
-% DataQueue for worker -> main progress messages.
-q = parallel.pool.DataQueue;
-afterEach(q, @(msg) updateParallelProgress(dlg, msg, nBars, nFiles));
-
-% Build plain-data worker opts (no UI handles).
-workerOpts.pipelineName   = opts.pipelineName;
-workerOpts.chanLocFile    = opts.chanLocFile;
-workerOpts.progressFcn    = [];
-workerOpts.progressQueue  = q;
-workerOpts.onStepError    = [];
-workerOpts.onPickChanFile = [];
-workerOpts.uiFigure       = [];
-
-% Submit one future per file (forward order — MATLAB grows the array by 1 each
-% iteration, which avoids the no-default-constructor issue for FevalFuture).
-for fi = 1:nFiles
-    workerOpts.fileIndex = fi;
-    futures(fi) = parfeval(@processOneFile, 2, spec, filePaths{fi}, workerOpts); %#ok<AGROW>
-end
-
-% Poll until all futures finish or user cancels.
-cancelled = false;
-while true
-    pause(0.25); drawnow;
-    if ~isvalid(dlg.fig) || dlg.fig.UserData.cancelRequested
-        cancel(futures);
-        cancelled = true;
-        break
-    end
-    states = {futures.State};
-    if all(strcmp(states, 'finished') | strcmp(states, 'failed')); break; end
-end
-
-if isvalid(dlg.fig); close(dlg.fig); end
-
-% Collect results from finished futures.
-allReports   = {};
-allSummaries = {};
-failedFiles  = {};
-for fi = 1:nFiles
-    [~, fname] = fileparts(filePaths{fi});
-    if strcmp(futures(fi).State, 'finished') && isempty(futures(fi).Error)
-        [fileReport, ~] = fetchOutputs(futures(fi));
-        [pathDir, ~, ~] = fileparts(filePaths{fi});
-        [summaryText, ~] = exportReport(fileReport, [pathDir, filesep]);
-        allReports{end+1}   = fileReport;   %#ok<AGROW>
-        allSummaries{end+1} = summaryText;  %#ok<AGROW>
-    elseif ~isempty(futures(fi).Error)
-        failedFiles{end+1} = fname; %#ok<AGROW>
-        fprintf('[nestapp] Worker failed on %s: %s\n', fname, futures(fi).Error.message);
-    end
-end
-
-if ~isempty(failedFiles)
-    fprintf('[nestapp] %d/%d files failed in parallel mode.\n', numel(failedFiles), nFiles);
-    if numel(failedFiles) == nFiles
-        % All files failed — surface the first error so the user knows what went wrong.
-        firstErr = futures(find(arrayfun(@(f) ~isempty(f.Error), futures), 1)).Error;
-        error('nestapp:parallelFailed', ...
-            'All %d files failed in parallel mode.\n\nFirst error: %s\n\nCheck that EEGLAB is on the MATLAB path and all pipeline steps are compatible with parallel execution.', ...
-            nFiles, firstErr.message);
-    end
-end
-
-if cancelled && isempty(allReports)
-    error('nestapp:cancelled', 'Parallel pipeline cancelled.');
-end
-end
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Parallel progress update (local function — no nested function restriction)
-
-function updateParallelProgress(dlg, msg, nBars, nFiles)
-if ~isvalid(dlg.fig); return; end
-slot  = mod(msg.fi - 1, nBars) + 1;
-nDone = dlg.fig.UserData.nDone;
-if msg.si == msg.nSteps
-    ud       = dlg.fig.UserData;
-    ud.nDone = ud.nDone + 1;
-    dlg.fig.UserData = ud;
-    nDone = ud.nDone;
-    % File complete: flash green then reset
-    dlg.fills(slot).BackgroundColor = [0.16 0.67 0.47];
-    dlg.fills(slot).Position(3)     = dlg.barW;
-else
-    dlg.fills(slot).BackgroundColor = [0.23 0.51 0.96];
-    dlg.fills(slot).Position(3)     = round(dlg.barW * msg.si / msg.nSteps);
-end
-dlg.labels(slot).Text = sprintf('File %d \x2014 %s  (%d/%d)', ...
-    msg.fi, msg.stepName, msg.si, msg.nSteps);
-
-dlg.overallFill.Position(3) = round(dlg.barW * nDone / nFiles);
-dlg.overallLabel.Text       = sprintf('%d / %d files complete', nDone, nFiles);
-end
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Parallel progress dialog (native uilabel-based — no uihtml dependency)
-
-function dlg = createParallelDlg(parentFig, nBars, nFiles)
+function dlg = createProgressDlg(parentFig, nBars, nFiles)
 PAD  = 12;
 figW = 440;
 barW = figW - 2*PAD;
 btnH = 28;
 barH = 10;
 lblH = 18;
-rowH = lblH + 4 + barH + 8;   % text + gap + bar + gap
+rowH = lblH + 4 + barH + 8;
 
 yBtn        = PAD;
 yOverallLbl = yBtn + btnH + PAD;
 yOverallBar = yOverallLbl + lblH + 4;
-yHeader     = yOverallBar + barH + 10;
-ySlot1      = yHeader + lblH + 6;
+ySlot1      = yOverallBar + barH + PAD;
 figH        = ySlot1 + nBars * rowH + PAD;
 
 if ~isempty(parentFig) && isvalid(parentFig)
@@ -285,18 +258,22 @@ else
     figY = (sc(4) - figH) / 2;
 end
 
-dlg.fig = uifigure('Name', 'Running Pipeline (Parallel)', ...
+dlg.fig = uifigure('Name', 'Running Pipeline', ...
     'Position', [figX figY figW figH], ...
-    'Color', [0.97 0.97 0.98], ...
-    'Resize', 'off');
-dlg.fig.UserData = struct('cancelRequested', false, 'nDone', 0);
-dlg.barW = barW;
+    'Color',    [0.97 0.97 0.98], ...
+    'Resize',   'off');
+% slotMap(fi)=slot tracks which bar slot is assigned to each file.
+% slotAvailable marks which slots are free to accept a new file.
+dlg.fig.UserData = struct( ...
+    'cancelRequested', false, ...
+    'nDone',           0, ...
+    'slotMap',         zeros(1, nFiles), ...
+    'slotAvailable',   true(1, nBars));
 
 uibutton(dlg.fig, 'push', 'Text', 'Cancel', ...
     'Position', [(figW-100)/2, yBtn, 100, btnH], ...
     'ButtonPushedFcn', @(~,~) setCancelFlag(dlg.fig));
 
-% Overall section
 dlg.overallLabel = uilabel(dlg.fig, ...
     'Text',       sprintf('0 / %d files complete', nFiles), ...
     'FontWeight', 'bold', ...
@@ -309,20 +286,13 @@ dlg.overallFill = uilabel(dlg.fig, 'Text', '', ...
     'BackgroundColor', [0.16 0.67 0.47], ...
     'Position',        [PAD, yOverallBar, 0, barH]);
 
-% Workers header
-uilabel(dlg.fig, 'Text', 'WORKERS', ...
-    'FontSize',  10, ...
-    'FontColor', [0.55 0.55 0.60], ...
-    'Position',  [PAD, yHeader, barW, lblH]);
-
-% Per-slot rows: text label + track + fill
 dlg.labels = gobjects(1, nBars);
 dlg.fills  = gobjects(1, nBars);
 for i = 1:nBars
     yLbl = ySlot1 + (i-1) * rowH;
     yBar = yLbl + lblH + 4;
     dlg.labels(i) = uilabel(dlg.fig, ...
-        'Text',     sprintf('Worker %d: Idle', i), ...
+        'Text',     'Idle', ...
         'FontSize', 11, ...
         'Position', [PAD, yLbl, barW, lblH]);
     uilabel(dlg.fig, 'Text', '', ...
@@ -336,6 +306,72 @@ end
 drawnow;
 end
 
+function updateProgressDlg(dlg, msg, ~, nFiles, throwOnCancel, statusBar)
+% Unified handler for both serial (throwOnCancel=true) and parallel (false).
+% msg format — per-step: struct(fi, si, nSteps, stepName)
+%              sentinel:  struct(fi, si=0, nSteps, stepName='Done')
+%              log line:  struct(log=true, ts, label, text)
+%
+% Slots are assigned dynamically: a slot is claimed when the file's first
+% step message arrives and released when the sentinel arrives.  This avoids
+% the mod-based static assignment that breaks when workers finish at
+% different speeds.
+if nargin < 6; statusBar = []; end
+
+if isfield(msg, 'log')
+    fprintf('[%s][%s] %s\n', msg.ts, msg.label, msg.text);
+    return
+end
+
+if ~isvalid(dlg.fig); return; end
+
+% In serial mode, flush queued UI events so a Cancel click is registered
+% before we read the flag.  Not safe to call drawnow from afterEach handlers.
+if throwOnCancel
+    drawnow;
+    if dlg.fig.UserData.cancelRequested
+        error('nestapp:cancelled', 'Pipeline cancelled by user.');
+    end
+end
+
+ud   = dlg.fig.UserData;
+barW = dlg.overallLabel.Position(3);
+
+if msg.si == 0
+    % Sentinel: file is fully done on the worker.
+    slot = ud.slotMap(msg.fi);
+    if slot == 0; return; end   % guard against duplicate sentinels
+    ud.nDone              = ud.nDone + 1;
+    ud.slotAvailable(slot) = true;   % release slot for the next file
+    ud.slotMap(msg.fi)    = 0;
+    dlg.fig.UserData = ud;
+    nDone = ud.nDone;
+    dlg.fills(slot).BackgroundColor = [0.16 0.67 0.47];
+    dlg.fills(slot).Position(3)     = barW;
+    dlg.labels(slot).Text = sprintf('File %d \x2014 Done', msg.fi);
+    dlg.overallFill.Position(3) = round(barW * nDone / nFiles);
+    dlg.overallLabel.Text       = sprintf('%d / %d files complete', nDone, nFiles);
+else
+    % Step starting: claim a slot on this file's first message.
+    slot = ud.slotMap(msg.fi);
+    if slot == 0
+        avail = find(ud.slotAvailable, 1);
+        if isempty(avail); return; end   % shouldn't happen; bail rather than crash
+        slot = avail;
+        ud.slotMap(msg.fi)     = slot;
+        ud.slotAvailable(slot) = false;
+        dlg.fig.UserData = ud;
+    end
+    dlg.fills(slot).BackgroundColor = [0.23 0.51 0.96];
+    dlg.fills(slot).Position(3)     = round(barW * msg.si / msg.nSteps);
+    dlg.labels(slot).Text = sprintf('File %d \x2014 %s  (%d/%d)', ...
+        msg.fi, msg.stepName, msg.si, msg.nSteps);
+    if ~isempty(statusBar) && isvalid(statusBar)
+        statusBar.Text = sprintf('  File %d / %d \x2014 %s', msg.fi, nFiles, msg.stepName);
+    end
+end
+end
+
 function setCancelFlag(fig)
 ud = fig.UserData;
 ud.cancelRequested = true;
@@ -343,16 +379,12 @@ fig.UserData = ud;
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Shared serial helpers
+%% Shared helpers
 
-function serialProgress(dlg, nfile, si, nFiles, nSteps, stepName, statusBar)
-if dlg.CancelRequested
-    error('nestapp:cancelled', 'Pipeline cancelled by user.');
-end
-dlg.Value   = ((nfile-1)*nSteps + si - 1) / (nFiles * nSteps);
-dlg.Message = sprintf('File %d / %d  \x2014  %s', nfile, nFiles, stepName);
+function parallelSkipMsg(statusBar, msg)
+fprintf('[nestapp] %s\n', msg);
 if ~isempty(statusBar) && isvalid(statusBar)
-    statusBar.Text = sprintf('  File %d / %d \x2014 %s', nfile, nFiles, stepName);
+    statusBar.Text = ['  ', msg];
 end
 end
 
@@ -365,12 +397,7 @@ end
 chFile = fullfile(chPath, chName);
 end
 
-function result = isInteractivePipeline(spec, opts)
-result = ~isempty(findInteractiveSteps(spec, opts));
-end
-
 function steps = findInteractiveSteps(spec, opts)
-% Returns cell array of step names that require GUI dialogs.
 ALWAYS_INTERACTIVE = {'Visualize EEG Data', 'Remove Bad Trials', 'Choose Data Set'};
 steps = {};
 for si = 1:numel(spec)
@@ -378,7 +405,6 @@ for si = 1:numel(spec)
     if any(strcmp(name, ALWAYS_INTERACTIVE))
         steps{end+1} = name; %#ok<AGROW>
     elseif strcmp(name, 'Remove ICA Components (TESA)')
-        % Interactive when compCheck is 'on' (opens component selection GUI).
         p = spec(si).params;
         if ~isfield(p, 'compCheck') || strcmp(p.compCheck, 'on')
             steps{end+1} = name; %#ok<AGROW>
@@ -398,8 +424,7 @@ end
 %% Pre-flight helpers
 
 function warnIfOverwriteFiles(spec, filePaths, opts)
-% Check whether Save New Set would overwrite existing .set files.
-% Throws 'nestapp:cancelled' if the user cancels.
+% Throws 'nestapp:cancelled' if the user declines to overwrite.
 saveIdx = find(strcmp({spec.name}, 'Save New Set'), 1);
 if isempty(saveIdx); return; end
 
