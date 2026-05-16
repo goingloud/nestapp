@@ -119,6 +119,10 @@ if useParallel
         if ~isempty(eeglabGenpath), addpath(eeglabGenpath); end
     end
     nestLog('PAR', 'spmd done (%.2fs)', toc(t0));
+    nCores           = feature('numcores');
+    threadsPerWorker = max(1, floor(nCores / pool.NumWorkers));
+    nestLog('PAR', 'Workers: %d | CPU cores: %d | BLAS threads/worker: %d', ...
+        pool.NumWorkers, nCores, threadsPerWorker);
 
     nBars = min(nFiles, pool.NumWorkers);
 end
@@ -145,8 +149,9 @@ if useParallel
     wOpts.progressFcn    = [];
     wOpts.onStepError    = [];
     wOpts.onPickChanFile = [];
-    wOpts.progressQueue  = q;   % per-step progress + file-done sentinel
-    wOpts.logQueue       = q;   % log msgs share the same queue
+    wOpts.progressQueue  = q;              % per-step progress + file-done sentinel
+    wOpts.logQueue       = q;              % log msgs share the same queue
+    wOpts.nWorkers       = pool.NumWorkers; % actual count for BLAS thread cap
 
     nestLog('PAR', 'Submitting %d futures...', nFiles);
     for fi = 1:nFiles

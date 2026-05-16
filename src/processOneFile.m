@@ -32,6 +32,7 @@ if ~isfield(opts, 'onPickChanFile'), opts.onPickChanFile = []; end
 if ~isfield(opts, 'fileIndex'),      opts.fileIndex      = 0; end
 if ~isfield(opts, 'uiFigure'),       opts.uiFigure       = []; end
 if ~isfield(opts, 'logQueue'),       opts.logQueue       = []; end
+if ~isfield(opts, 'nWorkers'),      opts.nWorkers       = 1;  end
 
 % eeglab('nogui') is expensive (plugin scan, path setup); run it once per
 % worker then just reset globals for subsequent files on the same worker.
@@ -44,6 +45,14 @@ fileName = [fileBase, fileExt];
 
 wLabel   = sprintf('FILE-%d', opts.fileIndex);
 fileTic  = tic;
+
+% Limit each worker to its fair share of BLAS threads to prevent
+% over-subscription when N workers each default to all cores.
+% Runs on every call — pool reuse can change nWorkers between pipeline runs.
+if ~isempty(opts.progressQueue) && isfield(opts, 'nWorkers') && opts.nWorkers > 1
+    nCores = feature('numcores');
+    maxNumCompThreads(max(1, floor(nCores / opts.nWorkers)));
+end
 
 if isempty(eeglabWorkerReady)
     sendWorkerLog(opts.logQueue, wLabel, 'eeglab(''nogui'') — first file on this worker, initializing...');
@@ -64,6 +73,11 @@ histLenBefore     = 0;
 nSteps = numel(spec);
 
 sendWorkerLog(opts.logQueue, wLabel, 'START  %s  (%d steps)', fileName, nSteps);
+
+% Stagger parallel workers so they don't all load their first file simultaneously.
+if ~isempty(opts.progressQueue) && isfield(opts, 'fileIndex') && opts.fileIndex > 1
+    pause(0.25 * (opts.fileIndex - 1));
+end
 
 stepLog = struct('step',{},'duration_s',{},'chanBefore',{},'chanAfter',{}, ...
                  'epochBefore',{},'epochAfter',{},'error',{});
