@@ -203,6 +203,8 @@ classdef nestapp < matlab.apps.AppBase
         tepComponentDefs = struct([]) % component window definitions used by tepPeakFinder
         allPipelineReports = {}    % cell array of report entry structs from current session
         loadedReports      = {}    % cell array of report entry structs loaded from disk
+        preSelectedChanFile = ''   % channel location file selected once before a run
+        ParallelCheckBox           % uicheckbox — enable parallel participant processing
 
         % Tab Analysis
         AnalysisTab
@@ -487,65 +489,76 @@ classdef nestapp < matlab.apps.AppBase
         %   and behavioural options. Changes are written to getpref/setpref
         %   under the 'nestapp' group and applied immediately on Save.
             dlg = uifigure('Name', 'nestapp Preferences', ...
-                'Position', [200 200 420 375], ...
+                'Position', [200 200 420 430], ...
                 'WindowStyle', 'modal', 'Resize', 'off');
 
             % --- EEGLAB section ---
             uilabel(dlg, 'Text', 'EEGLAB', 'FontWeight', 'bold', ...
-                'Position', [15 335 200 20]);
+                'Position', [15 390 200 20]);
             uilabel(dlg, 'Text', 'Path:', ...
-                'Position', [15 310 35 22], 'HorizontalAlignment', 'right');
+                'Position', [15 365 35 22], 'HorizontalAlignment', 'right');
             fEeglab = uieditfield(dlg, 'text', ...
-                'Position', [55 310 275 22], 'Editable', 'on', ...
+                'Position', [55 365 275 22], 'Editable', 'on', ...
                 'Value', getpref('nestapp','eeglabPath',''));
-            uibutton(dlg, 'Text', 'Browse...', 'Position', [335 310 70 22], ...
+            uibutton(dlg, 'Text', 'Browse...', 'Position', [335 365 70 22], ...
                 'ButtonPushedFcn', @(~,~) browseEeglab());
 
             % --- Default Locations section ---
             uilabel(dlg, 'Text', 'Default Locations', 'FontWeight', 'bold', ...
-                'Position', [15 280 200 20]);
+                'Position', [15 335 200 20]);
             uilabel(dlg, 'Text', 'Data folder:', ...
-                'Position', [15 255 65 22], 'HorizontalAlignment', 'right');
+                'Position', [15 310 65 22], 'HorizontalAlignment', 'right');
             fData = uieditfield(dlg, 'text', ...
-                'Position', [85 255 245 22], 'Editable', 'on', ...
+                'Position', [85 310 245 22], 'Editable', 'on', ...
                 'Value', getpref('nestapp','lastDataFolder',''));
-            uibutton(dlg, 'Text', 'Browse...', 'Position', [335 255 70 22], ...
+            uibutton(dlg, 'Text', 'Browse...', 'Position', [335 310 70 22], ...
                 'ButtonPushedFcn', @(~,~) browseFolder(fData));
             uilabel(dlg, 'Text', 'Pipeline folder:', ...
-                'Position', [15 227 80 22], 'HorizontalAlignment', 'right');
+                'Position', [15 282 80 22], 'HorizontalAlignment', 'right');
             fPipeline = uieditfield(dlg, 'text', ...
-                'Position', [100 227 230 22], 'Editable', 'on', ...
+                'Position', [100 282 230 22], 'Editable', 'on', ...
                 'Value', getpref('nestapp','lastPipelineFolder',''));
-            uibutton(dlg, 'Text', 'Browse...', 'Position', [335 227 70 22], ...
+            uibutton(dlg, 'Text', 'Browse...', 'Position', [335 282 70 22], ...
                 'ButtonPushedFcn', @(~,~) browseFolder(fPipeline));
             uilabel(dlg, 'Text', 'Reports folder:', ...
-                'Position', [15 199 80 22], 'HorizontalAlignment', 'right');
+                'Position', [15 254 80 22], 'HorizontalAlignment', 'right');
             fReports = uieditfield(dlg, 'text', ...
-                'Position', [100 199 230 22], 'Editable', 'on', ...
+                'Position', [100 254 230 22], 'Editable', 'on', ...
                 'Value', getpref('nestapp','reportFolder',''));
-            uibutton(dlg, 'Text', 'Browse...', 'Position', [335 199 70 22], ...
+            uibutton(dlg, 'Text', 'Browse...', 'Position', [335 254 70 22], ...
                 'ButtonPushedFcn', @(~,~) browseFolder(fReports));
 
             % --- Behaviour section ---
             uilabel(dlg, 'Text', 'Behaviour', 'FontWeight', 'bold', ...
-                'Position', [15 168 200 20]);
+                'Position', [15 223 200 20]);
             cbReport = uicheckbox(dlg, 'Text', 'Switch to Reports tab after each run', ...
-                'Position', [15 144 300 22], ...
+                'Position', [15 199 300 22], ...
                 'Value', getpref('nestapp','showReport',true));
             cbConfirm = uicheckbox(dlg, 'Text', 'Confirm before clearing pipeline', ...
-                'Position', [15 120 300 22], ...
+                'Position', [15 175 300 22], ...
                 'Value', getpref('nestapp','confirmClear',true));
             cbOverwrite = uicheckbox(dlg, 'Text', 'Overwrite existing report files (no timestamp)', ...
-                'Position', [15 96 320 22], ...
+                'Position', [15 151 320 22], ...
                 'Value', getpref('nestapp','overwriteReports',false));
             cbSuppressDialogs = uicheckbox(dlg, ...
                 'Text', 'Suppress EEGLAB processing dialogs (warn about overwrites before run)', ...
-                'Position', [15 72 390 22], ...
+                'Position', [15 127 390 22], ...
                 'Value', getpref('nestapp','suppressEEGLABDialogs',true));
             cbHideEEGLAB = uicheckbox(dlg, ...
                 'Text', 'Hide EEGLAB window during processing', ...
-                'Position', [15 48 300 22], ...
+                'Position', [15 103 300 22], ...
                 'Value', getpref('nestapp','hideEEGLABWindow',true));
+
+            % --- Parallel Processing section ---
+            uilabel(dlg, 'Text', 'Parallel Processing', 'FontWeight', 'bold', ...
+                'Position', [15 72 200 20]);
+            uilabel(dlg, 'Text', 'Max workers:', ...
+                'Position', [15 48 85 22], 'HorizontalAlignment', 'right');
+            spnWorkers = uispinner(dlg, ...
+                'Position', [105 48 60 22], 'Limits', [1 32], 'Step', 1, ...
+                'Value', getpref('nestapp', 'maxParallelWorkers', 4));
+            uilabel(dlg, 'Text', 'cap on simultaneous files when Parallel is on', ...
+                'Position', [172 48 240 22], 'FontColor', [0.4 0.4 0.4]);
 
             % --- Buttons ---
             uibutton(dlg, 'Text', 'Cancel', 'Position', [220 15 85 28], ...
@@ -584,6 +597,7 @@ classdef nestapp < matlab.apps.AppBase
                 setpref('nestapp', 'overwriteReports',       cbOverwrite.Value);
                 setpref('nestapp', 'suppressEEGLABDialogs',  cbSuppressDialogs.Value);
                 setpref('nestapp', 'hideEEGLABWindow',       cbHideEEGLAB.Value);
+                setpref('nestapp', 'maxParallelWorkers',     round(spnWorkers.Value));
                 close(dlg);
             end
         end
@@ -887,18 +901,19 @@ classdef nestapp < matlab.apps.AppBase
             app.SelectedListBoxLabel_2.FontSize   = fs(16);
 
             % Select Data panel + children (children coords are panel-relative)
-            app.SelectDatatoPerformAnalysisPanel.Position = p([649 135 208 206]);
+            app.SelectDatatoPerformAnalysisPanel.Position = p([649 237 208 206]);
             app.SelectedFilesListBox.Position     = p([5 30 195 145]);
             app.SelectDataButton.Position         = p([5 5 195 23]);
 
-            app.RunAnalysisButton.Position        = p([657 15 201 60]);
+            app.RunAnalysisButton.Position        = p([657 117 201 60]);
             app.RunAnalysisButton.FontSize        = fs(18);
             app.Image.Position                    = p([653 453 203 44]);
             app.NESTAPPLabel.Position             = p([785 448 71 22]);
             app.NESTAPPLabel.FontSize             = fs(14);
 
-            app.ReStartStepsButton.Position       = p([658 91 201 36]);
+            app.ReStartStepsButton.Position       = p([658 193 201 36]);
             app.ReStartStepsButton.FontSize       = fs(18);
+            app.ParallelCheckBox.Position         = p([657 85 201 24]);
 
             %% Visualizing Tab
             % Three zones: left (x:0-340 electrode map), center (x:340-648 TEP/topo),
@@ -1637,9 +1652,28 @@ classdef nestapp < matlab.apps.AppBase
             end
 
             filePaths = cellfun(@(f) fullfile(app.path, f), app.file, 'UniformOutput', false);
+
+            % Pre-select channel location file once if the pipeline needs it.
+            app.preSelectedChanFile = '';
+            for psi = 1:numel(app.spec)
+                if strcmp(app.spec(psi).name, 'Load Channel Location')
+                    p = app.spec(psi).params;
+                    needChan     = isfield(p, 'needchanloc') && strcmp(p.needchanloc, 'yes');
+                    eachFileDiff = isfield(p, 'eachFilediffPath') && strcmp(p.eachFilediffPath, 'yes');
+                    if needChan && ~eachFileDiff
+                        [chName, chPath] = uigetfile('*.*', 'Select channel location file');
+                        if isequal(chName, 0); return; end
+                        app.preSelectedChanFile = fullfile(chPath, chName);
+                    end
+                    break
+                end
+            end
+
             opts.uiFigure     = app.UIFigure;
             opts.pipelineName = app.pipelineName;
             opts.statusBar    = app.StatusBar;
+            opts.parallel     = app.ParallelCheckBox.Value;
+            opts.chanLocFile  = app.preSelectedChanFile;
 
             try
                 [allReports, allSummaries] = runPipelineCore(app.spec, filePaths, opts);
@@ -2345,7 +2379,7 @@ classdef nestapp < matlab.apps.AppBase
             app.SelectDatatoPerformAnalysisPanel.AutoResizeChildren = 'off';
             app.SelectDatatoPerformAnalysisPanel.BorderType = 'none';
             app.SelectDatatoPerformAnalysisPanel.Title = 'Select Data to Perform Analysis';
-            app.SelectDatatoPerformAnalysisPanel.Position = [649 135 208 206];
+            app.SelectDatatoPerformAnalysisPanel.Position = [649 237 208 206];
 
             % Create SelectedFilesListBox — shows all queued files
             app.SelectedFilesListBox = uilistbox(app.SelectDatatoPerformAnalysisPanel);
@@ -2366,7 +2400,7 @@ classdef nestapp < matlab.apps.AppBase
             app.RunAnalysisButton.FontColor = [1 1 1];
             app.RunAnalysisButton.FontSize = 18;
             app.RunAnalysisButton.FontWeight = 'bold';
-            app.RunAnalysisButton.Position = [657 15 201 60];
+            app.RunAnalysisButton.Position = [657 117 201 60];
             app.RunAnalysisButton.Text = 'Run Analysis';
 
             % Create Image
@@ -2388,8 +2422,15 @@ classdef nestapp < matlab.apps.AppBase
             app.ReStartStepsButton.BackgroundColor = [0.651 0.651 0.651];
             app.ReStartStepsButton.FontSize = 18;
             app.ReStartStepsButton.FontWeight = 'bold';
-            app.ReStartStepsButton.Position = [658 91 201 36];
+            app.ReStartStepsButton.Position = [658 193 201 36];
             app.ReStartStepsButton.Text = 'ReStart Steps';
+
+            % Create ParallelCheckBox
+            app.ParallelCheckBox = uicheckbox(app.CleaningTab);
+            app.ParallelCheckBox.Text = 'Parallel Processing';
+            app.ParallelCheckBox.Position = [657 85 201 24];
+            app.ParallelCheckBox.Value = false;
+            app.ParallelCheckBox.Enable = license('test', 'Distrib_Computing_Toolbox');
 
             % Create VisualizingTab
             app.VisualizingTab = uitab(app.TabGroup);

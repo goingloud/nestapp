@@ -209,21 +209,18 @@ testCase.verifyTrue(contains(src, 'EEG.history'), ...
 end
 
 function test_buildHistoryEntryExists(testCase)
-% buildHistoryEntry is the local function that formats the provenance string.
-% Its existence pins the implementation: renaming or deleting it breaks the
-% EEG.history feature.
-src = fileread(fullfile(srcRoot(), 'runPipelineCore.m'));
-testCase.verifyTrue(contains(src, 'buildHistoryEntry'), ...
-    'runPipelineCore.m must contain buildHistoryEntry for formatting EEG.history entries');
+% buildHistoryEntry is a standalone function that formats the EEG.history
+% provenance string. Its existence pins the implementation: renaming or
+% deleting it breaks the EEG.history feature.
+srcFile = fullfile(srcRoot(), 'buildHistoryEntry.m');
+testCase.verifyTrue(isfile(srcFile), ...
+    'buildHistoryEntry.m must exist in src/ for formatting EEG.history entries');
 end
 
 function test_buildHistoryEntryIncludesTimestamp(testCase)
 % The provenance entry must include a timestamp so researchers can see when
 % the pipeline ran, not just what steps it contained.
-src = fileread(fullfile(srcRoot(), 'runPipelineCore.m'));
-idx = strfind(src, 'function entry = buildHistoryEntry');
-testCase.verifyFalse(isempty(idx), 'buildHistoryEntry function must exist');
-window = src(idx(1):min(idx(1)+1500, numel(src)));
-testCase.verifyTrue(contains(window, 'datetime'), ...
+src = fileread(fullfile(srcRoot(), 'buildHistoryEntry.m'));
+testCase.verifyTrue(contains(src, 'datetime'), ...
     'buildHistoryEntry must include a datetime timestamp in the history entry');
 end
