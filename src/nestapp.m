@@ -552,13 +552,19 @@ classdef nestapp < matlab.apps.AppBase
             % --- Parallel Processing section ---
             uilabel(dlg, 'Text', 'Parallel Processing', 'FontWeight', 'bold', ...
                 'Position', [15 72 200 20]);
-            uilabel(dlg, 'Text', 'Max workers:', ...
-                'Position', [15 48 85 22], 'HorizontalAlignment', 'right');
-            spnWorkers = uispinner(dlg, ...
-                'Position', [105 48 60 22], 'Limits', [1 32], 'Step', 1, ...
-                'Value', getpref('nestapp', 'maxParallelWorkers', 4));
-            uilabel(dlg, 'Text', 'cap on simultaneous files when Parallel is on', ...
-                'Position', [172 48 240 22], 'FontColor', [0.4 0.4 0.4]);
+            spnWorkers = [];
+            if license('test', 'Distrib_Computing_Toolbox')
+                uilabel(dlg, 'Text', 'Max workers:', ...
+                    'Position', [15 48 85 22], 'HorizontalAlignment', 'right');
+                spnWorkers = uispinner(dlg, ...
+                    'Position', [105 48 60 22], 'Limits', [1 32], 'Step', 1, ...
+                    'Value', getpref('nestapp', 'maxParallelWorkers', 4));
+                uilabel(dlg, 'Text', 'cap on simultaneous files when Parallel is on', ...
+                    'Position', [172 48 240 22], 'FontColor', [0.4 0.4 0.4]);
+            else
+                uilabel(dlg, 'Text', 'Not available — Parallel Computing Toolbox not licensed.', ...
+                    'Position', [15 48 385 22], 'FontColor', [0.5 0.5 0.5]);
+            end
 
             % --- Buttons ---
             uibutton(dlg, 'Text', 'Cancel', 'Position', [220 15 85 28], ...
@@ -597,7 +603,9 @@ classdef nestapp < matlab.apps.AppBase
                 setpref('nestapp', 'overwriteReports',       cbOverwrite.Value);
                 setpref('nestapp', 'suppressEEGLABDialogs',  cbSuppressDialogs.Value);
                 setpref('nestapp', 'hideEEGLABWindow',       cbHideEEGLAB.Value);
-                setpref('nestapp', 'maxParallelWorkers',     round(spnWorkers.Value));
+                if ~isempty(spnWorkers)
+                    setpref('nestapp', 'maxParallelWorkers', round(spnWorkers.Value));
+                end
                 close(dlg);
             end
         end
@@ -2434,6 +2442,7 @@ classdef nestapp < matlab.apps.AppBase
                 app.ParallelCheckBox.Enable = 'on';
             else
                 app.ParallelCheckBox.Enable = 'off';
+                app.ParallelCheckBox.Tooltip = 'Requires Parallel Computing Toolbox';
             end
 
             % Create VisualizingTab

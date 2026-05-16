@@ -31,14 +31,30 @@ if ~isfield(opts, 'onStepError'),    opts.onStepError    = []; end
 if ~isfield(opts, 'onPickChanFile'), opts.onPickChanFile = []; end
 if ~isfield(opts, 'fileIndex'),      opts.fileIndex      = 0; end
 if ~isfield(opts, 'uiFigure'),       opts.uiFigure       = []; end
+if ~isfield(opts, 'logQueue'),       opts.logQueue       = []; end
 
+% eeglab('nogui') is expensive (plugin scan, path setup); run it once per
+% worker then just reset globals for subsequent files on the same worker.
+persistent eeglabWorkerReady
 global EEG ALLEEG CURRENTSET ALLCOM %#ok<GVMIS>
 
 [pathDir, fileBase, fileExt] = fileparts(fullPath);
 pathName = [pathDir, filesep];
 fileName = [fileBase, fileExt];
 
-[ALLEEG, EEG, CURRENTSET, ALLCOM] = eeglab('nogui');
+wLabel   = sprintf('FILE-%d', opts.fileIndex);
+fileTic  = tic;
+
+if isempty(eeglabWorkerReady)
+    sendWorkerLog(opts.logQueue, wLabel, 'eeglab(''nogui'') — first file on this worker, initializing...');
+    t0eeg = tic;
+    [ALLEEG, EEG, CURRENTSET, ALLCOM] = eeglab('nogui');
+    eeglabWorkerReady = true;
+    sendWorkerLog(opts.logQueue, wLabel, 'eeglab(''nogui'') done (%.2fs)', toc(t0eeg));
+else
+    sendWorkerLog(opts.logQueue, wLabel, 'EEGLAB already initialized on this worker — resetting globals only');
+    EEG = []; ALLEEG = []; CURRENTSET = 0; ALLCOM = {};
+end
 
 ICA_Rejected_Comp = {};
 interpElecs       = {};
@@ -47,7 +63,7 @@ histLenBefore     = 0;
 
 nSteps = numel(spec);
 
-disp(['!--------FILE ', fileName, ' IS BEING PROCESSED--------!'])
+sendWorkerLog(opts.logQueue, wLabel, 'START  %s  (%d steps)', fileName, nSteps);
 
 stepLog = struct('step',{},'duration_s',{},'chanBefore',{},'chanAfter',{}, ...
                  'epochBefore',{},'epochAfter',{},'error',{});
@@ -67,7 +83,7 @@ for si = 1:nSteps
             'nSteps', nSteps, 'stepName', stepName));
     end
 
-    disp(strcat('step ', num2str(si), ': "', stepName, '" is running!'));
+    sendWorkerLog(opts.logQueue, wLabel, 'Step %d/%d START  "%s"', si, nSteps, stepName);
 
     if isstruct(EEG) && ~isempty(EEG)
         nChanBefore  = EEG.nbchan;
@@ -119,7 +135,6 @@ for si = 1:nSteps
                 end
 
             case 'Load Data'
-                mode = varin{1,2};
                 if   strcmpi(fileName(end-2:end),'set')
                     EEG = pop_loadset( [pathName fileName]);
                 elseif strcmpi(fileName(end-2:end),'cnt')
@@ -130,9 +145,6 @@ for si = 1:nSteps
                     EEG = pop_loadbv(pathName , fileName );
                 end
                 EEG.filename = fileName;
-                if strcmpi(mode,'on')
-                    % eeglab redraw handled by caller in serial mode
-                end
                 [ALLEEG, EEG, CURRENTSET] = eeg_store(ALLEEG, EEG, CURRENTSET);
                 if isfield(EEG, 'history')
                     histLenBefore = numel(EEG.history);
@@ -746,6 +758,9 @@ for si = 1:nSteps
         stepRec.timestamp    = datetime('now');
         fileReport.steps{end+1} = stepRec;
 
+        sendWorkerLog(opts.logQueue, wLabel, 'Step %d/%d END    "%s"  (%.2fs)  ch:%d->%d  ep:%d->%d', ...
+            si, nSteps, stepName, elapsed, nChanBefore, nChanAfter, nEpochBefore, nEpochAfter);
+
         stepLog(end+1) = struct( ...
             'step',        stepName, ...
             'duration_s',  elapsed, ...
@@ -756,16 +771,19 @@ for si = 1:nSteps
             'error',       ''); %#ok<AGROW>
 
     catch err
+        elapsed = toc(t0);
+        sendWorkerLog(opts.logQueue, wLabel, 'Step %d/%d ERROR  "%s"  (%.2fs)  %s', ...
+            si, nSteps, stepName, elapsed, err.message);
+
         stepLog(end+1) = struct( ...
             'step',        stepName, ...
-            'duration_s',  toc(t0), ...
+            'duration_s',  elapsed, ...
             'chanBefore',  nChanBefore, ...
             'chanAfter',   nChanBefore, ...
             'epochBefore', nEpochBefore, ...
             'epochAfter',  nEpochBefore, ...
             'error',       err.message); %#ok<AGROW>
 
-        disp(err.message)
         warning('An error occurred at file %s at step %d: %s', fileName, si, stepName);
 
         shouldContinue = false;
@@ -792,5 +810,32 @@ if isstruct(EEG) && isfield(EEG, 'history')
     ALLCOM = [newLines(:)', ALLCOM];
 end
 
+sendWorkerLog(opts.logQueue, wLabel, 'Writing session log...');
 writeSessionLog(pathName, fileName, stepLog);
+sendWorkerLog(opts.logQueue, wLabel, 'DONE   %s  (total %.2fs)', fileName, toc(fileTic));
+
+% Sentinel: si=0 signals the file is truly done (after all cleanup).
+% updateParallelProgress uses this — not si==nSteps — to go green, so the
+% bar stays blue until the worker has actually finished, not just started the
+% last step.
+if ~isempty(opts.progressQueue)
+    sendWorkerLog(opts.logQueue, wLabel, 'Sending done sentinel to DataQueue');
+    send(opts.progressQueue, struct( ...
+        'fi', opts.fileIndex, 'si', 0, ...
+        'nSteps', nSteps, 'stepName', 'Done'));
+end
+end
+
+% ── local helper ──────────────────────────────────────────────────────────
+
+function sendWorkerLog(q, label, fmt, varargin)
+% Route timestamped log lines through the DataQueue so they print in real-time
+% on the client. PCT buffers plain fprintf until the future completes.
+if isempty(q)
+    nestLog(label, fmt, varargin{:});
+    return
+end
+ts = char(datetime('now', 'Format', 'HH:mm:ss.SSS'));
+send(q, struct('log', true, 'ts', ts, 'label', label, ...
+               'text', sprintf(fmt, varargin{:})));
 end
