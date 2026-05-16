@@ -441,6 +441,11 @@ for si = 1:nSteps
                 pendingICAStats = struct('rejMask', rejMask);
                 if ~isempty(EEG.icaweights) && size(EEG.icaweights,1) == numel(rejMask)
                     act2D = computeICAActivation(EEG);
+                    % Cache activations so pop_subcomp's eeg_getica doesn't recompute them.
+                    if isempty(EEG.icaact)
+                        EEG.icaact = reshape(act2D, size(EEG.icaweights,1), ...
+                            size(EEG.data,2), size(EEG.data,3));
+                    end
                     data2D = reshape(EEG.data(EEG.icachansind,:,:), numel(EEG.icachansind), []);
                     totalVar = sum(var(data2D, 0, 2));
                     if totalVar > 0
@@ -533,6 +538,7 @@ for si = 1:nSteps
                 EEG = pop_tesa_interpdata( EEG, interpolation, interpWin);
 
             case 'Run TESA ICA'
+                EEG.data = double(EEG.data);
                 vars = convertContainedStringsToChars(varin);
                 EEG = pop_tesa_fastica( EEG, vars{:} );
                 EEG = eeg_checkset( EEG );
