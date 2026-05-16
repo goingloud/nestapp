@@ -38,7 +38,7 @@ global EEG ALLEEG CURRENTSET ALLCOM %#ok<GVMIS>
 pathName = [pathDir, filesep];
 fileName = [fileBase, fileExt];
 
-ALLEEG = []; EEG = []; CURRENTSET = 0; ALLCOM = {};
+[ALLEEG, EEG, CURRENTSET, ALLCOM] = eeglab('nogui');
 
 ICA_Rejected_Comp = {};
 interpElecs       = {};

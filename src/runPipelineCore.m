@@ -149,18 +149,19 @@ if isempty(pool)
 end
 nWorkers = min(nWorkers, pool.NumWorkers);
 
-% Put nestapp src/ and EEGLAB on every worker's path.
-nestappSrc = fileparts(which('runPipelineCore'));
-if ~isempty(nestappSrc)
-    pctRunOnAll(['addpath(''' strrep(nestappSrc,'\','\\') ''');']);
-end
-eeglabDir = fileparts(which('eeglab'));
-if ~isempty(eeglabDir)
-    pctRunOnAll(['addpath(genpath(''' strrep(eeglabDir,'\','\\') '''));']);
+% Propagate paths to workers only (spmd, unlike pctRunOnAll, skips the client
+% — avoids shadowing MATLAB built-ins with EEGLAB subdirectories on the client).
+nestappSrc    = fileparts(which('runPipelineCore'));
+eeglabGenpath = genpath(fileparts(which('eeglab')));
+spmd
+    if ~isempty(nestappSrc),    addpath(nestappSrc);    end
+    if ~isempty(eeglabGenpath), addpath(eeglabGenpath); end
 end
 
 nBars = min(nFiles, nWorkers);
 dlg   = createParallelDlg(opts.uiFigure, nBars, nFiles);
+% Give the uihtml web view time to load before the first DataQueue message.
+pause(1.5); drawnow;
 
 % DataQueue for worker -> main progress messages.
 q = parallel.pool.DataQueue;
@@ -185,7 +186,7 @@ end
 % Poll until all futures finish or user cancels.
 cancelled = false;
 while true
-    pause(0.1);
+    pause(0.25); drawnow;
     if ~isvalid(dlg.fig) || dlg.fig.UserData.cancelRequested
         cancel(futures);
         cancelled = true;
