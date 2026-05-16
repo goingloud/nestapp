@@ -1565,8 +1565,14 @@ classdef nestapp < matlab.apps.AppBase
             for i = 1:n
                 paths{i} = fullfile(files(i).folder, files(i).name);
                 try
-                    tmp      = load(paths{i}, 'templateName');
-                    names{i} = tmp.templateName;
+                    tmp = load(paths{i});
+                    if isfield(tmp, 'pipelineName') && ~isempty(tmp.pipelineName)
+                        names{i} = tmp.pipelineName;
+                    elseif isfield(tmp, 'templateName') && ~isempty(tmp.templateName)
+                        names{i} = tmp.templateName;
+                    else
+                        [~, names{i}] = fileparts(files(i).name);
+                    end
                 catch
                     [~, names{i}] = fileparts(files(i).name);
                 end
