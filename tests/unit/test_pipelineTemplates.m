@@ -59,16 +59,16 @@ for i = 1:numel(templates)
 end
 end
 
-function test_threeTemplatesExist(testCase)
+function test_fiveTemplatesExist(testCase)
 templates = loadTemplates(testCase);
-testCase.verifyEqual(numel(templates), 3, 'Expected exactly 3 templates');
+testCase.verifyEqual(numel(templates), 5, 'Expected exactly 5 templates');
 end
 
 % ── template names ────────────────────────────────────────────────────────
 
 function test_tmsEEGTemplateExists(testCase)
 templates = loadTemplates(testCase);
-testCase.verifyTrue(any(contains({templates.name}, 'TMS-EEG')), ...
+testCase.verifyTrue(any(strcmp({templates.name}, 'TMS-EEG / TEP (TESA)')), ...
     'Must have a TMS-EEG template');
 end
 
@@ -84,11 +84,23 @@ testCase.verifyTrue(any(contains({templates.name}, 'Minimal')), ...
     'Must have a Minimal template');
 end
 
+function test_conservativeTemplateExists(testCase)
+templates = loadTemplates(testCase);
+testCase.verifyTrue(any(contains({templates.name}, 'Conservative')), ...
+    'Must have a Conservative template');
+end
+
+function test_aggressiveTemplateExists(testCase)
+templates = loadTemplates(testCase);
+testCase.verifyTrue(any(contains({templates.name}, 'Aggressive')), ...
+    'Must have an Aggressive template');
+end
+
 % ── step validity ─────────────────────────────────────────────────────────
 
 function test_allTmsEEGStepsInRegistry(testCase)
 templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'TMS-EEG'));
+t = templates(strcmp({templates.name}, 'TMS-EEG / TEP (TESA)'));
 allNames = validStepNames();
 for i = 1:numel(t.steps)
     testCase.verifyTrue(ismember(t.steps{i}, allNames), ...
@@ -120,7 +132,7 @@ end
 
 function test_tmsEEGHasAtLeast5Steps(testCase)
 templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'TMS-EEG'));
+t = templates(strcmp({templates.name}, 'TMS-EEG / TEP (TESA)'));
 testCase.verifyGreaterThanOrEqual(numel(t.steps), 5, ...
     'TMS-EEG template must have at least 5 steps');
 end
@@ -143,21 +155,21 @@ end
 
 function test_tmsEEGLoadDataIsFirst(testCase)
 templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'TMS-EEG'));
+t = templates(strcmp({templates.name}, 'TMS-EEG / TEP (TESA)'));
 testCase.verifyEqual(t.steps{1}, 'Load Data', ...
     'TMS-EEG template must start with Load Data');
 end
 
 function test_tmsEEGSaveNewSetIsLast(testCase)
 templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'TMS-EEG'));
+t = templates(strcmp({templates.name}, 'TMS-EEG / TEP (TESA)'));
 testCase.verifyEqual(t.steps{end}, 'Save New Set', ...
     'TMS-EEG template must end with Save New Set');
 end
 
 function test_tmsEEGFindPulsesBeforeRemove(testCase)
 templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'TMS-EEG'));
+t = templates(strcmp({templates.name}, 'TMS-EEG / TEP (TESA)'));
 findIdx   = find(strcmp(t.steps, 'Find TMS Pulses (TESA)'),      1);
 removeIdx = find(strcmp(t.steps, 'Remove TMS Artifacts (TESA)'), 1);
 testCase.verifyTrue(~isempty(findIdx) && ~isempty(removeIdx), ...

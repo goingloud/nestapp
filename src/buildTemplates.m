@@ -182,81 +182,25 @@ end
 %% Local helpers
 
 function saveMat(reg, steps, ovs, templateName, outPath)
-% Build pipeline arrays and write to a .mat in the same format as a user
-% saved pipeline (PLItems, PLItemsData, VarIns, ParamKeys, templateName).
-    n           = numel(steps);
-    PLItems     = steps;
-    PLItemsData = arrayfun(@(i) ['Item' num2str(i)], 1:n, 'UniformOutput', false);
-    VarIns      = cell(1, n);
-    ParamKeys   = cell(1, n);
+% Build a v3 pipeline spec and save it in the same format as a user-saved pipeline.
+    n    = numel(steps);
+    spec = repmat(struct('name', '', 'params', struct()), 1, n);
     for i = 1:n
-        [VarIns{i}, ParamKeys{i}] = makeStepTable(reg, steps{i}, ovs{i});
+        s        = makePipelineStep(steps{i}, reg);
+        ovFields = fieldnames(ovs{i});
+        for fi = 1:numel(ovFields)
+            key = ovFields{fi};
+            if ~isfield(s.params, key)
+                error('buildTemplates:badKey', ...
+                    'Key "%s" is not a param of step "%s".', key, steps{i});
+            end
+            s.params.(key) = ovs{i}.(key);
+        end
+        spec(i) = s;
     end
-    save(outPath, 'PLItems', 'PLItemsData', 'VarIns', 'ParamKeys', 'templateName');
+    pipelineName = templateName;
+    save(outPath, 'pipelineName', 'spec');
     fprintf('  %s\n', outPath);
-end
-
-function [T, rawKeys] = makeStepTable(reg, stepName, overrides)
-% Build the var/val display table for one step — same logic as the
-% DefaultsVal construction in nestapp.startupFcn.
-    regIdx = find(strcmp({reg.name}, stepName), 1);
-    if isempty(regIdx)
-        error('buildTemplates:notFound', 'Step "%s" not in stepRegistry.', stepName);
-    end
-    s         = reg(regIdx);
-    fields    = fieldnames(s.defaults);
-    paramKeys = {s.params.key};
-    paramPH   = {s.params.placeholder};
-    nF        = numel(fields);
-    var       = cell(nF, 1);
-    val       = cell(nF, 1);
-    for j = 1:nF
-        fn   = fields{j};
-        pIdx = find(strcmp(paramKeys, fn), 1);
-        if ~isempty(pIdx)
-            p = s.params(pIdx);
-            if isempty(p.unit)
-                var{j} = string(p.friendlyName);
-            else
-                var{j} = string([p.friendlyName, ' (', p.unit, ')']);
-            end
-        else
-            var{j} = string(fn);
-        end
-        V = s.defaults.(fn);
-        if ischar(V)
-            val{j} = string(V);
-        elseif isempty(V)
-            pIdx2 = find(strcmp(paramKeys, fn), 1);
-            if ~isempty(pIdx2) && ~isempty(paramPH{pIdx2})
-                val{j} = string(paramPH{pIdx2});
-            else
-                val{j} = "(not set)";
-            end
-        elseif iscell(V)
-            val{j} = string(V);
-        else
-            val{j} = string(mat2str(V));
-        end
-    end
-    % Apply overrides
-    ovFields = fieldnames(overrides);
-    for fi = 1:numel(ovFields)
-        key = ovFields{fi};
-        row = find(strcmp(fields, key), 1);
-        if isempty(row)
-            error('buildTemplates:badKey', ...
-                  'Key "%s" not found in step "%s" defaults.', key, stepName);
-        end
-        v = overrides.(key);
-        if isnumeric(v) || islogical(v)
-            val{row} = string(mat2str(v));
-        else
-            val{row} = string(v);
-        end
-    end
-    T       = table(var, val);
-    rawKeys = fields;
 end
 
 function ovs = emptyOvs(steps)

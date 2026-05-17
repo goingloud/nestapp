@@ -2,9 +2,8 @@ function [spec, warnings] = specFromSaved(data, registry)
 % SPECFROMSAVED Load a PipelineSpec from a saved pipeline .mat.
 %   [spec, warnings] = SPECFROMSAVED(data, registry)
 %
-%   data must contain a 'spec' field (new format, version '3').
-%   Old-format files (PLItems/VarIns) are no longer supported — convert
-%   them with the one-off migration script before loading.
+%   data must contain a 'spec' field. Returns a struct array of PipelineStep
+%   ({name, params}). Unknown steps are included with a warning.
 
 warnings = {};
 
