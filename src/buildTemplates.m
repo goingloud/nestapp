@@ -115,66 +115,6 @@ ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'Heart',  [0.9, 1])
 ovs = setOv(ovs, steps, 'Save New Set', 'savenew', 'minimal');
 saveMat(reg, steps, ovs, 'Minimal (Delorme 2023)', fullfile(outDir, '3_minimal.mat'));
 
-%% 4 — TMS-EEG / TEP — Conservative
-% Same 19-step structure; thresholds biased toward keeping data.
-steps = { ...
-    'Load Data', 'Load Channel Location', 'Remove un-needed Channels', ...
-    'Find TMS Pulses (TESA)', 'Remove TMS Artifacts (TESA)', ...
-    'Interpolate Missing Data (TESA)', 'Re-Sample', 'Frequency Filter (TESA)', ...
-    'Epoching', 'Remove Bad Channels', 'Interpolate Channels', 'Re-Reference', ...
-    'Run TESA ICA', 'Remove ICA Components (TESA)', ...
-    'Run TESA ICA', 'Remove ICA Components (TESA)', ...
-    'Remove Baseline', 'Remove Bad Epoch', 'Save New Set'};
-ovs = emptyOvs(steps);
-ovs = setOv(ovs, steps, 'Interpolate Missing Data (TESA)', 'interpolation', 'cubic');
-ovs = setOv(ovs, steps, 'Epoching',            'timelim',          [-1, 1]);
-ovs = setOv(ovs, steps, 'Remove Bad Channels', 'threshold',        8);
-ovs = setOv(ovs, steps, 'Re-Reference',        'ref',              '[]');
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'tmsMuscleThresh', 12,   1);
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'blink',          'on',  2);
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'move',           'on',  2);
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'muscle',         'on',  2);
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'elecNoise',      'on',  2);
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'blinkThresh',    3.5,   2);
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'moveThresh',     3.0,   2);
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'muscleThresh',   0.8,   2);
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'elecNoiseThresh',6.0,   2);
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'tmsMuscleThresh',12,    2);
-ovs = setOv(ovs, steps, 'Remove Bad Epoch', 'threshold', 1500);
-ovs = setOv(ovs, steps, 'Save New Set',     'savenew',   'conservative');
-saveMat(reg, steps, ovs, 'TMS-EEG / TEP — Conservative', ...
-    fullfile(outDir, '4_conservative.mat'));
-
-%% 5 — TMS-EEG / TEP — Aggressive
-% Same 19-step structure; thresholds biased toward removing artifact.
-steps = { ...
-    'Load Data', 'Load Channel Location', 'Remove un-needed Channels', ...
-    'Find TMS Pulses (TESA)', 'Remove TMS Artifacts (TESA)', ...
-    'Interpolate Missing Data (TESA)', 'Re-Sample', 'Frequency Filter (TESA)', ...
-    'Epoching', 'Remove Bad Channels', 'Interpolate Channels', 'Re-Reference', ...
-    'Run TESA ICA', 'Remove ICA Components (TESA)', ...
-    'Run TESA ICA', 'Remove ICA Components (TESA)', ...
-    'Remove Baseline', 'Remove Bad Epoch', 'Save New Set'};
-ovs = emptyOvs(steps);
-ovs = setOv(ovs, steps, 'Interpolate Missing Data (TESA)', 'interpolation', 'cubic');
-ovs = setOv(ovs, steps, 'Epoching',            'timelim',         [-1, 1]);
-ovs = setOv(ovs, steps, 'Remove Bad Channels', 'threshold',       3);
-ovs = setOv(ovs, steps, 'Re-Reference',        'ref',             '[]');
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'tmsMuscleThresh', 5,    1);
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'blink',          'on',  2);
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'move',           'on',  2);
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'muscle',         'on',  2);
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'elecNoise',      'on',  2);
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'blinkThresh',    1.5,   2);
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'moveThresh',     1.5,   2);
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'muscleThresh',   0.4,   2);
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'elecNoiseThresh',2.5,   2);
-ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'tmsMuscleThresh',5,     2);
-ovs = setOv(ovs, steps, 'Remove Bad Epoch', 'threshold', 500);
-ovs = setOv(ovs, steps, 'Save New Set',     'savenew',   'aggressive');
-saveMat(reg, steps, ovs, 'TMS-EEG / TEP — Aggressive', ...
-    fullfile(outDir, '5_aggressive.mat'));
-
 fprintf('buildTemplates: done — %s\n', outDir);
 end
 

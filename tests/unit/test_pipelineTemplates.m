@@ -59,9 +59,9 @@ for i = 1:numel(templates)
 end
 end
 
-function test_fiveTemplatesExist(testCase)
+function test_threeTemplatesExist(testCase)
 templates = loadTemplates(testCase);
-testCase.verifyEqual(numel(templates), 5, 'Expected exactly 5 templates');
+testCase.verifyEqual(numel(templates), 3, 'Expected exactly 3 templates');
 end
 
 % ── template names ────────────────────────────────────────────────────────
@@ -82,18 +82,6 @@ function test_minimalTemplateExists(testCase)
 templates = loadTemplates(testCase);
 testCase.verifyTrue(any(contains({templates.name}, 'Minimal')), ...
     'Must have a Minimal template');
-end
-
-function test_conservativeTemplateExists(testCase)
-templates = loadTemplates(testCase);
-testCase.verifyTrue(any(contains({templates.name}, 'Conservative')), ...
-    'Must have a Conservative template');
-end
-
-function test_aggressiveTemplateExists(testCase)
-templates = loadTemplates(testCase);
-testCase.verifyTrue(any(contains({templates.name}, 'Aggressive')), ...
-    'Must have an Aggressive template');
 end
 
 % ── step validity ─────────────────────────────────────────────────────────
