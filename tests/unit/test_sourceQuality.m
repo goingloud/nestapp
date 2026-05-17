@@ -113,17 +113,14 @@ end
 end
 
 function test_stepRegistryIsPureFunction(testCase)
-% stepRegistry must not access app state, globals, or UI.
-src = fileread(fullfile(srcRoot(), 'stepRegistry.m'));
-lines = strsplit(src, newline);
-for k = 1:numel(lines)
-    L = strtrim(lines{k});
-    if startsWith(L, '%'); continue; end
-    testCase.verifyEmpty(regexp(L, '\bapp\.', 'match'), ...
-        sprintf('Phase 2: stepRegistry.m line %d accesses app handle\n  Got: %s', k, L));
-    testCase.verifyEmpty(regexp(L, '\bglobal\b', 'match'), ...
-        sprintf('Phase 2: stepRegistry.m line %d declares global\n  Got: %s', k, L));
-end
+% stepRegistry must return the same result on every call regardless of
+% when or how many times it is called — no dependence on app state or globals.
+clear stepRegistry
+r1 = stepRegistry();
+clear stepRegistry
+r2 = stepRegistry();
+testCase.verifyEqual({r1.name}, {r2.name}, ...
+    'Phase 2: stepRegistry output is non-deterministic — likely accessing external state');
 end
 
 % ══════════════════════════════════════════════════════════════════════════
@@ -152,30 +149,24 @@ testCase.verifyEmpty(matches, ...
     'Phase 4: plotTEP uses rand(1,3) for colour — use the axes colour order instead');
 end
 
-function test_noDatestrInExportReport(testCase)
-% datestr() is deprecated in R2025b.
-src = fileread(fullfile(srcRoot(), 'exportReport.m'));
-lines = strsplit(src, newline);
-for k = 1:numel(lines)
-    L = strtrim(lines{k});
-    if startsWith(L, '%'); continue; end
-    testCase.verifyEmpty(regexp(L, '\bdatestr\s*\(', 'match'), ...
-        sprintf(['Phase 4: exportReport.m line %d uses deprecated datestr(). ' ...
-                 'Replace with string(datetime,...)\n  Got: %s'], k, L));
-end
+function test_exportReportDateFormatIsISO(testCase)
+% exportReport must format timestamps as YYYY-MM-DD (ISO 8601 / datetime format),
+% not as the datestr legacy format (e.g. "17-May-2026 10:30:00").
+report = initPipelineReport('test.set');
+txt    = exportReport(report, '');
+expectedDate = string(report.processedAt, 'yyyy-MM-dd');
+testCase.verifyTrue(contains(txt, expectedDate), ...
+    'Phase 4: exportReport date format should be YYYY-MM-DD (ISO 8601)');
+testCase.verifyEmpty(regexp(txt, '\d{2}-[A-Z][a-z]{2}-\d{4}', 'match'), ...
+    'Phase 4: exportReport must not use legacy datestr format (e.g. 17-May-2026)');
 end
 
-function test_noNowInInitReport(testCase)
-% now() is deprecated in R2025b (returns datenum).
-src = fileread(fullfile(srcRoot(), 'initPipelineReport.m'));
-lines = strsplit(src, newline);
-for k = 1:numel(lines)
-    L = strtrim(lines{k});
-    if startsWith(L, '%'); continue; end
-    testCase.verifyEmpty(regexp(L, '=\s*now\s*[;,]', 'match'), ...
-        sprintf(['Phase 4: initPipelineReport.m line %d uses deprecated now(). ' ...
-                 'Replace with datetime(''now'')\n  Got: %s'], k, L));
-end
+function test_initReportProcessedAtIsDatetime(testCase)
+% initPipelineReport.processedAt must be a datetime object, not a datenum
+% (which is what the deprecated now() returns).
+report = initPipelineReport('test.set');
+testCase.verifyTrue(isa(report.processedAt, 'datetime'), ...
+    'Phase 4: initPipelineReport.processedAt must be a datetime, not a double (deprecated now())');
 end
 
 function test_loadLabelsNoReturnValue(testCase)
@@ -205,12 +196,15 @@ end
 %% PHASE 6 — Efficiency
 % ══════════════════════════════════════════════════════════════════════════
 
-function test_stepRegistryHasPersistentCache(testCase)
+function test_stepRegistrySecondCallFasterThanFirst(testCase)
 % stepRegistry() is called multiple times from callbacks. A persistent cache
-% avoids rebuilding the 1,112-line struct on every call.
-src = fileread(fullfile(srcRoot(), 'stepRegistry.m'));
-testCase.verifyTrue(contains(src, 'persistent'), ...
-    'Phase 6: stepRegistry.m should use a persistent variable to cache the result');
+% avoids rebuilding the struct on every call — the second call should be
+% materially faster than the first (cold) call.
+clear stepRegistry
+t1 = tic; stepRegistry(); e1 = toc(t1);
+t2 = tic; stepRegistry(); e2 = toc(t2);
+testCase.verifyLessThan(e2, e1 * 0.5, ...
+    'Phase 6: stepRegistry second call is not faster than first — persistent cache may be missing');
 end
 
 

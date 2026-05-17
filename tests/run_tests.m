@@ -22,9 +22,12 @@ testRoot = fileparts(mfilename('fullpath'));
 repoRoot = fileparts(testRoot);
 addpath(repoRoot);
 addpath(fullfile(repoRoot, 'src'));
+addpath(fullfile(testRoot, 'helpers'));
 
 switch lower(suite)
-    case {'fast', 'unit'}
+    case 'fast'
+        suites = {fullfile(testRoot, 'unit'), fullfile(testRoot, 'regression')};
+    case 'unit'
         suites = {fullfile(testRoot, 'unit')};
     case 'regression'
         suites = {fullfile(testRoot, 'regression')};

@@ -8,7 +8,7 @@ classdef test_specFromSaved < matlab.unittest.TestCase
 
     methods (TestClassSetup)
         function addSrcPath(tc)
-            root = fileparts(fileparts(mfilename('fullpath')));
+            root = fileparts(fileparts(fileparts(mfilename('fullpath'))));
             addpath(fullfile(root, 'src'));
             tc.addTeardown(@rmpath, fullfile(root, 'src'));
         end

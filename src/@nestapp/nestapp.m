@@ -289,32 +289,14 @@ classdef nestapp < matlab.apps.AppBase
 
         function refreshParamTable(app, stepIdx)
         % REFRESHPARAMTABLE  Update UITable from app.spec(stepIdx).
-        %   Reads typed param values from spec and formats them for display.
-            reg      = stepRegistry();
-            step     = app.spec(stepIdx);
-            regIdx   = find(strcmp({reg.name}, step.name), 1);
+            reg    = stepRegistry();
+            step   = app.spec(stepIdx);
+            regIdx = find(strcmp({reg.name}, step.name), 1);
             if isempty(regIdx)
                 app.UITable.Data = [];
                 return
             end
-            params = reg(regIdx).params;
-            n      = numel(params);
-            data   = cell(n, 2);
-            for r = 1:n
-                p = params(r);
-                if isempty(p.unit)
-                    data{r,1} = p.friendlyName;
-                else
-                    data{r,1} = [p.friendlyName ' (' p.unit ')'];
-                end
-                if isfield(step.params, p.key)
-                    val = step.params.(p.key);
-                else
-                    val = [];
-                end
-                data{r,2} = formatParamForDisplay(app, val, p);
-            end
-            app.UITable.Data = data;
+            app.UITable.Data = buildParamTableData(step, reg(regIdx));
             styleParamTable(app);
         end
 
@@ -1602,13 +1584,8 @@ classdef nestapp < matlab.apps.AppBase
             step   = app.spec(stepIdx);
             regIdx = find(strcmp({reg.name}, step.name), 1);
             if isempty(regIdx); return; end
-            params = reg(regIdx).params;
-            row    = event.Indices(1);
-            if row > numel(params); return; end
 
-            paramMeta = params(row);
-            val = convertParam(event.NewData, paramMeta.type);
-            app.spec(stepIdx).params.(paramMeta.key) = val;
+            app.spec = applyParamEdit(app.spec, stepIdx, event.Indices(1), event.NewData, reg(regIdx));
             app.pipelineDirty = true;
             updateStatusBar(app);
         end

@@ -26,4 +26,11 @@
 !tests/integration/*.m
 !tests/regression/
 !tests/regression/*.m
+!tests/helpers/
+!tests/helpers/*.m
 !tests/*.m
+
+# CI
+!.github/
+!.github/workflows/
+!.github/workflows/*.yml
