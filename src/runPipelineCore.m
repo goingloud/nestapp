@@ -417,6 +417,13 @@ else
         statusBar.Text = sprintf('  File %d / %d \x2014 %s', msg.fi, nFiles, msg.stepName);
     end
 end
+% Render the label updates before the step executes.  The drawnow at the top
+% of this function flushes cancel clicks but runs before the label is set, so
+% without this second call the user sees the previous step's label for the
+% entire duration of the current step.  Not safe to call from afterEach handlers.
+if throwOnCancel
+    drawnow;
+end
 end
 
 function setCancelFlag(fig)
