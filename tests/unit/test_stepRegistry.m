@@ -128,10 +128,11 @@ matFiles = dir(fullfile(r, 'src', 'templates', '*.mat'));
 testCase.verifyFalse(isempty(matFiles), 'No template .mat files found in src/templates/');
 for fi = 1:numel(matFiles)
     data = load(fullfile(matFiles(fi).folder, matFiles(fi).name));
-    for si = 1:numel(data.PLItems)
-        testCase.verifyTrue(ismember(data.PLItems{si}, allNames), ...
+    stepNames = {data.spec.name};
+    for si = 1:numel(stepNames)
+        testCase.verifyTrue(ismember(stepNames{si}, allNames), ...
             sprintf('Template "%s" step "%s" not in stepRegistry', ...
-                data.templateName, data.PLItems{si}));
+                data.pipelineName, stepNames{si}));
     end
 end
 end

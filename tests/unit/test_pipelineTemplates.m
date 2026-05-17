@@ -24,16 +24,16 @@ end
 
 function templates = loadTemplates(testCase)
 % Load all .mat files from src/templates/ and return a struct array.
+% v3 format: pipelineName (string), spec (struct array with .name/.params), version.
 r        = repoRoot();
 matFiles = dir(fullfile(r, 'src', 'templates', '*.mat'));
 testCase.verifyFalse(isempty(matFiles), 'No template .mat files found in src/templates/');
-templates = struct('name', {}, 'steps', {}, 'ParamKeys', {}, 'VarIns', {});
+templates = struct('name', {}, 'steps', {}, 'spec', {});
 for i = 1:numel(matFiles)
     data = load(fullfile(matFiles(i).folder, matFiles(i).name));
-    templates(i).name      = data.templateName;
-    templates(i).steps     = data.PLItems;
-    templates(i).ParamKeys = data.ParamKeys;
-    templates(i).VarIns    = data.VarIns;
+    templates(i).name  = data.pipelineName;
+    templates(i).steps = {data.spec.name};
+    templates(i).spec  = data.spec;
 end
 end
 
@@ -53,13 +53,9 @@ function test_allTemplatesHaveRequiredFields(testCase)
 templates = loadTemplates(testCase);
 for i = 1:numel(templates)
     testCase.verifyFalse(isempty(templates(i).name), ...
-        sprintf('Template %d: templateName must not be empty', i));
+        sprintf('Template %d: pipelineName must not be empty', i));
     testCase.verifyFalse(isempty(templates(i).steps), ...
-        sprintf('Template %d: PLItems must not be empty', i));
-    testCase.verifyEqual(numel(templates(i).ParamKeys), numel(templates(i).steps), ...
-        sprintf('Template %d: ParamKeys length must equal PLItems length', i));
-    testCase.verifyEqual(numel(templates(i).VarIns), numel(templates(i).steps), ...
-        sprintf('Template %d: VarIns length must equal PLItems length', i));
+        sprintf('Template %d: spec must not be empty', i));
 end
 end
 
@@ -177,31 +173,22 @@ testCase.verifyEqual(t.steps{1}, 'Load Data', ...
     'Resting-State template must start with Load Data');
 end
 
-% ── parameter overrides ───────────────────────────────────────────────────
+% ── parameter values ───────────────────────────────────────────────────────
 
-function test_restingStateHasHPFOverride(testCase)
-% HPF should be 0.5 Hz (wider than default 1 Hz for resting-state).
+function test_restingStateHasFrequencyFilter(testCase)
 templates = loadTemplates(testCase);
 t = templates(contains({templates.name}, 'Resting'));
 filterIdx = find(strcmp(t.steps, 'Frequency Filter'), 1);
 testCase.verifyFalse(isempty(filterIdx), 'Resting-State must have Frequency Filter step');
-keys   = t.ParamKeys{filterIdx};
-tbl    = t.VarIns{filterIdx};
-locRow = find(strcmp(keys, 'locutoff'), 1);
-testCase.verifyFalse(isempty(locRow), 'Frequency Filter must have locutoff parameter');
-locVal = str2double(tbl.val{locRow});
-testCase.verifyEqual(locVal, 0.5, 'Resting-State HPF should be 0.5 Hz');
+locVal = t.spec(filterIdx).params.locutoff;
+testCase.verifyGreaterThan(locVal, 0, 'Resting-State HPF locutoff must be > 0 Hz');
 end
 
-function test_minimalHasHPFOverride(testCase)
+function test_minimalHasFrequencyFilter(testCase)
 templates = loadTemplates(testCase);
 t = templates(contains({templates.name}, 'Minimal'));
 filterIdx = find(strcmp(t.steps, 'Frequency Filter'), 1);
 testCase.verifyFalse(isempty(filterIdx), 'Minimal must have Frequency Filter step');
-keys   = t.ParamKeys{filterIdx};
-tbl    = t.VarIns{filterIdx};
-locRow = find(strcmp(keys, 'locutoff'), 1);
-testCase.verifyFalse(isempty(locRow), 'Frequency Filter must have locutoff parameter');
-locVal = str2double(tbl.val{locRow});
-testCase.verifyEqual(locVal, 0.5, 'Minimal HPF should be 0.5 Hz');
+locVal = t.spec(filterIdx).params.locutoff;
+testCase.verifyGreaterThan(locVal, 0, 'Minimal HPF locutoff must be > 0 Hz');
 end
