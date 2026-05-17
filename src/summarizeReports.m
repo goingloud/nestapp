@@ -1,9 +1,9 @@
-function summaryText = summarizeReports(reports)
+﻿function summaryText = summarizeReports(reports)
 % SUMMARIZEREPORTS  Build a cross-file summary from a cell array of PipelineReport structs.
 %
 %   summaryText = SUMMARIZEREPORTS(reports)
 %
-%   reports - 1×N cell array of structs returned by initPipelineReport and
+%   reports - 1xN cell array of structs returned by initPipelineReport and
 %             populated by runPipelineCore. N must be >= 2.
 %
 %   Returns a formatted char suitable for display in the pipeline report dialog
@@ -48,7 +48,7 @@ if any(epoched)
     lines{end+1} = sprintf('  Original:  %s', fmtStat(origTr(ep)));
     if any(rejTr(ep) > 0)
         pctRej = rejTr(ep) ./ origTr(ep) * 100;
-        lines{end+1} = sprintf('  Rejected:  %s  (%.1f%%±%.1f%% of trials)', ...
+        lines{end+1} = sprintf('  Rejected:  %s  (%.1f%%+/-%.1f%% of trials)', ...
             fmtStat(rejTr(ep)), mean(pctRej), std(pctRej));
     end
     lines{end+1} = sprintf('  Final:     %s', fmtStat(finalTr(ep)));
@@ -97,13 +97,13 @@ end
 %% ---- helpers ---------------------------------------------------------------
 
 function s = fmtStat(v)
-% Format a numeric vector as "mean ± SD" or just the value when all equal.
+% Format a numeric vector as "mean +/- SD" or just the value when all equal.
 v = double(v(:));
 if isscalar(v)
     s = sprintf('%.1f', v);
 elseif std(v) < 1e-9
     s = sprintf('%.1f (all equal)', mean(v));
 else
-    s = sprintf('%.1f ± %.1f  [%g – %g]', mean(v), std(v), min(v), max(v));
+    s = sprintf('%.1f +/- %.1f  [%g - %g]', mean(v), std(v), min(v), max(v));
 end
 end

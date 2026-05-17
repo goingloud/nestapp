@@ -1,6 +1,6 @@
-function varin = paramsToVarin(params)
+﻿function varin = paramsToVarin(params)
 % PARAMSTOVARIN Convert a typed params struct to a flat key-value cell.
-%   varin = PARAMSTOVARIN(params) returns a 1×2N cell where element 2k-1
+%   varin = PARAMSTOVARIN(params) returns a 1x2N cell where element 2k-1
 %   is the field name and element 2k is the corresponding value, in the
 %   same order as fieldnames(params).
 %

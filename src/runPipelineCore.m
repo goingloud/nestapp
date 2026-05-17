@@ -1,14 +1,14 @@
-function [allReports, allSummaries] = runPipelineCore(spec, filePaths, opts)
+﻿function [allReports, allSummaries] = runPipelineCore(spec, filePaths, opts)
 % RUNPIPELINECORE Execute a typed pipeline spec against a list of files.
 %   [allReports, allSummaries] = RUNPIPELINECORE(spec, filePaths, opts)
 %
-%   spec      — struct array of PipelineStep (name + params struct)
-%   filePaths — cell array of full absolute file paths
-%   opts      — struct with optional fields:
+%   spec      - struct array of PipelineStep (name + params struct)
+%   filePaths - cell array of full absolute file paths
+%   opts      - struct with optional fields:
 %     .uiFigure     UIFigure handle (required for interactive steps/dialogs)
 %     .pipelineName pipeline name string for EEG.history provenance
 %     .statusBar    text component for status line messages
-%     .parallel     logical — request parallel execution (default false)
+%     .parallel     logical - request parallel execution (default false)
 %     .chanLocFile  pre-selected channel location file path (default '')
 %
 %   See also: processOneFile, initPipelineReport, exportReport
@@ -73,18 +73,18 @@ if useParallel
 
     pool = gcp('nocreate');
     if isempty(pool)
-        nestLog('PAR', 'No pool — starting parpool(%d)...', nWorkers);
+        nestLog('PAR', 'No pool - starting parpool(%d)...', nWorkers);
         t0 = tic; parpool(nWorkers); pool = gcp('nocreate');
         nestLog('PAR', 'parpool ready (%d workers, %.2fs)', pool.NumWorkers, toc(t0));
     elseif pool.NumWorkers ~= nWorkers
-        nestLog('PAR', 'Pool size mismatch (%d vs %d) — restarting...', pool.NumWorkers, nWorkers);
+        nestLog('PAR', 'Pool size mismatch (%d vs %d) - restarting...', pool.NumWorkers, nWorkers);
         t0 = tic; delete(pool); parpool(nWorkers); pool = gcp('nocreate');
         nestLog('PAR', 'New parpool ready (%d workers, %.2fs)', pool.NumWorkers, toc(t0));
     else
         nestLog('PAR', 'Reusing pool (%d workers)', pool.NumWorkers);
     end
 
-    % Propagate paths to workers only (spmd skips the client — avoids
+    % Propagate paths to workers only (spmd skips the client - avoids
     % shadowing MATLAB built-ins with EEGLAB subdirectories on the client).
     % genpath(eeglab) is expensive (~30 s); cache it across calls.
     nestappSrc = fileparts(which('runPipelineCore'));
@@ -122,11 +122,11 @@ cancelled = false;
 
 if useParallel
     % DataQueue carries per-step progress, log messages, and file-done
-    % sentinels from workers — all routed through updateProgressDlg.
+    % sentinels from workers - all routed through updateProgressDlg.
     q = parallel.pool.DataQueue;
     afterEach(q, @(msg) updateProgressDlg(dlg, msg, nFiles, false, []));
 
-    % Strip all UI handles — workers cannot access graphics objects.
+    % Strip all UI handles - workers cannot access graphics objects.
     wOpts = opts;
     wOpts.uiFigure       = [];
     wOpts.statusBar      = [];
@@ -148,11 +148,11 @@ if useParallel
     while true
         pause(0.25); drawnow;
         if ~isvalid(dlg.fig) || dlg.fig.UserData.cancelRequested
-            nestLog('PAR', 'Cancel requested — cancelling futures');
+            nestLog('PAR', 'Cancel requested - cancelling futures');
             cancel(futures);
             cancelled = true;
             % Wait for workers to reach a terminal state before closing the
-            % dialog.  cancel() is asynchronous — workers may still be
+            % dialog.  cancel() is asynchronous - workers may still be
             % mid-EEGLAB-call and need time to wind down.
             t0 = tic;
             while toc(t0) < 30
@@ -188,7 +188,7 @@ else
 
         fOpts = opts;
         % Wrap progressFcn to produce the same message struct that workers
-        % send via DataQueue — so both paths share updateProgressDlg.
+        % send via DataQueue - so both paths share updateProgressDlg.
         fOpts.progressFcn = @(si, sn) updateProgressDlg(dlg, ...
             struct('fi', fi, 'si', si, 'nSteps', nSteps, 'stepName', sn), ...
             nFiles, true, opts.statusBar);
@@ -239,7 +239,7 @@ allReports   = reports(~cellfun(@isempty, reports));
 allSummaries = summaries(~cellfun(@isempty, summaries));
 
 if cancelled
-    % Discard any partially-completed reports — a cancelled run is not a result.
+    % Discard any partially-completed reports - a cancelled run is not a result.
     error('nestapp:cancelled', 'Pipeline cancelled by user.');
 end
 if isempty(allReports)
@@ -347,7 +347,7 @@ end
 
 function updateProgressDlg(dlg, msg, nFiles, throwOnCancel, statusBar)
 % Unified handler for both serial (throwOnCancel=true) and parallel (false).
-% msg format — per-step: struct(fi, si, nSteps, stepName)
+% msg format - per-step: struct(fi, si, nSteps, stepName)
 %              sentinel:  struct(fi, si=0, nSteps, stepName='Done')
 %              log line:  struct(log=true, ts, label, text)
 %
@@ -396,7 +396,7 @@ else
     if slot == 0
         avail = find(ud.slotAvailable, 1);
         if isempty(avail)
-            nestLog('PROG', 'No free slot for file %d (step %d) — dropped', msg.fi, msg.si);
+            nestLog('PROG', 'No free slot for file %d (step %d) - dropped', msg.fi, msg.si);
             return
         end
         slot = avail;

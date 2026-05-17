@@ -1,4 +1,4 @@
-function [results, warnings] = batchTEPExtract(filePaths, roiElectrodes, varargin)
+﻿function [results, warnings] = batchTEPExtract(filePaths, roiElectrodes, varargin)
 % BATCHTEPEXTRACT  Extract TEP peaks across multiple .set files.
 %
 %   [results, warnings] = batchTEPExtract(filePaths, roiElectrodes)
@@ -9,7 +9,7 @@ function [results, warnings] = batchTEPExtract(filePaths, roiElectrodes, varargi
 %   [results, warnings] = batchTEPExtract(__, 'loadFcn', @myLoader)
 %
 %   Inputs
-%     filePaths     - 1×N cell array of full paths to .set files
+%     filePaths     - 1xN cell array of full paths to .set files
 %     roiElectrodes - cell array of electrode label strings for the ROI
 %
 %   Optional name-value arguments
@@ -21,13 +21,13 @@ function [results, warnings] = batchTEPExtract(filePaths, roiElectrodes, varargi
 %                   Use for testing (pass synthetic EEG structs without EEGLAB I/O).
 %
 %   Outputs
-%     results  - MATLAB table, one row per file × per component (long format).
+%     results  - MATLAB table, one row per file x per component (long format).
 %                Columns: file, roi_electrodes, component, polarity, found,
 %                latency_ms, amplitude_uv, win_start_ms, win_end_ms,
 %                nom_latency_ms, n_trials, n_channels_roi.
 %     warnings - cell array of strings, one per skipped or degraded file.
 %
-%   CSV format: long format (one row per file × component). Researchers pivot
+%   CSV format: long format (one row per file x component). Researchers pivot
 %   to wide in R/SPSS as needed; merge with subject metadata via the 'file' column.
 %
 %   Example
@@ -38,7 +38,7 @@ function [results, warnings] = batchTEPExtract(filePaths, roiElectrodes, varargi
 %
 %   See also: tepPeakFinder, plotTEP
 
-% ── parse inputs ──────────────────────────────────────────────────────────
+% -- parse inputs ----------------------------------------------------------
 p = inputParser;
 p.addRequired('filePaths',      @(x) iscell(x) && ~isempty(x));
 p.addRequired('roiElectrodes',  @(x) iscell(x) && ~isempty(x));
@@ -50,21 +50,21 @@ p.addParameter('loadFcn',     [], @(x) isempty(x) || isa(x,'function_handle'));
 p.parse(filePaths, roiElectrodes, varargin{:});
 opts = p.Results;
 
-% ── guard: TESA required ───────────────────────────────────────────────────
+% -- guard: TESA required ---------------------------------------------------
 if isempty(opts.loadFcn) && isempty(which('tesa_peakanalysis'))
     error('batchTEPExtract:noTESA', ...
         ['TESA toolbox not found. Add TESA to the MATLAB path before ' ...
          'calling batchTEPExtract.']);
 end
 
-% ── resolve canonical component definitions ────────────────────────────────
+% -- resolve canonical component definitions --------------------------------
 % Resolve early so buildNaNRows can use them without calling tepPeakFinder.
 compDefs = opts.compDefs;
 if isempty(compDefs)
     compDefs = defaultTEPComponentDefs();
 end
 
-% ── per-file loop ──────────────────────────────────────────────────────────
+% -- per-file loop ----------------------------------------------------------
 nFiles  = numel(opts.filePaths);
 rows    = {};
 warnings = {};
@@ -85,7 +85,7 @@ for fi = 1:nFiles
             evalc("EEG = pop_loadset('filename', [fname fext], 'filepath', fdir)");
         end
     catch ME
-        warnings{end+1} = sprintf('%s: load failed — %s', fname, ME.message); %#ok<AGROW>
+        warnings{end+1} = sprintf('%s: load failed - %s', fname, ME.message); %#ok<AGROW>
         rows = appendNaNRows(rows, fname, opts.roiElectrodes, compDefs);
         continue
     end
@@ -94,7 +94,7 @@ for fi = 1:nFiles
     if ~isstruct(EEG) || ~isfield(EEG,'trials') || EEG.trials < 2
         nTrials = 0;
         if isstruct(EEG) && isfield(EEG, 'trials'), nTrials = EEG.trials; end
-        warnings{end+1} = sprintf('%s: skipped — not epoched (trials=%d)', fname, nTrials); %#ok<AGROW>
+        warnings{end+1} = sprintf('%s: skipped - not epoched (trials=%d)', fname, nTrials); %#ok<AGROW>
         rows = appendNaNRows(rows, fname, opts.roiElectrodes, compDefs);
         continue
     end
@@ -104,26 +104,26 @@ for fi = 1:nFiles
     roiPresent = intersect(opts.roiElectrodes, allLabels, 'stable');
     nRoiFound  = numel(roiPresent);
     if nRoiFound == 0
-        warnings{end+1} = sprintf('%s: skipped — none of the requested ROI electrodes found', fname); %#ok<AGROW>
+        warnings{end+1} = sprintf('%s: skipped - none of the requested ROI electrodes found', fname); %#ok<AGROW>
         rows = appendNaNRows(rows, fname, opts.roiElectrodes, compDefs);
         continue
     end
     if nRoiFound < numel(opts.roiElectrodes)
-        warnings{end+1} = sprintf('%s: partial ROI — %d of %d requested electrodes found', ...
+        warnings{end+1} = sprintf('%s: partial ROI - %d of %d requested electrodes found', ...
             fname, nRoiFound, numel(opts.roiElectrodes)); %#ok<AGROW>
     end
     roiIdx = find(ismember(allLabels, roiPresent));
 
     %% Grand-mean waveform (ROI average, trial average, smoothed)
-    roiData  = mean(EEG.data(roiIdx, :, :), 1);          % 1 × T × nTrials
-    waveform = mean(roiData, 3);                           % 1 × T
+    roiData  = mean(EEG.data(roiIdx, :, :), 1);          % 1 x T x nTrials
+    waveform = mean(roiData, 3);                           % 1 x T
     waveform = smoothdata(waveform, 'movmean', opts.smoothWin);
 
     %% Peak detection
     try
         peaks = tepPeakFinder(waveform, EEG.times, compDefs);
     catch ME
-        warnings{end+1} = sprintf('%s: peak detection failed — %s', fname, ME.message); %#ok<AGROW>
+        warnings{end+1} = sprintf('%s: peak detection failed - %s', fname, ME.message); %#ok<AGROW>
         % Pass nRoiFound so the NaN rows still record how many ROI channels were found.
         rows = appendNaNRows(rows, fname, opts.roiElectrodes, compDefs, nRoiFound);
         continue
@@ -151,7 +151,7 @@ for fi = 1:nFiles
     end
 end
 
-% ── assemble table ─────────────────────────────────────────────────────────
+% -- assemble table ---------------------------------------------------------
 COL_NAMES = {'file','roi_electrodes','component','polarity','found', ...
     'latency_ms','amplitude_uv','win_start_ms','win_end_ms', ...
     'nom_latency_ms','n_trials','n_channels_roi'};
@@ -162,13 +162,13 @@ else
     results = cell2table(vertcat(rows{:}), 'VariableNames', COL_NAMES);
 end
 
-% ── write CSV ──────────────────────────────────────────────────────────────
+% -- write CSV --------------------------------------------------------------
 if ~isempty(opts.csvPath)
     writeCSV(results, opts.csvPath);
 end
 end
 
-%% ── local helpers ────────────────────────────────────────────────────────
+%% -- local helpers --------------------------------------------------------
 
 function rows = appendNaNRows(rows, fname, roiElectrodes, compDefs, nRoiFound)
 % Append one NaN-filled row per component for a file that was skipped or failed.
@@ -193,7 +193,7 @@ end
 cleanup = onCleanup(@() fclose(fid));
 % Header
 fprintf(fid, '%s\n', strjoin(T.Properties.VariableNames, ','));
-% Rows — roi_electrodes may contain commas, so quote it
+% Rows - roi_electrodes may contain commas, so quote it
 for ri = 1:height(T)
     fprintf(fid, '%s,"%s",%s,%s,%d,%.4f,%.4f,%.1f,%.1f,%.1f,%d,%d\n', ...
         T.file{ri}, T.roi_electrodes{ri}, T.component{ri}, T.polarity{ri}, ...

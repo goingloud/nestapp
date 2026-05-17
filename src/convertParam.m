@@ -1,15 +1,15 @@
-function v = convertParam(raw, type)
+﻿function v = convertParam(raw, type)
 % CONVERTPARAM Convert a raw parameter value to the correct typed form.
 %   v = CONVERTPARAM(raw, type) coerces raw (from UITable, TextArea, or a
 %   saved .mat) to the type declared in the step registry.
 %
 %   Recognised type strings:
-%     'scalar'     — single double
-%     'integer'    — whole-number double
-%     'vector'     — numeric row vector
-%     'logical'    — 'on'/'off' string (kept as-is)
-%     'string'     — plain char
-%     'stringlist' — cell array of chars
+%     'scalar'     - single double
+%     'integer'    - whole-number double
+%     'vector'     - numeric row vector
+%     'logical'    - 'on'/'off' string (kept as-is)
+%     'string'     - plain char
+%     'stringlist' - cell array of chars
 
 switch type
     case {'scalar', 'integer'}
@@ -51,11 +51,11 @@ switch type
         if ischar(raw) && isrow(raw)
             v = raw;
         elseif ischar(raw)
-            v = strjoin(cellstr(raw), newline);   % char matrix → newline-joined row
+            v = strjoin(cellstr(raw), newline);   % char matrix -> newline-joined row
         elseif isstring(raw) && isscalar(raw)
             v = char(raw);
         elseif iscell(raw)
-            v = strjoin(raw(:)', newline);         % cell of lines → newline-joined row
+            v = strjoin(raw(:)', newline);         % cell of lines -> newline-joined row
         elseif isnumeric(raw) && isempty(raw)
             v = '';
         else
@@ -66,7 +66,7 @@ switch type
         if iscell(raw)
             v = raw;
         elseif isstring(raw) && ~isscalar(raw)
-            % Multi-element string array (e.g. ["Fp1" "Fp2"]) — char() would
+            % Multi-element string array (e.g. ["Fp1" "Fp2"]) - char() would
             % produce a char matrix that strsplit cannot handle.
             v = cellstr(raw);
         elseif isnumeric(raw) && isempty(raw)

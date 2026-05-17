@@ -1,4 +1,4 @@
-function [fileReport, stepLog] = processOneFile(spec, fullPath, opts)
+﻿function [fileReport, stepLog] = processOneFile(spec, fullPath, opts)
 % PROCESSONEFILE  Execute a typed pipeline spec against a single EEG file.
 %   [fileReport, stepLog] = PROCESSONEFILE(spec, fullPath, opts)
 %
@@ -59,13 +59,13 @@ if ~isempty(opts.progressQueue) && opts.nWorkers > 1
 end
 
 if isempty(eeglabWorkerReady)
-    sendWorkerLog(opts.logQueue, wLabel, 'eeglab(''nogui'') — first file on this worker, initializing...');
+    sendWorkerLog(opts.logQueue, wLabel, 'eeglab(''nogui'') - first file on this worker, initializing...');
     t0eeg = tic;
     [ALLEEG, EEG, CURRENTSET, ALLCOM] = eeglab('nogui');
     eeglabWorkerReady = true;
     sendWorkerLog(opts.logQueue, wLabel, 'eeglab(''nogui'') done (%.2fs)', toc(t0eeg));
 else
-    sendWorkerLog(opts.logQueue, wLabel, 'EEGLAB already initialized on this worker — resetting globals only');
+    sendWorkerLog(opts.logQueue, wLabel, 'EEGLAB already initialized on this worker - resetting globals only');
     EEG = []; ALLEEG = []; CURRENTSET = 0; ALLCOM = {};
 end
 
@@ -93,7 +93,7 @@ for si = 1:nSteps
     stepName = step.name;
     varin    = paramsToVarin(step.params);
 
-    % Progress notification — may throw nestapp:cancelled if user cancelled.
+    % Progress notification - may throw nestapp:cancelled if user cancelled.
     if ~isempty(opts.progressFcn)
         opts.progressFcn(si, stepName);
     elseif ~isempty(opts.progressQueue)
@@ -850,7 +850,7 @@ writeSessionLog(pathName, fileName, stepLog);
 sendWorkerLog(opts.logQueue, wLabel, 'DONE   %s  (total %.2fs)', fileName, toc(fileTic));
 
 % Sentinel: si=0 signals the file is truly done (after all cleanup).
-% updateParallelProgress uses this — not si==nSteps — to go green, so the
+% updateParallelProgress uses this - not si==nSteps - to go green, so the
 % bar stays blue until the worker has actually finished, not just started the
 % last step.
 if ~isempty(opts.progressQueue)
@@ -861,7 +861,7 @@ if ~isempty(opts.progressQueue)
 end
 end
 
-% ── local helpers ─────────────────────────────────────────────────────────
+% -- local helpers ---------------------------------------------------------
 
 function cats = tesaICACategories()
 % TESA component category names, in the order TESA's icaCompClass.compClass codes map to.

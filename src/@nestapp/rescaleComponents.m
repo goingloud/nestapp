@@ -1,12 +1,12 @@
 ﻿function rescaleComponents(app, sX, sY)
 % RESCALECOMPONENTS  Rescale all nestapp UI components proportionally.
-%   Called from UIFigureSizeChanged. This file lives in src/@nestapp/ — a
+%   Called from UIFigureSizeChanged. This file lives in src/@nestapp/ - a
 %   proper class method with access to protected App Designer methods.
             STATUS_H = 20;
 
             sf = min(sX, sY);
             p  = @(o) round(o .* [sX, sY, sX, sY]);
-            % ph: scale x/y/w but keep original height — for fixed-height controls
+            % ph: scale x/y/w but keep original height - for fixed-height controls
             % (uicheckbox, uieditfield, uispinner, uirangedslider) that emit
             % "height cannot be changed" warnings when h is set to a scaled value.
             ph = @(o) [round(o(1)*sX), round(o(2)*sY), round(o(3)*sX), o(4)];
@@ -61,35 +61,35 @@
             % right (x:651-867 file selection). Bottom strip (y:0-165) holds controls.
             % TEP window slider lives above UIAxes; topoplot controls sit right of UIAxes2.
 
-            % Left action column â€” bottom-aligned with ReLoad button (y=7)
+            % Left action column - bottom-aligned with ReLoad button (y=7)
             % TOPOPLOT joins this group as the lowest button
             app.PLOTTEPButton.Position                = p([5 88 140 30]);
             app.ShowComponentsButton.Position         = p([5 61 140 23]);
             app.ExportTEPFigureButton.Position        = p([5 34 140 23]);
             app.TOPOPLOTButton.Position               = p([5 7 140 23]);
 
-            % Center-left controls â€” bottom strip (x:152-340)
+            % Center-left controls - bottom strip (x:152-340)
             % PlottingModeButtonGroup sits above the single-row topoplot controls
             app.PlottingModeButtonGroup.Position  = p([152 36 150 67]);
             app.NewFigureButton.Position          = p([11 21 83 22]);
             app.AddtocurrentFigureButton.Position = p([11 -1 135 22]);
-            % Topoplot time and window on one line â€” 3-digit fields
+            % Topoplot time and window on one line - 3-digit fields
             app.TopoplottimeSpinnerLabel.Position = p([152 10 35 22]);
             app.TopoplottimeSpinner.Position      = ph([189 10 52 22]);
             app.WindowsizeforTopoplotLabel.Position = p([245 10 35 22]);
             app.WindowsizefortimeaveragedTopoplotEditField.Position = ph([282 10 52 22]);
 
-            % Center column â€” TEP window slider above the TEP plot
-            % TEP plot (60%) and topoplot (40%) of 448px available â€” slider in gap
+            % Center column - TEP window slider above the TEP plot
+            % TEP plot (60%) and topoplot (40%) of 448px available - slider in gap
             app.UIAxes.Position                   = p([340 230 308 270]);
             app.TEPWindowSliderLabel.Position     = p([380 204 130 16]);
             app.TEPWindowSlider.Position          = ph([380 193 268 3]);
             app.UIAxes2.Position                  = p([340 7 308 179]);
 
-            % Head image (electrode map) â€” unchanged
+            % Head image (electrode map) - unchanged
             app.Image2.Position                   = p([-1 165 350 336]);
 
-            % Right column â€” data selection
+            % Right column - data selection
             app.SelectDatatoVisulaizeTEPsPanel.Position  = p([651 406 208 90]);
             app.FolderEditField_2Label.Position   = p([1 41 40 22]);
             app.FolderEditField_2.Position        = ph([49 41 145 22]);
@@ -100,7 +100,7 @@
             app.DontfindcommonelectrodesCheckBox.Position = ph([670 28 180 22]);
             app.ReLoadAvailableElectrodesButton.Position  = p([686 7 153 23]);
 
-            %% Electrode buttons (Visualizing Tab â€” 64 buttons)
+            %% Electrode buttons (Visualizing Tab - 64 buttons)
             app.AF3Button.Position   = p([108 410 25 23]);
             app.FP1Button.Position   = p([131 433 25 23]);
             app.FPZButton.Position   = p([161 439 25 23]);

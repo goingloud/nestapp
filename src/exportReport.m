@@ -1,4 +1,4 @@
-function [summaryText, matPath] = exportReport(report, outputDir)
+﻿function [summaryText, matPath] = exportReport(report, outputDir)
 % EXPORTREPORT  Export a PipelineReport to disk and return a formatted summary.
 %
 %   [summaryText, matPath] = EXPORTREPORT(report, outputDir)
@@ -143,7 +143,7 @@ for k = 1:numel(report.steps)
 end
 lines{end+1} = '';
 
-% Methods summary — prose suitable for copy-paste into a methods section
+% Methods summary - prose suitable for copy-paste into a methods section
 lines{end+1} = 'METHODS SUMMARY';
 methLines = {};
 

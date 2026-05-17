@@ -1,8 +1,8 @@
-function vars = stripEmptyVarin(vars)
+﻿function vars = stripEmptyVarin(vars)
 % STRIPEMPTYVARIN  Remove key-value pairs where the value is an "empty" sentinel.
 %   vars = STRIPEMPTYVARIN(vars)
 %
-%   Handles the old '[]' string sentinel, numeric [], NaN scalar, and empty cell —
+%   Handles the old '[]' string sentinel, numeric [], NaN scalar, and empty cell -
 %   all representations of "not set" used across old and new typed-model param formats.
 isEmptyVal = cellfun(@(v) (ischar(v) && strcmp(v,'[]')) || ...
                           (isnumeric(v) && isempty(v)) || ...

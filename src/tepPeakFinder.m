@@ -1,17 +1,17 @@
-function peaks = tepPeakFinder(waveform, times, compDefs)
+﻿function peaks = tepPeakFinder(waveform, times, compDefs)
 % TEPPEAKFINDER  Detect TMS-EEG components using TESA's peak analysis.
 %
 %   peaks = tepPeakFinder(waveform, times)
 %   peaks = tepPeakFinder(waveform, times, compDefs)
 %
 %   Inputs
-%     waveform  1×T numeric — ROI-averaged grand-mean TEP (µV)
-%     times     1×T numeric — time points (ms)
+%     waveform  1xT numeric - ROI-averaged grand-mean TEP (uV)
+%     times     1xT numeric - time points (ms)
 %     compDefs  (optional) struct array with fields:
 %                 .name, .polarity, .nomLatency, .winStart, .winEnd
 %
 %   Output
-%     peaks  1×N struct array:
+%     peaks  1xN struct array:
 %              .name, .polarity, .latencyMs, .amplitudeUV, .found
 %
 %   Requires: TESA toolbox (tesa_peakanalysis) on the MATLAB path.
@@ -43,7 +43,7 @@ for k = 1:numel(compDefs)
     peaks(k).polarity = compDefs(k).polarity;
 end
 
-% Build minimal EEG stub — only the fields tesa_peakanalysis reads
+% Build minimal EEG stub - only the fields tesa_peakanalysis reads
 EEGstub.times          = times;
 EEGstub.ROI.R1.tseries = waveform;
 

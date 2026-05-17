@@ -1,4 +1,4 @@
-function [ok, msg] = checkStepDependencies(stepNames, filePaths)
+﻿function [ok, msg] = checkStepDependencies(stepNames, filePaths)
 % CHECKSTEPDEPENDENCIES  Verify required plugins are on the MATLAB path.
 %
 %   [ok, msg] = checkStepDependencies(stepNames, filePaths)
@@ -64,7 +64,7 @@ if isempty(missing)
 end
 
 ok    = false;
-lines = {'Missing plugins — install before running:', ''};
+lines = {'Missing plugins - install before running:', ''};
 pluginNames = keys(missing);
 for i = 1:numel(pluginNames)
     plugin = pluginNames{i};

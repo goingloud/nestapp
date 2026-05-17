@@ -1,10 +1,10 @@
-function buildTemplates()
+﻿function buildTemplates()
 % BUILDTEMPLATES  Regenerate all built-in pipeline template .mat files.
 %
 %   Run this from the MATLAB command window (after run_nestapp, or from
 %   within src/) whenever template definitions or stepRegistry defaults
 %   change.  The generated .mat files in src/templates/ are committed to
-%   version control and loaded at runtime — no override logic runs in the
+%   version control and loaded at runtime - no override logic runs in the
 %   app itself.
 %
 %   See also: stepRegistry, nestapp
@@ -16,7 +16,7 @@ if ~exist(outDir, 'dir')
     mkdir(outDir);
 end
 
-%% 1 — TMS-EEG / TEP (TESA)
+%% 1 - TMS-EEG / TEP (TESA)
 % Two-round FastICA pipeline per Rogasch et al. 2017, restructured to match
 % the TESA User Manual step order precisely:
 %   - Bad channels removed before epoching (manual step 5)
@@ -74,7 +74,7 @@ ovs = setOv(ovs, steps, 'Remove ICA Components (TESA)', 'elecNoise', 'on', 2);
 ovs = setOv(ovs, steps, 'Save New Set', 'savenew', 'tesa');
 saveMat(reg, steps, ovs, 'TMS-EEG / TEP (TESA)', fullfile(outDir, '1_tesa_tep.mat'));
 
-%% 2 — Resting-State EEG
+%% 2 - Resting-State EEG
 % Continuous-data pipeline per PREP (Bigdely-Shamlo 2015) with structural
 % improvements from Delorme 2023 (Sci Rep, doi:10.1038/s41598-023-27528-0).
 steps = { ...
@@ -96,7 +96,7 @@ ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'Heart',  [0.9, 1])
 ovs = setOv(ovs, steps, 'Save New Set', 'savenew', 'resting');
 saveMat(reg, steps, ovs, 'Resting-State EEG', fullfile(outDir, '2_resting_state.mat'));
 
-%% 3 — Minimal (Delorme 2023)
+%% 3 - Minimal (Delorme 2023)
 % Minimal pipeline per Delorme 2023 ("EEG is better left alone", Sci Rep).
 % HPF 0.5 Hz only; no LPF; no explicit re-reference.
 steps = { ...
@@ -115,7 +115,7 @@ ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'Heart',  [0.9, 1])
 ovs = setOv(ovs, steps, 'Save New Set', 'savenew', 'minimal');
 saveMat(reg, steps, ovs, 'Minimal (Delorme 2023)', fullfile(outDir, '3_minimal.mat'));
 
-fprintf('buildTemplates: done — %s\n', outDir);
+fprintf('buildTemplates: done - %s\n', outDir);
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

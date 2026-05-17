@@ -2,10 +2,10 @@
 % CREATECOMPONENTS  Create all UI components for nestapp.
 %   Sets every property on app.UIFigure and all child controls.
 %   Called from the nestapp constructor via App Designer's createComponents hook.
-%   This file lives in src/@nestapp/ — a proper class method with access to
+%   This file lives in src/@nestapp/ - a proper class method with access to
 %   protected methods like createCallbackFcn.
 %
-% WARNING: Do not open nestapp_designer.mlapp and save — App Designer will
+% WARNING: Do not open nestapp_designer.mlapp and save - App Designer will
 % regenerate nestapp.m and may overwrite the createComponents call path.
 % All layout edits belong in this file.
 
@@ -18,7 +18,7 @@
             % uimenu renders outside the coordinate space (MATLAB shifts the window
             % upward when the menu is created; coordinate height stays unchanged).
             app.UIFigure.Position = [100 100 867 549];
-            app.UIFigure.Name = 'nestapp â€” TMS-EEG Processing';
+            app.UIFigure.Name = 'nestapp - TMS-EEG Processing';
             app.UIFigure.AutoResizeChildren = 'off';
             app.UIFigure.SizeChangedFcn    = createCallbackFcn(app, @UIFigureSizeChanged, true);
             app.UIFigure.CloseRequestFcn   = createCallbackFcn(app, @UIFigureCloseRequest, true);
@@ -50,7 +50,7 @@
             uimenu(mHelp, 'Text', 'About nestapp', ...
                 'MenuSelectedFcn', createCallbackFcn(app, @showAboutMenu, true));
 
-            % Create status bar â€” pinned to bottom of UIFigure, visible on both tabs
+            % Create status bar - pinned to bottom of UIFigure, visible on both tabs
             app.StatusBar = uilabel(app.UIFigure);
             app.StatusBar.Position = [0 0 867 20];
             app.StatusBar.BackgroundColor = [0.90 0.90 0.90];
@@ -58,7 +58,7 @@
             app.StatusBar.Text = '  Ready';
             app.StatusBar.HorizontalAlignment = 'left';
 
-            % Create TabGroup â€” starts at y=20 to leave room for status bar
+            % Create TabGroup - starts at y=20 to leave room for status bar
             app.TabGroup = uitabgroup(app.UIFigure);
             app.TabGroup.AutoResizeChildren = 'off';
             app.TabGroup.Position = [1 20 867 529];
@@ -69,7 +69,7 @@
             app.CleaningTab.AutoResizeChildren = 'off';
             app.CleaningTab.Title = 'Cleaning';
 
-            % Create StepsListBox â€” items derived from stepRegistry, not hardcoded
+            % Create StepsListBox - items derived from stepRegistry, not hardcoded
             reg_init = stepRegistry();
             app.StepsListBox = uilistbox(app.CleaningTab);
             app.StepsListBox.Items = {reg_init.name};
@@ -176,7 +176,7 @@
             app.SelectDatatoPerformAnalysisPanel.Title = 'Select Data to Perform Analysis';
             app.SelectDatatoPerformAnalysisPanel.Position = [649 237 208 206];
 
-            % Create SelectedFilesListBox â€” shows all queued files
+            % Create SelectedFilesListBox - shows all queued files
             app.SelectedFilesListBox = uilistbox(app.SelectDatatoPerformAnalysisPanel);
             app.SelectedFilesListBox.Items = {};
             app.SelectedFilesListBox.Position = [5 30 195 145];
@@ -1044,7 +1044,7 @@
             app.AnalysisTab.AutoResizeChildren = 'off';
             app.AnalysisTab.Title = 'Analysis';
 
-            % Analysis tab â€” current selection summary panel (near top)
+            % Analysis tab - current selection summary panel (near top)
             app.AnalysisSelPanel = uipanel(app.AnalysisTab, 'Title', 'Current Selection', ...
                 'AutoResizeChildren', 'off', ...
                 'Position', [10 430 847 55]);
@@ -1053,13 +1053,13 @@
                 'Text', 'Select files and ROI electrodes on the Visualizing tab.', ...
                 'WordWrap', 'on', 'FontSize', 11);
 
-            % Analysis tab â€” LEFT column: component windows
+            % Analysis tab - LEFT column: component windows
             app.AnalysisCompWindowsLabel = uilabel(app.AnalysisTab, 'Position', [10 407 300 18], ...
                 'Text', 'COMPONENT WINDOWS', 'FontWeight', 'bold', 'FontSize', 10);
 
-            % TEPComponentTable â€” taller to show all 6 components without scrolling
+            % TEPComponentTable - taller to show all 6 components without scrolling
             app.TEPComponentTable = uitable(app.AnalysisTab);
-            app.TEPComponentTable.ColumnName  = {'Component', 'Latency (ms)', 'Amplitude (ÂµV)'};
+            app.TEPComponentTable.ColumnName  = {'Component', 'Latency (ms)', 'Amplitude (uV)'};
             app.TEPComponentTable.ColumnWidth = {'auto', 'auto', 'auto'};
             app.TEPComponentTable.RowName     = {};
             app.TEPComponentTable.Enable      = 'on';
@@ -1070,7 +1070,7 @@
             app.EditComponentWindowsButton.Text     = 'Edit Component Windows...';
             app.EditComponentWindowsButton.Position = [10 196 220 25];
 
-            % Analysis tab â€” RIGHT column: workspace export + batch extraction grouped
+            % Analysis tab - RIGHT column: workspace export + batch extraction grouped
             app.AnalysisWorkspaceLabel = uilabel(app.AnalysisTab, 'Position', [450 407 380 18], ...
                 'Text', 'WORKSPACE EXPORT', 'FontWeight', 'bold', 'FontSize', 10);
 
@@ -1101,7 +1101,7 @@
 
             app.ExtractPeaksCSVButton = uibutton(app.AnalysisTab, 'push');
             app.ExtractPeaksCSVButton.ButtonPushedFcn = createCallbackFcn(app, @ExtractPeaksCSVButtonPushed, true);
-            app.ExtractPeaksCSVButton.Text    = 'Extract Peaks  â†’  CSV';
+            app.ExtractPeaksCSVButton.Text    = 'Extract Peaks  ->  CSV';
             app.ExtractPeaksCSVButton.Position = [450 254 220 32];
             app.ExtractPeaksCSVButton.Tooltip = ...
                 'Run peak detection across all selected files and save results as a CSV table';
@@ -1141,7 +1141,7 @@
             app.ReportsTab.AutoResizeChildren = 'off';
             app.ReportsTab.Title = 'Reports';
 
-            % Reports tab â€” left column: session list
+            % Reports tab - left column: session list
             app.ReportsListBoxLabel = uilabel(app.ReportsTab);
             app.ReportsListBoxLabel.FontSize = 16;
             app.ReportsListBoxLabel.FontWeight = 'bold';
@@ -1177,7 +1177,7 @@
             app.ReportsStatusLabel.Position = [5 5 205 18];
             app.ReportsStatusLabel.Text = 'No reports loaded.';
 
-            % Reports tab â€” right column: report text + actions
+            % Reports tab - right column: report text + actions
             app.ExportReportsCSVButton = uibutton(app.ReportsTab, 'push');
             app.ExportReportsCSVButton.ButtonPushedFcn = createCallbackFcn(app, @ExportReportsCSVButtonPushed, true);
             app.ExportReportsCSVButton.Position = [580 470 130 24];

@@ -1,4 +1,4 @@
-﻿% WARNING: Do not open nestapp_designer.mlapp and save â€” App Designer will
+﻿% WARNING: Do not open nestapp_designer.mlapp and save - App Designer will
 % regenerate this file and overwrite startupFcn and other hand-edited methods.
 % All edits must be made directly to nestapp.m.
 classdef nestapp < matlab.apps.AppBase
@@ -144,7 +144,7 @@ classdef nestapp < matlab.apps.AppBase
         ReportsTextArea                 matlab.ui.control.TextArea
         ExportReportsCSVButton          matlab.ui.control.Button
         CopyMethodsButton               matlab.ui.control.Button
-        % Analysis tab â€” static elements not auto-resized by MATLAB
+        % Analysis tab - static elements not auto-resized by MATLAB
         AnalysisSelPanel                matlab.ui.container.Panel
         AnalysisCompWindowsLabel        matlab.ui.control.Label
         AnalysisWorkspaceLabel          matlab.ui.control.Label
@@ -171,11 +171,11 @@ classdef nestapp < matlab.apps.AppBase
         % Tab Cleaning
         selectedItem % Selected Table Item Values
         info % Command Information and description
-        % Canonical pipeline state â€” single source of truth for steps and params.
+        % Canonical pipeline state - single source of truth for steps and params.
         % appendStep/removeStep/moveStep/clearSteps/loadPipelineData all write here.
         currentParamKey  = ''  % param key selected in UITable (transient)
         currentParamType = ''  % type of selected param (transient)
-        originalSize     % [w h] of UIFigure at creation â€” used by UIFigureSizeChanged
+        originalSize     % [w h] of UIFigure at creation - used by UIFigureSizeChanged
         clickedItem = [];
         doubleClicked = 0;
         TEPfiles % File list for calculating TEPs
@@ -192,9 +192,9 @@ classdef nestapp < matlab.apps.AppBase
         DefaulTEPxLim = [-50 300]; % Default xLim for time in TEP
         EEGtime
         TEP2Export
-        MenuRecentFiles     % Handle to 'Recent Files' submenu â€” rebuilt on open
-        MenuRecentPipelines % Handle to 'Recent Pipelines' submenu â€” rebuilt on open
-        StatusBar           % uilabel pinned to bottom of UIFigure â€” visible on both tabs
+        MenuRecentFiles     % Handle to 'Recent Files' submenu - rebuilt on open
+        MenuRecentPipelines % Handle to 'Recent Pipelines' submenu - rebuilt on open
+        StatusBar           % uilabel pinned to bottom of UIFigure - visible on both tabs
         pipelineDirty   = false    % true when pipeline has unsaved changes
         pipelineName    = ''       % filename of last saved/loaded pipeline
         lastStepClick   = NaT     % datetime of last StepsListBox click (double-click detection)
@@ -203,7 +203,7 @@ classdef nestapp < matlab.apps.AppBase
         allPipelineReports = {}    % cell array of report entry structs from current session
         loadedReports      = {}    % cell array of report entry structs loaded from disk
         preSelectedChanFile = ''   % channel location file selected once before a run
-        ParallelCheckBox           % uicheckbox â€” enable parallel participant processing
+        ParallelCheckBox           % uicheckbox - enable parallel participant processing
 
         % Tab Analysis
         AnalysisTab
@@ -213,10 +213,10 @@ classdef nestapp < matlab.apps.AppBase
     end
 
     methods (Access = private)
-        % â”€â”€ Pipeline state mutation methods â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        % All four parallel arrays (Items, ItemsData, ChangedVal, stepParamKeys)
-        % must stay in sync. These methods are the ONLY permitted way to add,
-        % remove, move, or clear steps â€” callbacks delegate here.
+        % -- Pipeline state mutation methods ---------------------------------
+        % app.spec, SelectedListBox.Items, and SelectedListBox.ItemsData must
+        % stay in sync. These methods are the ONLY permitted way to add,
+        % remove, move, or clear steps -- callbacks delegate here.
 
         function appendStep(app, stepName)
         % APPENDSTEP  Append stepName to the pipeline using its default params.
@@ -261,7 +261,7 @@ classdef nestapp < matlab.apps.AppBase
             [app.SelectedListBox.Items{idx}, app.SelectedListBox.Items{idx2}] = ...
                 deal(app.SelectedListBox.Items{idx2}, app.SelectedListBox.Items{idx});
             [app.spec(idx), app.spec(idx2)] = deal(app.spec(idx2), app.spec(idx));
-            % ItemsData stays in positional order â€” just renumber both slots
+            % ItemsData stays in positional order - just renumber both slots
             app.SelectedListBox.ItemsData{idx}  = ['Item' num2str(idx)];
             app.SelectedListBox.ItemsData{idx2} = ['Item' num2str(idx2)];
             app.SelectedListBox.Value = app.SelectedListBox.ItemsData{idx2};
@@ -284,7 +284,7 @@ classdef nestapp < matlab.apps.AppBase
 
         function idx = selectedStepIndex(app)
         % SELECTEDSTEPINDEX  Decode the current SelectedListBox selection to a 1-based index.
-            idx = selectedStepIndex(app);
+            idx = str2double(strrep(app.SelectedListBox.Value, 'Item', ''));
         end
 
         function refreshParamTable(app, stepIdx)
@@ -318,7 +318,7 @@ classdef nestapp < matlab.apps.AppBase
             styleParamTable(app);
         end
 
-        % â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        % -----------------------------------------------------------------
 
         function updateStatusBar(app)
         % UPDATESTATUSBAR  Refresh the status bar text from current app state.
@@ -428,8 +428,7 @@ classdef nestapp < matlab.apps.AppBase
 
         function loadPipelineData(app, fullPath)
         % LOADPIPELINEDATA  Load pipeline state from a .mat into app.spec.
-        %   Handles both new format (spec field) and old format
-        %   (PLItems / VarIns / ParamKeys). Unknown steps produce a warning dialog.
+        %   Unknown steps produce a warning dialog.
             data = load(fullPath, '-mat');
             reg  = stepRegistry();
             [app.spec, warns] = specFromSaved(data, reg);
@@ -471,7 +470,7 @@ classdef nestapp < matlab.apps.AppBase
         function loadPrefs(~)
         % LOADPREFS  Read persistent preferences and apply to app state.
         %   Called from startupFcn. Uses MATLAB getpref with 'nestapp' group.
-        %   The app handle is accepted but not used â€” prefs apply globally
+        %   The app handle is accepted but not used - prefs apply globally
         %   (addpath) rather than writing to removed UI components.
             eeglabPath = getpref('nestapp', 'eeglabPath', '');
             if ~isempty(eeglabPath) && isfolder(eeglabPath)
@@ -566,7 +565,7 @@ classdef nestapp < matlab.apps.AppBase
                 uilabel(dlg, 'Text', 'cap on simultaneous files when Parallel is on', ...
                     'Position', [172 48 240 22], 'FontColor', [0.4 0.4 0.4]);
             else
-                uilabel(dlg, 'Text', 'Not available â€” Parallel Computing Toolbox not licensed.', ...
+                uilabel(dlg, 'Text', 'Not available - Parallel Computing Toolbox not licensed.', ...
                     'Position', [15 48 385 22], 'FontColor', [0.5 0.5 0.5]);
             end
 
@@ -676,7 +675,7 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         function ReportsListBoxValueChanged(app, ~)
-        % Callback â€” show the report text for the newly selected entry.
+        % Callback - show the report text for the newly selected entry.
             idx = app.ReportsListBox.Value;
             if isempty(idx); return; end
             allEntries = [app.allPipelineReports, app.loadedReports];
@@ -857,12 +856,12 @@ classdef nestapp < matlab.apps.AppBase
                 end
             end
             msg = sprintf([ ...
-                'nestapp â€” TMS-EEG Processing\n\n' ...
+                'nestapp - TMS-EEG Processing\n\n' ...
                 'EEGLAB:  %s\n' ...
                 'MATLAB:  %s\n\n' ...
                 'Please cite:\n' ...
-                'Rogasch et al. (2017) NeuroImage â€” TESA toolbox\n' ...
-                'Delorme & Makeig (2004) J Neurosci Methods â€” EEGLAB'], ...
+                'Rogasch et al. (2017) NeuroImage - TESA toolbox\n' ...
+                'Delorme & Makeig (2004) J Neurosci Methods - EEGLAB'], ...
                 eeglabVer, version);
             uialert(app.UIFigure, msg, 'About nestapp', 'Icon', 'info');
         end
@@ -912,7 +911,7 @@ classdef nestapp < matlab.apps.AppBase
                     s = '(not set)';
                 end
             elseif ischar(val) && ~isrow(val)
-                s = [deblank(val(1,:)), ' ...'];   % char matrix â€” show first line
+                s = [deblank(val(1,:)), ' ...'];   % char matrix - show first line
             elseif ischar(val) || isstring(val)
                 s = char(val);
             elseif iscell(val)
@@ -1145,7 +1144,7 @@ classdef nestapp < matlab.apps.AppBase
                 xline(ax, pk.latencyMs, '--', 'Color', [0.4 0.4 0.4], ...
                     'LineWidth', 1, 'HandleVisibility', 'off');
                 text(ax, pk.latencyMs, labelY, ...
-                    sprintf('%s\n%.0f ms\n%.1f ÂµV', pk.name, pk.latencyMs, pk.amplitudeUV), ...
+                    sprintf('%s\n%.0f ms\n%.1f uV', pk.name, pk.latencyMs, pk.amplitudeUV), ...
                     'FontSize', 7, 'HorizontalAlignment', 'center', ...
                     'Color', [0.3 0.3 0.3], 'VerticalAlignment', 'top');
             end
@@ -1154,7 +1153,7 @@ classdef nestapp < matlab.apps.AppBase
 
         function populateTEPComponentTable(app)
         % Fill TEPComponentTable from app.tepPeaks.
-        % Shows 'â€”' for components not found.
+        % Shows '-' for components not found.
             if isempty(app.tepPeaks)
                 app.TEPComponentTable.Data = {};
                 return
@@ -1168,8 +1167,8 @@ classdef nestapp < matlab.apps.AppBase
                     tableData{i, 2} = pk.latencyMs;
                     tableData{i, 3} = pk.amplitudeUV;
                 else
-                    tableData{i, 2} = 'â€”';
-                    tableData{i, 3} = 'â€”';
+                    tableData{i, 2} = '-';
+                    tableData{i, 3} = '-';
                 end
             end
             app.TEPComponentTable.Data = tableData;
@@ -1361,7 +1360,7 @@ classdef nestapp < matlab.apps.AppBase
         % Menu selected function: Load Template...
         function LoadTemplateMenuSelected(app, ~)
         % LOADTEMPLATEMENUSELECTED  Show a template picker and load the chosen template.
-        %   Reads template .mat files from src/templates/ â€” the same format
+        %   Reads template .mat files from src/templates/ - the same format
         %   as user-saved pipelines.  No override logic runs at runtime.
             srcDir      = fileparts(which('nestapp'));
             templateDir = fullfile(srcDir, 'templates');
@@ -1373,7 +1372,7 @@ classdef nestapp < matlab.apps.AppBase
                 return
             end
 
-            % Read templateName from each file for the picker list.
+            % Read pipelineName from each file for the picker list.
             n     = numel(files);
             names = cell(n, 1);
             paths = cell(n, 1);
@@ -1383,8 +1382,6 @@ classdef nestapp < matlab.apps.AppBase
                     tmp = load(paths{i});
                     if isfield(tmp, 'pipelineName') && ~isempty(tmp.pipelineName)
                         names{i} = tmp.pipelineName;
-                    elseif isfield(tmp, 'templateName') && ~isempty(tmp.templateName)
-                        names{i} = tmp.templateName;
                     else
                         [~, names{i}] = fileparts(files(i).name);
                     end
@@ -1548,7 +1545,7 @@ classdef nestapp < matlab.apps.AppBase
             elseif iscell(val)
                 app.TextArea.Value = strjoin(val, ', ');
             elseif ischar(val) && ~isrow(val) && ~isempty(val)
-                app.TextArea.Value = cellstr(val);   % char matrix â†’ cell for TextArea
+                app.TextArea.Value = cellstr(val);   % char matrix -> cell for TextArea
             else
                 app.TextArea.Value = char(val);
             end
@@ -1573,7 +1570,7 @@ classdef nestapp < matlab.apps.AppBase
         function UIFigureCloseRequest(app, ~)
             pool = gcp('nocreate');
             if ~isempty(pool)
-                nestLog('PAR', 'nestapp closing â€” shutting down parallel pool (%d workers)', ...
+                nestLog('PAR', 'nestapp closing - shutting down parallel pool (%d workers)', ...
                     pool.NumWorkers);
                 delete(pool);
             end
@@ -1658,7 +1655,7 @@ classdef nestapp < matlab.apps.AppBase
 
                     end
                     app.FilesListBox.Items =  app.TEPfiles';
-                    app.TEPCreated = false;  % file selection changed â€” existing plot is stale
+                    app.TEPCreated = false;  % file selection changed - existing plot is stale
 
                 elseif ~isempty(app.FilesListBox.Items)
                     warning('No files have been cleaned recently. Try selecting files!')
@@ -1686,7 +1683,7 @@ classdef nestapp < matlab.apps.AppBase
                     app.TEPfiles = {app.TEPfiles};
                 end
 
-                % Invalidate EEG cache â€” new files mean stale loaded data must be discarded.
+                % Invalidate EEG cache - new files mean stale loaded data must be discarded.
                 app.EEG_SelectedTEPFiles_Loaded = false;
                 app.EEGofAllSelectedFiles = {};
 
@@ -1821,7 +1818,7 @@ classdef nestapp < matlab.apps.AppBase
                 if app.ShowComponentsButton.Value
                     overlayTEPComponents(app);
                 else
-                    % Replot without overlays â€” cla then replot
+                    % Replot without overlays - cla then replot
                     plotTEP(app);
                 end
             end
@@ -1898,7 +1895,7 @@ classdef nestapp < matlab.apps.AppBase
             end
         end
 
-        % â”€â”€ Analysis Tab callbacks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        % -- Analysis Tab callbacks ----------------------------------------
 
         % Button pushed function: ExtractPeaksCSVButton
         function ExtractPeaksCSVButtonPushed(app, ~)
@@ -1950,17 +1947,17 @@ classdef nestapp < matlab.apps.AppBase
 
             nRows = height(results);
             if isempty(warnings)
-                app.AnalysisStatusLabel.Text = sprintf('Extracted %d rows â†’ %s', nRows, fname);
+                app.AnalysisStatusLabel.Text = sprintf('Extracted %d rows -> %s', nRows, fname);
             else
                 app.AnalysisStatusLabel.Text = sprintf( ...
-                    'Extracted %d rows â†’ %s  (%d warning(s))', nRows, fname, numel(warnings));
+                    'Extracted %d rows -> %s  (%d warning(s))', nRows, fname, numel(warnings));
                 uialert(app.UIFigure, strjoin(warnings, newline), 'Extraction Warnings');
             end
 
             function updateExtractionProgress(dlg, iFile, nFiles, fps)
                 [~, nm] = fileparts(fps{iFile});
                 dlg.Value   = (iFile - 1) / nFiles;
-                dlg.Message = sprintf('File %d / %d  â€”  %s', iFile, nFiles, nm);
+                dlg.Message = sprintf('File %d / %d  -  %s', iFile, nFiles, nm);
                 drawnow limitrate
             end
         end
@@ -1989,7 +1986,7 @@ classdef nestapp < matlab.apps.AppBase
             elseif nROI <= 6
                 roiStr = sprintf('ROI: %s', strjoin(app.ROIelecsLabels, ', '));
             else
-                roiStr = sprintf('ROI: %s â€¦ (%d electrodes total)', ...
+                roiStr = sprintf('ROI: %s ... (%d electrodes total)', ...
                     strjoin(app.ROIelecsLabels(1:6), ', '), nROI);
             end
             app.AnalysisSelectionLabel.Text = sprintf('%s          %s', fileStr, roiStr);
@@ -2000,7 +1997,7 @@ classdef nestapp < matlab.apps.AppBase
     % Component initialization
     methods (Access = private)
 
-        % Create UIFigure and components — body in @nestapp/createComponents.m
+        % Create UIFigure and components - body in @nestapp/createComponents.m
         createComponents(app)
     end
 
@@ -2008,7 +2005,7 @@ classdef nestapp < matlab.apps.AppBase
     methods (Access = public)
 
         function updateReportsTab(app)
-        % UPDATEREPORTSTAB  Public entry point â€” refreshes the Reports tab.
+        % UPDATEREPORTSTAB  Public entry point - refreshes the Reports tab.
         %   Delegates to the private implementation. Exposed as public so
         %   runPipelineCore.m can call it after each processing run.
             updateReportsTabImpl(app);
