@@ -31,6 +31,10 @@ function r = srcRoot()
 r = fullfile(repoRoot(), 'src');
 end
 
+function p = nestappFile()
+p = fullfile(repoRoot(), 'src', '@nestapp', 'nestapp.m');
+end
+
 % ══════════════════════════════════════════════════════════════════════════
 %% PHASE 1 — Project Structure
 % ══════════════════════════════════════════════════════════════════════════
@@ -91,7 +95,7 @@ function test_noAssignInBaseNestapp(testCase)
 %       is intentional (user-requested feature) and must NOT be flagged here.
 %       Only the workspace-pollution patterns ('files', 'paths', 'steps2run',
 %       'stepsName') are disallowed.
-src   = fileread(fullfile(srcRoot(), 'nestapp.m'));
+src   = fileread(nestappFile());
 lines = strsplit(src, newline);
 pollutionPatterns = {'assignin\s*\(\s*''base''\s*,\s*''files''', ...
                      'assignin\s*\(\s*''base''\s*,\s*''paths''', ...
@@ -129,7 +133,7 @@ end
 function test_noRandColorInPlotTEP(testCase)
 % rand(1,3) for colour produces non-reproducible figures — violates the
 % project's reproducibility requirement.
-src = fileread(fullfile(srcRoot(), 'nestapp.m'));
+src = fileread(nestappFile());
 % Find plotTEP function body
 startIdx = strfind(src, 'function plotTEP(app)');
 if isempty(startIdx)
@@ -176,7 +180,7 @@ end
 
 function test_loadLabelsNoReturnValue(testCase)
 % LoadLabels returns the app handle unnecessarily — handles are pass-by-reference.
-src = fileread(fullfile(srcRoot(), 'nestapp.m'));
+src = fileread(nestappFile());
 % Look for the function declaration pattern with a return value
 matches = regexp(src, 'function\s+app\s*=\s*LoadLabels\s*\(', 'match');
 testCase.verifyEmpty(matches, ...
@@ -187,7 +191,7 @@ end
 function test_electrodeButtonAccessGuarded(testCase)
 % Dynamic property access must have an isprop guard to handle non-standard
 % electrode names that would otherwise crash the app.
-src = fileread(fullfile(srcRoot(), 'nestapp.m'));
+src = fileread(nestappFile());
 hasDynamicAccess = contains(src, ",'Button'])");
 hasIspropGuard   = contains(src, 'isprop(app');
 if hasDynamicAccess
@@ -213,7 +217,7 @@ end
 function test_resizeCallbackHasThrottle(testCase)
 % UIFigureSizeChanged repositions 140+ components on every pixel of a drag.
 % A drawnow limitrate call prevents runaway redraws.
-src = fileread(fullfile(srcRoot(), 'nestapp.m'));
+src = fileread(nestappFile());
 % Search for the function definition, not just any mention of the name.
 fnIdx = regexp(src, 'function\s+UIFigureSizeChanged', 'once');
 if isempty(fnIdx); return; end
