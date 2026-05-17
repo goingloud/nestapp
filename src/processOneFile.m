@@ -162,6 +162,10 @@ for si = 1:nSteps
                     EEG = loadcurry([pathName fileName], 'CurryLocations', 'False');
                 elseif strcmpi(fileName(end-3:end),'vhdr')
                     EEG = pop_loadbv(pathName , fileName );
+                else
+                    error('nestapp:unknownFormat', ...
+                        'Load Data: unrecognized file extension in "%s". Supported: .set, .cnt, .cdt, .vhdr', ...
+                        fileName);
                 end
                 EEG.filename = fileName;
                 [ALLEEG, EEG, CURRENTSET] = eeg_store(ALLEEG, EEG, CURRENTSET);
@@ -212,10 +216,13 @@ for si = 1:nSteps
                 [ALLEEG, EEG, CURRENTSET] = pop_newset(ALLEEG, EEG, CURRENTSET,'retrieve',setIndex);
 
             case 'Visualize EEG Data'
-                if sum(isnan(varin{1,2}))
+                vars  = convertContainedStringsToChars(varin);
+                ind   = find(strcmpi(vars, 'state'));
+                state = vars{ind+1};
+                if sum(isnan(state))
                     pop_eegplot(EEG);
                 else
-                    pop_eegplot(EEG, varin{1,2}(1),varin{1,2}(2),varin{1,2}(3));
+                    pop_eegplot(EEG, state(1), state(2), state(3));
                 end
                 uiconfirm(opts.uiFigure,'Press OK when done viewing the EEG plot.','Visualize EEG','Options',{'OK'},'DefaultOption',1);
 
@@ -306,7 +313,8 @@ for si = 1:nSteps
 
             case 'Remove Baseline'
                 vars = convertContainedStringsToChars(varin);
-                timerange = vars{2};
+                ind  = find(strcmpi(vars, 'timerange'));
+                timerange = vars{ind+1};
                 if ischar(timerange) && strcmp(timerange, '[]')
                     timerange = [];
                 elseif ischar(timerange) || isstring(timerange)
@@ -323,7 +331,8 @@ for si = 1:nSteps
                 vars = convertContainedStringsToChars(varin);
                 [nCh, nT, nEp] = size(EEG.data);
                 d2 = reshape(permute(EEG.data, [2 1 3]), nT, nCh*nEp);
-                d2 = detrend(d2, vars{1,2});
+                ind = find(strcmpi(vars, 'npoly'));
+                d2 = detrend(d2, vars{ind+1});
                 EEG.data = permute(reshape(d2, nT, nCh, nEp), [2 1 3]);
                 EEG = eeg_checkset( EEG );
 
@@ -415,7 +424,8 @@ for si = 1:nSteps
 
             case 'Label ICA Components'
                 vars = convertContainedStringsToChars(varin);
-                iclabelVersion = vars{2};
+                ind = find(strcmpi(vars, 'iclabelVersion'));
+                iclabelVersion = vars{ind+1};
                 EEG = pop_iclabel(EEG, iclabelVersion);
                 EEG = eeg_checkset( EEG );
 
@@ -724,8 +734,8 @@ for si = 1:nSteps
                     ~isempty(fieldnames(EEG.icaCompClass))
                 tesaKeys = fieldnames(EEG.icaCompClass);
                 cl = EEG.icaCompClass.(tesaKeys{end});
-                TESA_CATS  = {'TMS Muscle','Blink','Eye Move','Muscle','Elec Noise','Sensory','Reject'};
-                TESA_CODES = [3, 4, 5, 6, 7, 8, 2];
+                TESA_CATS  = tesaICACategories();
+                TESA_CODES = tesaICAClassCodes();
                 rejIdx   = cl.compClass > 1;
                 nRejTESA = sum(rejIdx);
                 rnd.roundNum    = numel(tesaKeys);
@@ -851,7 +861,17 @@ if ~isempty(opts.progressQueue)
 end
 end
 
-% ── local helper ──────────────────────────────────────────────────────────
+% ── local helpers ─────────────────────────────────────────────────────────
+
+function cats = tesaICACategories()
+% TESA component category names, in the order TESA's icaCompClass.compClass codes map to.
+cats = {'TMS Muscle','Blink','Eye Move','Muscle','Elec Noise','Sensory','Reject'};
+end
+
+function codes = tesaICAClassCodes()
+% TESA compClass integer codes, matched positionally to tesaICACategories().
+codes = [3, 4, 5, 6, 7, 8, 2];
+end
 
 function sendWorkerLog(q, label, fmt, varargin)
 % Route timestamped log lines through the DataQueue so they print in real-time
