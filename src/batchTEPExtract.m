@@ -61,7 +61,7 @@ end
 % Resolve early so buildNaNRows can use them without calling tepPeakFinder.
 compDefs = opts.compDefs;
 if isempty(compDefs)
-    compDefs = defaultCompDefs();
+    compDefs = defaultTEPComponentDefs();
 end
 
 % ── per-file loop ──────────────────────────────────────────────────────────
@@ -182,16 +182,6 @@ for ci = 1:numel(compDefs)
         0, NaN, NaN, cd.winStart, cd.winEnd, cd.nomLatency, 0, nRoiFound ...
     }; %#ok<AGROW>
 end
-end
-
-function defs = defaultCompDefs()
-% Canonical 6-component windows following Beck et al. 2024 (Hum Brain Mapp, 45:e70048).
-defs = struct( ...
-    'name',       {'N15',  'P30',  'N45',  'P60',  'N100', 'P180'}, ...
-    'polarity',   {'neg',  'pos',  'neg',  'pos',  'neg',  'pos'}, ...
-    'nomLatency', {15,     30,     45,     60,     100,    180}, ...
-    'winStart',   {10,     20,     40,     50,     70,     150}, ...
-    'winEnd',     {20,     40,     55,     70,     150,    240});
 end
 
 function writeCSV(T, csvPath)

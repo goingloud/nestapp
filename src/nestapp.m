@@ -161,24 +161,23 @@ classdef nestapp < matlab.apps.AppBase
                 'CP2','CP4','CP6','P7','P5','P3','P1','Pz',...
                 'P2','P4','P6','P8','PO7','PO5','PO3','PO1','POz','PO2','PO4','PO6','PO8',...
                 'CB1','O1','Oz','O2','CB2','TP9','TP10'}; % All Listed Electrodes
-        
+        path         % File Path
+        file         % File Name
+        spec         % PipelineStep struct array (name + typed params)
+        NSelecFiles  % Number of selected files for EEG preprocessing
+        cleanedName  % Name used to rename the saved cleaned EEG data
     end
     properties (Access = public)
         % Tab Cleaning
         selectedItem % Selected Table Item Values
         info % Command Information and description
-        path % File Path
-        file % File Name
         % Canonical pipeline state — single source of truth for steps and params.
         % appendStep/removeStep/moveStep/clearSteps/loadPipelineData all write here.
-        spec             % PipelineStep struct array (name + typed params)
         currentParamKey  = ''  % param key selected in UITable (transient)
         currentParamType = ''  % type of selected param (transient)
         originalSize     % [w h] of UIFigure at creation — used by UIFigureSizeChanged
-        NSelecFiles % Number of selcted Files for EEG preprocessing
         clickedItem = [];
         doubleClicked = 0;
-        cleanedName % Name used to rename the save cleaned EEG data
         TEPfiles % File list for calculating TEPs
         
         % Tab Visualizing
@@ -281,6 +280,11 @@ classdef nestapp < matlab.apps.AppBase
             app.currentParamType = '';
             app.pipelineDirty   = true;
             updateStatusBar(app);
+        end
+
+        function idx = selectedStepIndex(app)
+        % SELECTEDSTEPINDEX  Decode the current SelectedListBox selection to a 1-based index.
+            idx = selectedStepIndex(app);
         end
 
         function refreshParamTable(app, stepIdx)
@@ -1322,15 +1326,8 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         
-        function selected = CheckifanyFileSelected(app)
-            selected = 0;
-            if isempty(app.SelectedFilesforTEP)
-                warning('Please select at least a file to plot')
-            else
-                selected = 1;
-            end
-
-
+        function tf = isFileSelected(app)
+            tf = ~isempty(app.SelectedFilesforTEP);
         end
 
         function overlayTEPComponents(app)
@@ -1432,7 +1429,7 @@ classdef nestapp < matlab.apps.AppBase
             app.UITable.Data = [];
             app.ItemNum = 1;
             app.originalSize      = app.UIFigure.Position(3:4);
-            app.tepComponentDefs  = defaultTEPComponentDefs(app);
+            app.tepComponentDefs  = defaultTEPComponentDefs();
             applyTooltips(app);
             loadPrefs(app);
             buildRecentFilesMenu(app);
@@ -1468,7 +1465,7 @@ classdef nestapp < matlab.apps.AppBase
 
         % Button pushed function: MoveUpButton
         function MoveUpButtonPushed(app, ~)
-            ind = str2double(strrep(app.SelectedListBox.Value, 'Item', ''));
+            ind = selectedStepIndex(app);
             moveStep(app, ind, -1);
         end
 
@@ -1492,13 +1489,13 @@ classdef nestapp < matlab.apps.AppBase
 
         % Button pushed function: RemoveButton
         function RemoveButtonPushed(app, ~)
-            ind = str2double(strrep(app.SelectedListBox.Value, 'Item', ''));
+            ind = selectedStepIndex(app);
             removeStep(app, ind);
         end
 
         % Button pushed function: MoveDownButton
         function MoveDownButtonPushed(app, ~)
-            ind = str2double(strrep(app.SelectedListBox.Value, 'Item', ''));
+            ind = selectedStepIndex(app);
             moveStep(app, ind, +1);
         end
 
@@ -1716,7 +1713,7 @@ classdef nestapp < matlab.apps.AppBase
         % Value changed function: TextArea
         function TextAreaValueChanged(app, ~)
             if isempty(app.currentParamKey); return; end
-            stepIdx = str2double(strrep(app.SelectedListBox.Value, 'Item', ''));
+            stepIdx = selectedStepIndex(app);
             if isempty(stepIdx) || stepIdx > numel(app.spec); return; end
 
             raw = app.TextArea.Value;
@@ -1735,7 +1732,7 @@ classdef nestapp < matlab.apps.AppBase
         function UITableCellSelection(app, event)
             if isempty(event.Indices); return; end
             row     = event.Indices(1);
-            stepIdx = str2double(strrep(app.SelectedListBox.Value, 'Item', ''));
+            stepIdx = selectedStepIndex(app);
             if isempty(stepIdx) || stepIdx > numel(app.spec); return; end
 
             reg    = stepRegistry();
@@ -1763,7 +1760,7 @@ classdef nestapp < matlab.apps.AppBase
 
         % Button pushed function: DefaultValueButton
         function DefaultValueButtonPushed(app, ~)
-            stepIdx = str2double(strrep(app.SelectedListBox.Value, 'Item', ''));
+            stepIdx = selectedStepIndex(app);
             if isempty(stepIdx) || stepIdx > numel(app.spec); return; end
             reg  = stepRegistry();
             name = app.spec(stepIdx).name;
@@ -1805,7 +1802,7 @@ classdef nestapp < matlab.apps.AppBase
 
         % Cell edit callback: UITable
         function UITableCellEdit(app, event)
-            stepIdx = str2double(strrep(app.SelectedListBox.Value, 'Item', ''));
+            stepIdx = selectedStepIndex(app);
             if isempty(stepIdx) || stepIdx > numel(app.spec); return; end
 
             reg    = stepRegistry();
@@ -1825,8 +1822,7 @@ classdef nestapp < matlab.apps.AppBase
 
         % Value changed function: SelectedListBox
         function SelectedListBoxValueChanged(app, ~)
-            value   = app.SelectedListBox.Value;
-            stepIdx = str2double(strrep(value, 'Item', ''));
+            stepIdx = selectedStepIndex(app);
             if isempty(stepIdx) || stepIdx > numel(app.spec); return; end
             app.currentParamKey  = '';
             app.currentParamType = '';
@@ -1836,7 +1832,7 @@ classdef nestapp < matlab.apps.AppBase
 
         % Button pushed function: PLOTTEPButton
         function PLOTTEPButtonPushed(app, ~)
-            if ~CheckifanyFileSelected(app)
+            if ~isFileSelected(app)
                 warning('Please select at least a file to plot the TEP!');
             else
                 LoadLabels(app);
@@ -1877,16 +1873,6 @@ classdef nestapp < matlab.apps.AppBase
             else
                 warning('Try selecting files!')
             end
-        end
-
-        % Value changed function: FolderEditField_2
-        function FolderEditField_2ValueChanged(app, ~)
-            if ~isempty(app.cleanedName) && ~isempty(app.path)
-                app.FolderEditField_2.Value = app.path;
-            else
-                app.FolderEditField_2.Value = '';
-            end
-
         end
 
         % Button pushed function: SelectDataButton_2
@@ -1944,7 +1930,7 @@ classdef nestapp < matlab.apps.AppBase
 
         % Button pushed function: TOPOPLOTButton
         function TOPOPLOTButtonPushed(app, ~)
-            if CheckifanyFileSelected(app)
+            if isFileSelected(app)
                 EEG_topoplot(app)
             end
         end
@@ -1974,7 +1960,7 @@ classdef nestapp < matlab.apps.AppBase
 
         % Button pushed function: ReLoadAvailableElectrodesButton
         function ReLoadAvailableElectrodesButtonPushed(app, ~)
-            if CheckifanyFileSelected(app)
+            if isFileSelected(app)
                 LoadLabels(app);
             end
 
@@ -2016,13 +2002,11 @@ classdef nestapp < matlab.apps.AppBase
         % Button pushed function: PlotEEGdataButton
         function PlotEEGdataButtonPushed(app, ~)
             subInd = strcmpi(app.SelectedFilesforTEP, app.EEGDatasetDropDown.Value);
-            if CheckifanyFileSelected(app)
+            if isFileSelected(app)
                 if ~app.EEG_SelectedTEPFiles_Loaded
                     LoadSelecEEGdata(app)
-                    pop_eegplot(app.EEGofAllSelectedFiles{subInd},1,1,1)
-                else
-                    pop_eegplot(app.EEGofAllSelectedFiles{subInd},1,1,1)
                 end
+                pop_eegplot(app.EEGofAllSelectedFiles{subInd},1,1,1)
             end
         end
 
@@ -2090,7 +2074,7 @@ classdef nestapp < matlab.apps.AppBase
 
             function resetDefaults(t)
                 % app is accessible from the enclosing method scope
-                defaults = defaultTEPComponentDefs(app);
+                defaults = defaultTEPComponentDefs();
                 d = cell(numel(defaults), 5);
                 for k = 1:numel(defaults)
                     d{k, 1} = defaults(k).name;
@@ -2116,17 +2100,6 @@ classdef nestapp < matlab.apps.AppBase
                 end
                 close(f);
             end
-        end
-
-        function defs = defaultTEPComponentDefs(~)
-        % DEFAULTTEPCOMPONENTDEFS  Return canonical TEP component window definitions.
-        %   Windows follow Beck et al. 2024 (Hum Brain Mapp, 45:e70048).
-            defs = struct( ...
-                'name',       {'N15',  'P30',  'N45',  'P60',  'N100', 'P180'}, ...
-                'polarity',   {'neg',  'pos',  'neg',  'pos',  'neg',  'pos'}, ...
-                'nomLatency', {15,     30,     45,     60,     100,    180}, ...
-                'winStart',   {10,     20,     40,     50,     70,     150}, ...
-                'winEnd',     {20,     40,     55,     70,     150,    240});
         end
 
         % ── Analysis Tab callbacks ────────────────────────────────────────
@@ -2294,14 +2267,15 @@ classdef nestapp < matlab.apps.AppBase
             app.CleaningTab.AutoResizeChildren = 'off';
             app.CleaningTab.Title = 'Cleaning';
 
-            % Create StepsListBox
+            % Create StepsListBox — items derived from stepRegistry, not hardcoded
+            reg_init = stepRegistry();
             app.StepsListBox = uilistbox(app.CleaningTab);
-            app.StepsListBox.Items = {'Load Data', 'Load Channel Location', 'Save New Set', 'Choose Data Set', 'Remove un-needed Channels', 'Remove Baseline', 'Remove Bad Channels', 'Clean Artifacts', 'Automatic Continuous Rejection', 'Automatic Cleaning Data', 'De-Trend Epoch', 'TESA De-Trend', 'Re-Sample', 'Re-Reference', 'Frequency Filter (CleanLine)', 'Frequency Filter (TESA)', 'Frequency Filter', 'Run ICA', 'Run TESA ICA', 'Label ICA Components', 'Flag ICA Components for Rejection', 'Remove Flagged ICA Components', 'Remove ICA Components (TESA)', 'Epoching', 'Remove Bad Epoch', 'Find TMS Pulses (TESA)', 'Remove TMS Artifacts (TESA)', 'Fix TMS Pulse (TESA)', 'Interpolate Channels', 'Interpolate Missing Data (TESA)', 'Find Artifacts EDM (TESA)', 'SSP SIR', 'Median Filter 1D', 'Extract TEP (TESA)', 'Find TEP Peaks (TESA)', 'TEP Peak Output', 'Remove Recording Noise (SOUND)', 'Visualize EEG Data', 'Manual Command'};
+            app.StepsListBox.Items = {reg_init.name};
             app.StepsListBox.ValueChangedFcn = createCallbackFcn(app, @StepsListBoxValueChanged, true);
             app.StepsListBox.FontSize = 11;
             app.StepsListBox.ClickedFcn = createCallbackFcn(app, @StepsListBoxClicked, true);
             app.StepsListBox.Position = [10 173 207 294];
-            app.StepsListBox.Value = 'Load Data';
+            app.StepsListBox.Value = reg_init(1).name;
 
             % Create CommandDescriptionLabel
             app.CommandDescriptionLabel = uilabel(app.CleaningTab);
@@ -2507,7 +2481,6 @@ classdef nestapp < matlab.apps.AppBase
 
             % Create FolderEditField_2
             app.FolderEditField_2 = uieditfield(app.SelectDatatoVisulaizeTEPsPanel, 'text');
-            app.FolderEditField_2.ValueChangedFcn = createCallbackFcn(app, @FolderEditField_2ValueChanged, true);
             app.FolderEditField_2.Editable = 'off';
             app.FolderEditField_2.Position = [49 41 145 22];
 
