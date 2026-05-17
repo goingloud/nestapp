@@ -1276,7 +1276,6 @@ classdef nestapp < matlab.apps.AppBase
         
         function EEG_topoplot(app)
             cla(app.UIAxes2)
-            BIGEEG = [];
             TOPOPLOT_INTRAD = 0.55;   % EEGLAB default interpolation radius
             SMOOTH_METHOD   = 'movmean';
             SMOOTH_WIN_PTS  = 5;      % 5-point moving average (~5 ms at 1 kHz)

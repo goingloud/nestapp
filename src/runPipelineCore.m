@@ -19,6 +19,8 @@ if ~isfield(opts, 'statusBar'),    opts.statusBar    = []; end
 if ~isfield(opts, 'parallel'),     opts.parallel     = false; end
 if ~isfield(opts, 'chanLocFile'),  opts.chanLocFile  = ''; end
 
+persistent cachedNestappSrc cachedEeglabGenpath
+
 nFiles = numel(filePaths);
 nSteps = numel(spec);
 
@@ -85,7 +87,6 @@ if useParallel
     % Propagate paths to workers only (spmd skips the client — avoids
     % shadowing MATLAB built-ins with EEGLAB subdirectories on the client).
     % genpath(eeglab) is expensive (~30 s); cache it across calls.
-    persistent cachedNestappSrc cachedEeglabGenpath
     nestappSrc = fileparts(which('runPipelineCore'));
     if isempty(cachedEeglabGenpath) || ~strcmp(cachedNestappSrc, nestappSrc)
         nestLog('PAR', 'Building EEGLAB genpath cache...');
@@ -114,7 +115,7 @@ end
 % through each file); parallel uses one slot per worker.  Both modes use the
 % same createProgressDlg / updateProgressDlg pair and the same message format.
 dlg = createProgressDlg(opts.uiFigure, nBars, nFiles);
-dlgCleanup = onCleanup(@() closeDlg(dlg)); %#ok<NASGU>
+dlgCleanup = onCleanup(@() closeDlg(dlg));
 
 reports   = cell(nFiles, 1);
 cancelled = false;
