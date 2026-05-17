@@ -78,10 +78,10 @@ nSteps = numel(spec);
 
 sendWorkerLog(opts.logQueue, wLabel, 'START  %s  (%d steps)', fileName, nSteps);
 
-% Stagger parallel workers so they don't all load their first file simultaneously.
-% Cap at nWorkers slots — files beyond the first wave are already queued on busy workers.
-if ~isempty(opts.progressQueue) && opts.fileIndex > 1
-    pause(0.25 * min(opts.fileIndex - 1, opts.nWorkers));
+% Stagger the first worker wave to avoid simultaneous disk reads at batch start.
+% Files beyond the first wave are already staggered naturally by worker completion times.
+if ~isempty(opts.progressQueue) && opts.fileIndex > 1 && opts.fileIndex <= opts.nWorkers
+    pause(0.25 * (opts.fileIndex - 1));
 end
 
 stepLog = struct('step',{},'duration_s',{},'chanBefore',{},'chanAfter',{}, ...

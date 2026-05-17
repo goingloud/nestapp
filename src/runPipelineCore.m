@@ -522,6 +522,3 @@ elseif isfield(dlg, 'fig') && ~isempty(dlg.fig) && isvalid(dlg.fig)
 end
 end
 
-function closeIfValid(d)
-if ~isempty(d) && isvalid(d); close(d); end
-end
