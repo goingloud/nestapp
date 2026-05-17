@@ -222,7 +222,6 @@ else
         if ~getpref('nestapp', 'hideEEGLABWindow', true)
             eeglab redraw
         end
-        disp('-----------------Data processed!-----------------')
     end
 end
 
@@ -243,9 +242,11 @@ if cancelled
     % Discard any partially-completed reports — a cancelled run is not a result.
     error('nestapp:cancelled', 'Pipeline cancelled by user.');
 end
-if useParallel && isempty(allReports)
-    error('nestapp:parallelFailed', ...
-        'All %d files failed in parallel mode. Check the console log for details.', nFiles);
+if isempty(allReports)
+    mode = 'serial';
+    if useParallel; mode = 'parallel'; end
+    error('nestapp:allFilesFailed', ...
+        'All %d files failed in %s mode. Check the console log for details.', nFiles, mode);
 end
 end
 
