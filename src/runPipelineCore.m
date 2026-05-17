@@ -61,24 +61,6 @@ if opts.parallel
     end
 end
 
-% Scrim: same semi-transparent overlay that uialert/uiconfirm show.
-% Blocks nestapp input while the pipeline runs; closed automatically via onCleanup
-% so every exit path (normal return, error throw, cancel) tears it down.
-scrimDlg = [];
-if ~isempty(opts.uiFigure) && isvalid(opts.uiFigure)
-    try
-        scrimDlg = uiprogressdlg(opts.uiFigure, ...
-            'Title',      'Running Pipeline', ...
-            'Message',    sprintf('0 / %d files complete', nFiles), ...
-            'Value',      0, ...
-            'Cancelable', 'off');
-        drawnow;   % render before parpool blocks the thread
-    catch ME
-        nestLog('PAR', 'uiprogressdlg failed (non-fatal): %s', ME.message);
-    end
-end
-scrimGuard = onCleanup(@() closeIfValid(scrimDlg)); %#ok<NASGU>
-
 % Pool setup before the progress dialog so startup time doesn't inflate
 % the first file's apparent duration.
 nBars = 1;   % serial uses one slot; parallel uses one slot per worker
@@ -132,7 +114,7 @@ end
 % through each file); parallel uses one slot per worker.  Both modes use the
 % same createProgressDlg / updateProgressDlg pair and the same message format.
 dlg = createProgressDlg(opts.uiFigure, nBars, nFiles);
-dlg.scrimDlg = scrimDlg;   % allows sentinel handler to update overall progress
+dlgCleanup = onCleanup(@() closeDlg(dlg)); %#ok<NASGU>
 
 reports   = cell(nFiles, 1);
 cancelled = false;
@@ -243,7 +225,7 @@ else
     end
 end
 
-if isvalid(dlg.fig); close(dlg.fig); end
+closeDlg(dlg);
 
 % Collect summaries for all successfully processed files.
 summaries = cell(nFiles, 1);
@@ -274,34 +256,49 @@ end
 % updateProgressDlg handles both cases identically.
 
 function dlg = createProgressDlg(parentFig, nBars, nFiles)
-PAD  = 12;
-figW = 440;
-barW = figW - 2*PAD;
-btnH = 28;
-barH = 10;
-lblH = 18;
-rowH = lblH + 4 + barH + 8;
+PAD    = 12;
+figW   = 440;
+barW   = figW - 2*PAD;
+btnH   = 28;
+barH   = 10;
+lblH   = 18;
+rowH   = lblH + 4 + barH + 8;
+titleH = 26;
 
 yBtn        = PAD;
 yOverallLbl = yBtn + btnH + PAD;
 yOverallBar = yOverallLbl + lblH + 4;
 ySlot1      = yOverallBar + barH + PAD;
-figH        = ySlot1 + nBars * rowH + PAD;
+figH        = ySlot1 + nBars * rowH + PAD + titleH;
 
 if ~isempty(parentFig) && isvalid(parentFig)
     pPos = parentFig.Position;
-    figX = pPos(1) + (pPos(3) - figW) / 2;
-    figY = pPos(2) + (pPos(4) - figH) / 2;
+    % Full-size overlay panel that blocks nestapp interaction while the pipeline runs.
+    dlg.overlay = uipanel(parentFig, ...
+        'Position',        [0, 0, pPos(3), pPos(4)], ...
+        'BackgroundColor', [0.82 0.82 0.84], ...
+        'BorderType',      'none');
+    cX = (pPos(3) - figW) / 2;
+    cY = (pPos(4) - figH) / 2;
+    dlg.fig = uipanel(dlg.overlay, ...
+        'Position',        [cX, cY, figW, figH], ...
+        'BackgroundColor', [0.97 0.97 0.98], ...
+        'BorderType',      'none');
+    uilabel(dlg.fig, 'Text', 'Running Pipeline', ...
+        'FontWeight', 'bold', 'FontSize', 13, ...
+        'HorizontalAlignment', 'center', ...
+        'Position', [0, figH - titleH, figW, titleH]);
 else
     sc   = get(0, 'ScreenSize');
     figX = (sc(3) - figW) / 2;
     figY = (sc(4) - figH) / 2;
+    dlg.overlay = [];
+    dlg.fig = uifigure('Name', 'Running Pipeline', ...
+        'Position', [figX figY figW figH], ...
+        'Color',    [0.97 0.97 0.98], ...
+        'Resize',   'off');
 end
 
-dlg.fig = uifigure('Name', 'Running Pipeline', ...
-    'Position', [figX figY figW figH], ...
-    'Color',    [0.97 0.97 0.98], ...
-    'Resize',   'off');
 % slotMap(fi)=slot tracks which bar slot is assigned to each file.
 % slotAvailable marks which slots are free to accept a new file.
 dlg.fig.UserData = struct( ...
@@ -391,10 +388,6 @@ if msg.si == 0
     dlg.labels(slot).Text = sprintf('File %d \x2014 Done', msg.fi);
     dlg.overallFill.Position(3) = round(barW * nDone / nFiles);
     dlg.overallLabel.Text       = sprintf('%d / %d files complete', nDone, nFiles);
-    if isfield(dlg, 'scrimDlg') && ~isempty(dlg.scrimDlg) && isvalid(dlg.scrimDlg)
-        dlg.scrimDlg.Value   = nDone / nFiles;
-        dlg.scrimDlg.Message = sprintf('%d / %d files complete', nDone, nFiles);
-    end
 else
     % Step starting: claim a slot on this file's first message.
     slot = ud.slotMap(msg.fi);
@@ -518,6 +511,14 @@ answer = uiconfirm(opts.uiFigure, msg, 'Output Files Exist', ...
     'Icon', 'warning');
 if strcmp(answer, 'Cancel')
     error('nestapp:cancelled', 'Run cancelled by user.');
+end
+end
+
+function closeDlg(dlg)
+if isfield(dlg, 'overlay') && ~isempty(dlg.overlay) && isvalid(dlg.overlay)
+    delete(dlg.overlay);
+elseif isfield(dlg, 'fig') && ~isempty(dlg.fig) && isvalid(dlg.fig)
+    close(dlg.fig);
 end
 end
 
