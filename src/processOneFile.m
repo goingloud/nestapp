@@ -36,7 +36,7 @@ if ~isfield(opts, 'nWorkers'),      opts.nWorkers       = 1;  end
 
 % eeglab('nogui') is expensive (plugin scan, path setup); run it once per
 % worker then just reset globals for subsequent files on the same worker.
-persistent eeglabWorkerReady
+persistent eeglabWorkerReady lastThreadCount
 global EEG ALLEEG CURRENTSET ALLCOM %#ok<GVMIS>
 
 [pathDir, fileBase, fileExt] = fileparts(fullPath);
@@ -48,10 +48,14 @@ fileTic  = tic;
 
 % Limit each worker to its fair share of BLAS threads to prevent
 % over-subscription when N workers each default to all cores.
-% Runs on every call — pool reuse can change nWorkers between pipeline runs.
-if ~isempty(opts.progressQueue) && isfield(opts, 'nWorkers') && opts.nWorkers > 1
-    nCores = feature('numcores');
-    maxNumCompThreads(max(1, floor(nCores / opts.nWorkers)));
+% Pool reuse can change nWorkers between pipeline runs, so re-check each call
+% but skip the BLAS call when the value is already correct.
+if ~isempty(opts.progressQueue) && opts.nWorkers > 1
+    desired = max(1, floor(feature('numcores') / opts.nWorkers));
+    if isempty(lastThreadCount) || lastThreadCount ~= desired
+        maxNumCompThreads(desired);
+        lastThreadCount = desired;
+    end
 end
 
 if isempty(eeglabWorkerReady)
@@ -75,8 +79,9 @@ nSteps = numel(spec);
 sendWorkerLog(opts.logQueue, wLabel, 'START  %s  (%d steps)', fileName, nSteps);
 
 % Stagger parallel workers so they don't all load their first file simultaneously.
-if ~isempty(opts.progressQueue) && isfield(opts, 'fileIndex') && opts.fileIndex > 1
-    pause(0.25 * (opts.fileIndex - 1));
+% Cap at nWorkers slots — files beyond the first wave are already queued on busy workers.
+if ~isempty(opts.progressQueue) && opts.fileIndex > 1
+    pause(0.25 * min(opts.fileIndex - 1, opts.nWorkers));
 end
 
 stepLog = struct('step',{},'duration_s',{},'chanBefore',{},'chanAfter',{}, ...

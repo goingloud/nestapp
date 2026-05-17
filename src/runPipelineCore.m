@@ -73,7 +73,8 @@ if ~isempty(opts.uiFigure) && isvalid(opts.uiFigure)
             'Value',      0, ...
             'Cancelable', 'off');
         drawnow;   % render before parpool blocks the thread
-    catch
+    catch ME
+        nestLog('PAR', 'uiprogressdlg failed (non-fatal): %s', ME.message);
     end
 end
 scrimGuard = onCleanup(@() closeIfValid(scrimDlg)); %#ok<NASGU>
