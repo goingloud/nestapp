@@ -6,6 +6,10 @@
 
             sf = min(sX, sY);
             p  = @(o) round(o .* [sX, sY, sX, sY]);
+            % ph: scale x/y/w but keep original height — for fixed-height controls
+            % (uicheckbox, uieditfield, uispinner, uirangedslider) that emit
+            % "height cannot be changed" warnings when h is set to a scaled value.
+            ph = @(o) [round(o(1)*sX), round(o(2)*sY), round(o(3)*sX), o(4)];
             fs = @(o) max(8, round(o * sf));
 
             % Status bar: fixed height, pinned to bottom, full width
@@ -50,7 +54,7 @@
 
             app.ReStartStepsButton.Position       = p([658 193 201 36]);
             app.ReStartStepsButton.FontSize       = fs(18);
-            app.ParallelCheckBox.Position         = p([657 85 201 24]);
+            app.ParallelCheckBox.Position         = ph([657 85 201 24]);
 
             %% Visualizing Tab
             % Three zones: left (x:0-340 electrode map), center (x:340-648 TEP/topo),
@@ -71,15 +75,15 @@
             app.AddtocurrentFigureButton.Position = p([11 -1 135 22]);
             % Topoplot time and window on one line â€” 3-digit fields
             app.TopoplottimeSpinnerLabel.Position = p([152 10 35 22]);
-            app.TopoplottimeSpinner.Position      = p([189 10 52 22]);
+            app.TopoplottimeSpinner.Position      = ph([189 10 52 22]);
             app.WindowsizeforTopoplotLabel.Position = p([245 10 35 22]);
-            app.WindowsizefortimeaveragedTopoplotEditField.Position = p([282 10 52 22]);
+            app.WindowsizefortimeaveragedTopoplotEditField.Position = ph([282 10 52 22]);
 
             % Center column â€” TEP window slider above the TEP plot
             % TEP plot (60%) and topoplot (40%) of 448px available â€” slider in gap
             app.UIAxes.Position                   = p([340 230 308 270]);
             app.TEPWindowSliderLabel.Position     = p([380 204 130 16]);
-            app.TEPWindowSlider.Position          = p([380 193 268 3]);
+            app.TEPWindowSlider.Position          = ph([380 193 268 3]);
             app.UIAxes2.Position                  = p([340 7 308 179]);
 
             % Head image (electrode map) â€” unchanged
@@ -88,12 +92,12 @@
             % Right column â€” data selection
             app.SelectDatatoVisulaizeTEPsPanel.Position  = p([651 406 208 90]);
             app.FolderEditField_2Label.Position   = p([1 41 40 22]);
-            app.FolderEditField_2.Position        = p([49 41 145 22]);
+            app.FolderEditField_2.Position        = ph([49 41 145 22]);
             app.SelectDataButton_2.Position       = p([13 10 183 23]);
             app.FilesListBoxLabel.Position        = p([740 382 30 22]);
             app.FilesListBox.Position             = p([669 71 183 306]);
-            app.SelectAllCheckBox.Position        = p([670 46 71 22]);
-            app.DontfindcommonelectrodesCheckBox.Position = p([670 28 180 22]);
+            app.SelectAllCheckBox.Position        = ph([670 46 71 22]);
+            app.DontfindcommonelectrodesCheckBox.Position = ph([670 28 180 22]);
             app.ReLoadAvailableElectrodesButton.Position  = p([686 7 153 23]);
 
             %% Electrode buttons (Visualizing Tab â€” 64 buttons)
@@ -177,7 +181,7 @@
             app.AnalysisWorkspaceLabel.Position    = p([450 407 380 18]);
             app.ExportTEPDataButton.Position       = p([450 374 220 28]);
             app.TEPvarNameEditFieldLabel.Position  = p([450 348 60 22]);
-            app.TEPvarNameEditField.Position       = p([515 348 155 22]);
+            app.TEPvarNameEditField.Position       = ph([515 348 155 22]);
             app.AnalysisBatchLabel.Position        = p([450 313 380 18]);
             app.AnalysisBatchDescLabel.Position    = p([450 291 380 18]);
             app.ExtractPeaksCSVButton.Position     = p([450 254 220 32]);
