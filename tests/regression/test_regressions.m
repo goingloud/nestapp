@@ -30,6 +30,10 @@ function r = srcRoot()
 r = fullfile(repoRoot(), 'src');
 end
 
+function p = nestappFile()
+p = fullfile(repoRoot(), 'src', '@nestapp', 'nestapp.m');
+end
+
 % ── M0 bug fixes ──────────────────────────────────────────────────────────
 
 function test_saveNewSetAssignsFname(testCase)
@@ -102,7 +106,7 @@ end
 
 function test_noInputCallsInNestapp(testCase)
 % All interactive prompts must use MATLAB UI dialogs, not command-line input().
-src   = fileread(fullfile(srcRoot(), 'nestapp.m'));
+src   = fileread(nestappFile());
 lines = strsplit(src, newline);
 for k = 1:numel(lines)
     L = strtrim(lines{k});
@@ -155,7 +159,7 @@ function test_selectDataButton2ResetsEEGLoaded(testCase)
 % BUG: EEG_SelectedTEPFiles_Loaded was never reset on new file selection,
 %      so the old EEG data was silently reused.
 % FIX: SelectDataButton_2Pushed resets the flag.
-src = fileread(fullfile(srcRoot(), 'nestapp.m'));
+src = fileread(nestappFile());
 % Find the SelectDataButton_2 callback body and check it contains the reset
 idx = strfind(src, 'SelectDataButton_2Pushed');
 testCase.verifyFalse(isempty(idx), 'SelectDataButton_2Pushed must exist in nestapp.m');
@@ -172,7 +176,7 @@ end
 function test_electrodeButtonAccessHasIspropGuard(testCase)
 % BUG: app.([upper(label),'Button']) crashes for non-standard electrode names.
 % FIX: Guard with isprop(app, propName) before accessing.
-src = fileread(fullfile(srcRoot(), 'nestapp.m'));
+src = fileread(nestappFile());
 % Verify isprop guard exists somewhere near the dynamic access pattern
 hasGuard   = contains(src, 'isprop(app');
 hasPattern = contains(src, ",'Button'])");
@@ -188,7 +192,7 @@ end
 function test_savePipelineClearsDirtyFlag(testCase)
 % BUG: uisave does not return the chosen path, so pipelineDirty was never cleared.
 % FIX: SavePipelineButtonPushed uses uiputfile and clears pipelineDirty.
-src = fileread(fullfile(srcRoot(), 'nestapp.m'));
+src = fileread(nestappFile());
 % Find SavePipelineButtonPushed
 idx = strfind(src, 'SavePipelineButtonPushed');
 testCase.verifyFalse(isempty(idx), 'SavePipelineButtonPushed must exist');
