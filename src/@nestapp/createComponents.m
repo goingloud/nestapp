@@ -194,11 +194,19 @@ function createComponents(app)
             app.SelectedFilesListBox.Position = [5 30 195 145];
             app.SelectedFilesListBox.FontSize = 10;
 
-            % Create SelectDataButton (full-width, at bottom of panel)
+            % Create SelectDataButton (left half of bottom button row)
             app.SelectDataButton = uibutton(app.SelectDatatoPerformAnalysisPanel, 'push');
             app.SelectDataButton.ButtonPushedFcn = createCallbackFcn(app, @SelectDataButtonPushed, true);
-            app.SelectDataButton.Position = [5 5 195 23];
-            app.SelectDataButton.Text = 'Select Data Files...';
+            app.SelectDataButton.Position = [5 5 95 23];
+            app.SelectDataButton.Text = 'Files...';
+            app.SelectDataButton.Tooltip = {'Select one or more data files from a single folder'};
+
+            % Create SelectFoldersButton (right half - queue every file inside several folders)
+            app.SelectFoldersButton = uibutton(app.SelectDatatoPerformAnalysisPanel, 'push');
+            app.SelectFoldersButton.ButtonPushedFcn = createCallbackFcn(app, @SelectFoldersButtonPushed, true);
+            app.SelectFoldersButton.Position = [105 5 95 23];
+            app.SelectFoldersButton.Text = 'Folders...';
+            app.SelectFoldersButton.Tooltip = {'Add several folders; every data file inside each is queued for processing'};
 
             % Create RunAnalysisButton
             app.RunAnalysisButton = uibutton(app.CleaningTab, 'push');
