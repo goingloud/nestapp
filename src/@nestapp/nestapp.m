@@ -18,7 +18,6 @@ classdef nestapp < matlab.apps.AppBase
         RunAnalysisButton               matlab.ui.control.Button
         SelectDatatoPerformAnalysisPanel  matlab.ui.container.Panel
         SelectDataButton                matlab.ui.control.Button
-        SelectFoldersButton             matlab.ui.control.Button
         SelectedFilesListBox            matlab.ui.control.ListBox
         SelectedListBoxLabel_2          matlab.ui.control.Label
         TextArea                        matlab.ui.control.TextArea
@@ -381,31 +380,15 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         function openRecentData(app, folder)
-        % Load data files from a recently used folder.
+        % Open the data browser straight into a recently used folder.
             if ~isfolder(folder)
                 uialert(app.UIFigure, 'Folder no longer exists.', 'Not Found');
                 return
             end
-            try
-                [app.file, app.path] = uigetfile( ...
-                    {'*.set;*.vhdr;*.cdt;*.cnt','Data Files'}, ...
-                    'Select File(s)', folder, 'multiSelect', 'on');
-                if isequal(app.file, 0); return; end
-                if ~iscell(app.file)
-                    app.NSelecFiles = 1;
-                    app.file = {app.file};
-                else
-                    app.NSelecFiles = numel(app.file);
-                end
-                app.filePaths = cellfun(@(f) fullfile(app.path, f), app.file, ...
-                    'UniformOutput', false);
-                app.SelectedFilesListBox.Items = app.file;
-                setpref('nestapp', 'lastDataFolder', app.path);
-                pushRecent(app, 'recentFiles', app.path);
-                buildRecentFilesMenu(app);
-            catch
-                warning('nestapp: could not open data from recent folder.');
-            end
+            paths = selectDataTree(folder, app.dataFileExts());
+            if isempty(paths); return; end
+            setFileQueue(app, paths);
+            if isvalid(app.UIFigure); figure(app.UIFigure); end
         end
 
         function openRecentPipeline(app, pPath)
@@ -1682,252 +1665,66 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Button pushed function: SelectDataButton
+        % Button pushed function: SelectDataButton ("Browse...")
         function SelectDataButtonPushed(app, ~)
-            try
-                startFolder = getpref('nestapp', 'lastDataFolder', '');
-                [app.file,app.path] = uigetfile( ...
-                    {'*.set;*.vhdr;*.cdt;*.cnt',...
-                    'Data Files (*.set,*.vhdr,*.cdt,*.cnt)'; ...
-                    '*.set','Set Files (*.set)'; ...
-                    '*.vhdr','VHDR Files (*.vhdr)'; ...
-                    '*.cdt','CDT Files (*.cdt)'; ...
-                    '*.cnt','CNT Files (*.cnt)'; ...
-                    '*.*',  'All Files (*.*)'}, ...
-                    'Select File(s)', startFolder, 'multiSelect','on');
-                if iscell(app.file)
-                    app.NSelecFiles = numel(app.file);
-                else
-                    app.NSelecFiles = 1;
-                    app.file = {app.file};
-                end
-
-                % Single source of truth for Run Analysis - all files share app.path.
-                app.filePaths = cellfun(@(f) fullfile(app.path, f), app.file, ...
-                    'UniformOutput', false);
-
-                app.SelectedFilesListBox.Items = app.file;
-                setpref('nestapp', 'lastDataFolder', app.path);
-                pushRecent(app, 'recentFiles', app.path);
-                buildRecentFilesMenu(app);
-                updateStatusBar(app);
-
-            catch
-                warning('Please select at least one file!')
-                app.SelectedFilesListBox.Items = {};
-            end
-        end
-
-        % Button pushed function: SelectFoldersButton
-        function SelectFoldersButtonPushed(app, ~)
-        % SELECTFOLDERSBUTTONPUSHED  Queue every data file inside many folders.
-        %   Lets you process many subject folders in one run instead of
-        %   opening each folder and picking its files separately. Two ways
-        %   to add folders, both feeding one list:
-        %     "Add Folders..."     true multi-select (Shift/Ctrl-click) via
-        %                          a Java chooser; falls back to MATLAB's
-        %                          single-folder picker if Java is disabled.
-        %     "Add Subfolders..."  pick ONE parent and every child folder
-        %                          that holds data files is added at once -
-        %                          the fast path for tens/hundreds of
-        %                          subjects living under a common parent.
-        %   "Use these" then gathers every .set/.vhdr/.cdt/.cnt file inside
-        %   each listed folder into one flat queue.
+        % SELECTDATABUTTONPUSHED  Open the data browser and queue checked files.
+        %   selectDataTree shows the folder tree beneath a chosen parent as a
+        %   checkbox tree with a path filter, so recordings spread across many
+        %   subject folders (e.g. just the SPL files, or just session 1) can
+        %   be picked in one place. Returns the full paths of every checked
+        %   file; setFileQueue then adopts them as the run queue.
             startFolder = getpref('nestapp', 'lastDataFolder', '');
-            chosen      = {};   % accumulates the selected folder paths
-
-            dlg = uifigure('Name', 'Select Folders', ...
-                'Position', [300 300 470 330], ...
-                'WindowStyle', 'modal', 'Resize', 'off');
-            uilabel(dlg, 'Text', ...
-                'Folders to process (every data file inside each is queued):', ...
-                'Position', [15 298 440 22]);
-            lb = uilistbox(dlg, 'Items', {}, ...
-                'Position', [15 100 440 190], 'Multiselect', 'on');
-            uibutton(dlg, 'Text', 'Add Folders...', 'Position', [15 62 130 30], ...
-                'ButtonPushedFcn', @(~,~) addFolders());
-            uibutton(dlg, 'Text', 'Add Subfolders...', 'Position', [150 62 145 30], ...
-                'ButtonPushedFcn', @(~,~) addSubfolders());
-            uibutton(dlg, 'Text', 'Remove', 'Position', [300 62 75 30], ...
-                'ButtonPushedFcn', @(~,~) removeSelected());
-            uibutton(dlg, 'Text', 'Clear', 'Position', [380 62 75 30], ...
-                'ButtonPushedFcn', @(~,~) clearAll());
-            uilabel(dlg, 'FontSize', 10, 'FontColor', [0.4 0.4 0.4], ...
-                'Position', [15 38 440 18], 'Text', ...
-                ['Add Folders: Shift/Ctrl-click for many.  ' ...
-                 'Add Subfolders: adds all child folders of a parent.']);
-            uibutton(dlg, 'Text', 'Cancel', 'Position', [265 8 90 28], ...
-                'ButtonPushedFcn', @(~,~) close(dlg));
-            uibutton(dlg, 'Text', 'Use these', 'Position', [365 8 90 28], ...
-                'BackgroundColor', [0.20 0.55 0.20], 'FontColor', [1 1 1], ...
-                'ButtonPushedFcn', @(~,~) useChosen());
-            uiwait(dlg);
-
-            % Closing the modal can leave the main window buried; raise it.
-            if isvalid(app.UIFigure)
-                figure(app.UIFigure);
-            end
-
-            function base = startDirForPick()
-                % Start the picker near the last selection, else last data folder.
-                if isempty(chosen)
-                    base = startFolder;
-                else
-                    base = fileparts(chosen{end});
-                end
-            end
-
-            function addFolders()
-                base = startDirForPick();
-                try
-                    picked = app.pickFoldersMultiSelect(base);
-                catch
-                    % Java AWT unavailable - fall back to single-folder pick.
-                    p = uigetdir(base, 'Select a folder');
-                    if isequal(p, 0); picked = {}; else; picked = {p}; end
-                end
-                addPaths(picked);
-                if isvalid(dlg); figure(dlg); end   % chooser can bury the modal
-            end
-
-            function addSubfolders()
-                base   = startDirForPick();
-                parent = uigetdir(base, 'Select the parent folder of your subjects');
-                if isequal(parent, 0); return; end
-                entries = dir(parent);
-                subs    = entries([entries.isdir]);
-                subs    = subs(~ismember({subs.name}, {'.', '..'}));
-                picked  = {};
-                for k = 1:numel(subs)
-                    sub = fullfile(parent, subs(k).name);
-                    if app.folderHasData(sub)
-                        picked{end+1} = sub; %#ok<AGROW>
-                    end
-                end
-                if isempty(picked)
-                    uialert(dlg, sprintf(['No subfolders of\n%s\ncontain ' ...
-                        '.set/.vhdr/.cdt/.cnt files.'], parent), 'No Data Subfolders');
-                    return
-                end
-                addPaths(picked);
-                if isvalid(dlg); figure(dlg); end
-            end
-
-            function addPaths(newPaths)
-                % Append picks to the list, skipping ones already present.
-                for k = 1:numel(newPaths)
-                    if ~any(strcmp(chosen, newPaths{k}))
-                        chosen{end+1} = newPaths{k}; %#ok<AGROW>
-                    end
-                end
-                lb.Items = chosen;
-            end
-
-            function removeSelected()
-                sel = lb.Value;
-                if isempty(sel); return; end
-                if ~iscell(sel); sel = {sel}; end
-                chosen(ismember(chosen, sel)) = [];
-                lb.Items = chosen;
-            end
-
-            function clearAll()
-                chosen = {};
-                lb.Items = chosen;
-            end
-
-            function useChosen()
-                close(dlg);
-                if ~isempty(chosen)
-                    gatherFromFolders(app, chosen);
-                end
-            end
+            paths = selectDataTree(startFolder, app.dataFileExts());
+            if isempty(paths); return; end
+            setFileQueue(app, paths);
+            if isvalid(app.UIFigure); figure(app.UIFigure); end
         end
 
-        function paths = pickFoldersMultiSelect(~, startDir)
-        % PICKFOLDERSMULTISELECT  True multi-select folder picker.
-        %   Uses a Java Swing JFileChooser in directories-only mode with
-        %   multi-selection enabled, so Shift-click / Ctrl-click / Ctrl-A
-        %   select many folders in one dialog. Returns a cell array of
-        %   absolute paths, or {} if the user cancels. Throws if Java AWT
-        %   is unavailable so the caller can fall back to uigetdir.
-            if isempty(startDir) || ~isfolder(startDir)
-                chooser = javaObjectEDT('javax.swing.JFileChooser');
+        function setFileQueue(app, fullPaths)
+        % SETFILEQUEUE  Adopt a flat list of full file paths as the run queue.
+        %   The single source of truth Run Analysis reads from. When every
+        %   file shares one folder we keep app.path set and show basenames
+        %   (so the TEP "use cleaned data" reuse and single-folder status
+        %   bar keep working); when files span folders app.path is cleared
+        %   and labels carry the parent-folder name to disambiguate.
+            fullPaths = fullPaths(:)';
+            if isempty(fullPaths); return; end
+
+            parents       = cellfun(@fileparts, fullPaths, 'UniformOutput', false);
+            uniqueParents = unique(parents);
+            labels        = cell(1, numel(fullPaths));
+            if isscalar(uniqueParents)
+                app.path = uniqueParents{1};
+                for i = 1:numel(fullPaths)
+                    [~, nm, ex] = fileparts(fullPaths{i});
+                    labels{i}   = [nm ex];
+                end
             else
-                chooser = javaObjectEDT('javax.swing.JFileChooser', ...
-                    java.io.File(startDir));
-            end
-            chooser.setFileSelectionMode(javax.swing.JFileChooser.DIRECTORIES_ONLY);
-            chooser.setMultiSelectionEnabled(true);
-            chooser.setDialogTitle('Select folders (Shift/Ctrl-click for many)');
-            status = chooser.showOpenDialog([]);
-            paths  = {};
-            if status == javax.swing.JFileChooser.APPROVE_OPTION
-                jfiles = chooser.getSelectedFiles();
-                for k = 1:numel(jfiles)
-                    paths{end+1} = char(jfiles(k).getAbsolutePath()); %#ok<AGROW>
+                app.path = '';   % files span folders - no single path
+                for i = 1:numel(fullPaths)
+                    [folder, nm, ex] = fileparts(fullPaths{i});
+                    [~, folderName]  = fileparts(folder);
+                    labels{i}        = [folderName '/' nm ex];
                 end
             end
-        end
 
-        function tf = folderHasData(app, folder)
-        % FOLDERHASDATA  True if a folder directly contains a loadable file.
-            tf   = false;
-            exts = app.dataFileExts();
-            for ei = 1:numel(exts)
-                if ~isempty(dir(fullfile(folder, exts{ei})))
-                    tf = true;
-                    return
-                end
-            end
+            app.filePaths   = fullPaths;
+            app.file        = labels;
+            app.NSelecFiles = numel(fullPaths);
+            app.SelectedFilesListBox.Items = labels;
+
+            setpref('nestapp', 'lastDataFolder', parents{1});
+            pushRecent(app, 'recentFiles', parents{1});
+            buildRecentFilesMenu(app);
+            updateStatusBar(app);
+
+            fprintf('[nestapp] Queued %d file(s) from %d folder(s).\n', ...
+                numel(fullPaths), numel(uniqueParents));
         end
 
         function exts = dataFileExts(~)
         % DATAFILEEXTS  Glob patterns for the data formats nestapp loads.
             exts = {'*.set', '*.vhdr', '*.cdt', '*.cnt'};
-        end
-
-        function gatherFromFolders(app, folders)
-        % GATHERFROMFOLDERS  Build the flat file queue from a set of folders.
-        %   Collects every .set/.vhdr/.cdt/.cnt file directly inside each
-        %   folder (non-recursive). Display labels keep the parent-folder
-        %   name so same-named files from different subjects stay distinct
-        %   in the listbox. Sets app.filePaths as the run source of truth.
-            exts   = app.dataFileExts();
-            paths  = {};
-            labels = {};
-            for fi = 1:numel(folders)
-                folder = folders{fi};
-                [~, folderName] = fileparts(folder);
-                for ei = 1:numel(exts)
-                    hits = dir(fullfile(folder, exts{ei}));
-                    for hi = 1:numel(hits)
-                        if hits(hi).isdir; continue; end
-                        paths{end+1}  = fullfile(folder, hits(hi).name); %#ok<AGROW>
-                        labels{end+1} = [folderName '/' hits(hi).name];  %#ok<AGROW>
-                    end
-                end
-            end
-
-            if isempty(paths)
-                uialert(app.UIFigure, ...
-                    'No .set/.vhdr/.cdt/.cnt files were found in the selected folders.', ...
-                    'No Data Files');
-                return
-            end
-
-            app.filePaths   = paths;
-            app.file        = labels;   % shown in the listbox
-            app.path        = '';       % files span folders - no single path
-            app.NSelecFiles = numel(paths);
-            app.SelectedFilesListBox.Items = labels;
-
-            setpref('nestapp', 'lastDataFolder', fileparts(folders{1}));
-            pushRecent(app, 'recentFiles', fileparts(folders{1}));
-            buildRecentFilesMenu(app);
-            updateStatusBar(app);
-
-            fprintf('[nestapp] Queued %d file(s) from %d folder(s).\n', ...
-                numel(paths), numel(folders));
         end
 
         % Button pushed function: ReStartStepsButton
