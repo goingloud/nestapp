@@ -1278,7 +1278,10 @@ classdef nestapp < matlab.apps.AppBase
                 eeglab('nogui');
             end
             for nfile = 1:numel(app.SelectedFilesforTEP)
-                EEGaux = pop_loadset('filename', app.SelectedFilesforTEP{nfile}, 'filepath', app.PathofSelectedFilesforTEP);
+                % SelectedFilesforTEP holds full paths; split for pop_loadset
+                % so files from different folders all load correctly.
+                [fp, nm, ex] = fileparts(app.SelectedFilesforTEP{nfile});
+                EEGaux = pop_loadset('filename', [nm ex], 'filepath', fp);
                 app.EEGofAllSelectedFiles{nfile} = EEGaux;
                 app.EEGtime = EEGaux.times;
             end
@@ -2041,19 +2044,20 @@ classdef nestapp < matlab.apps.AppBase
         function UseCurrentlyCleanedDataCheckBoxValueChanged(app, ~)
             value = app.UseCurrentlyCleanedDataCheckBox.Value;
             if value
+                % app.path is only set for a single-folder cleaning run; the
+                % cleaned .set files land next to their source with the
+                % cleanedName suffix. Build their full paths and feed the
+                % same list setter the browser uses.
                 if ~isempty(app.path) && ~isempty(app.cleanedName)
-                    app.FilesListBox.Items = {};
-                    for nn=1:app.NSelecFiles
-                        dots = find(ismember(app.file{nn},'.'));
-                        fname=[app.file{nn}(1:dots(end)-1),'_',app.cleanedName,'.set'];
-                        app.TEPfiles{nn} = fname;
-                        app.PathofSelectedFilesforTEP = app.path;
-                        app.FolderEditField_2.Value = app.PathofSelectedFilesforTEP;
-
+                    cleanedPaths = cell(1, app.NSelecFiles);
+                    for nn = 1:app.NSelecFiles
+                        base = app.file{nn};
+                        dots = find(ismember(base, '.'));
+                        if isempty(dots), stem = base; else, stem = base(1:dots(end)-1); end
+                        cleanedPaths{nn} = fullfile(app.path, [stem '_' app.cleanedName '.set']);
                     end
-                    app.FilesListBox.Items =  app.TEPfiles';
+                    setTEPFileList(app, cleanedPaths);
                     app.TEPCreated = false;  % file selection changed - existing plot is stale
-
                 elseif ~isempty(app.FilesListBox.Items)
                     warning('No files have been cleaned recently. Try selecting files!')
                 end
@@ -2067,55 +2071,103 @@ classdef nestapp < matlab.apps.AppBase
 
         % Button pushed function: SelectDataButton_2
         function SelectDataButton_2Pushed(app, ~)
-            try
-                [app.TEPfiles,app.PathofSelectedFilesforTEP] = uigetfile( ...
-                    {'*.set',...
-                    'Data Files (*.set)'; ...
-                    '*.set','Set Files (*.set)'} , ...
-                    'Select File(s)','multiSelect','on');
-                if iscell(app.TEPfiles)
-                    app.NumberOfSelecFilesforTEP = numel(app.TEPfiles);
-                else
-                    app.NSelecFiles = 1;
-                    app.TEPfiles = {app.TEPfiles};
-                end
-
-                % Invalidate EEG cache - new files mean stale loaded data must be discarded.
-                app.EEG_SelectedTEPFiles_Loaded = false;
-                app.EEGofAllSelectedFiles = {};
-
-                % app.FileEditField_2.Value = app.TEPfiles{1};
-                app.FolderEditField_2.Value = app.PathofSelectedFilesforTEP;
-                app.FilesListBox.Items =  app.TEPfiles';
-                app.TOPOPLOTButton.Enable = 'on';
-                app.ExportTEPFigureButton.Enable = "on";
-                app.PLOTTEPButton.Enable = "on";
-                app.PlotEEGdataButton.Enable = 'on';
-                app.EEGDatasetDropDown.Enable = "on";
-            catch
-                warning('Please select at least one file!')
-                if isempty(app.FilesListBox.Items)
-                    app.FolderEditField_2.Value = '';
-                    app.TOPOPLOTButton.Enable = 'off';
-                    app.ExportTEPFigureButton.Enable = "off";
-                    app.PLOTTEPButton.Enable = "off";
-                    app.PlotEEGdataButton.Enable = 'off';
-                    app.EEGDatasetDropDown.Enable = "off";
-                end
+            % Same folder-tree browser as the Cleaning tab, so cleaned .set
+            % files can be picked across many subject folders for plotting.
+            startFolder = getpref('nestapp', 'lastDataFolder', '');
+            if isempty(startFolder) && ~isempty(app.PathofSelectedFilesforTEP)
+                startFolder = app.PathofSelectedFilesforTEP;
             end
+            paths = selectDataTree(startFolder, {'*.set'});
+            if isempty(paths); return; end
+            setTEPFileList(app, paths);
+            if isvalid(app.UIFigure); figure(app.UIFigure); end
+        end
+
+        function setTEPFileList(app, fullPaths)
+        % SETTEPFILELIST  Populate the Visualize-tab file list from full paths.
+        %   Mirrors the Cleaning tab's setFileQueue. The listbox shows
+        %   readable labels (basename, or parentFolder/basename when the
+        %   selection spans folders) while its ItemsData carries the full
+        %   path, so loading / TEP extraction work regardless of which
+        %   folders the files came from.
+            fullPaths = fullPaths(:)';
+            if isempty(fullPaths); return; end
+
+            parents       = cellfun(@fileparts, fullPaths, 'UniformOutput', false);
+            uniqueParents = unique(parents);
+            labels        = cell(1, numel(fullPaths));
+            if isscalar(uniqueParents)
+                for i = 1:numel(fullPaths)
+                    [~, nm, ex] = fileparts(fullPaths{i});
+                    labels{i}   = [nm ex];
+                end
+                app.PathofSelectedFilesforTEP = uniqueParents{1};
+                app.FolderEditField_2.Value   = uniqueParents{1};
+            else
+                for i = 1:numel(fullPaths)
+                    [folder, nm, ex] = fileparts(fullPaths{i});
+                    [~, folderName]  = fileparts(folder);
+                    labels{i}        = [folderName '/' nm ex];
+                end
+                app.PathofSelectedFilesforTEP = '';   % files span folders
+                app.FolderEditField_2.Value   = sprintf('(%d folders)', numel(uniqueParents));
+            end
+
+            app.TEPfiles                 = labels;
+            app.NumberOfSelecFilesforTEP = numel(fullPaths);
+            app.FilesListBox.Value       = {};          % clear before swapping items
+            app.FilesListBox.Items       = labels;
+            app.FilesListBox.ItemsData   = fullPaths;   % selections carry full paths
+
+            % New file set - drop any cached selection / loaded EEG.
+            app.SelectedFilesforTEP         = {};
+            app.EEGofAllSelectedFiles       = {};
+            app.EEG_SelectedTEPFiles_Loaded = false;
+            app.SelectAllCheckBox.Value     = 0;
+            refreshTEPDropdown(app);
+
+            setpref('nestapp', 'lastDataFolder', parents{1});
+
+            app.TOPOPLOTButton.Enable        = 'on';
+            app.ExportTEPFigureButton.Enable = "on";
+            app.PLOTTEPButton.Enable         = "on";
+            app.PlotEEGdataButton.Enable     = 'on';
+            app.EEGDatasetDropDown.Enable    = "on";
+        end
+
+        function refreshTEPDropdown(app)
+        % REFRESHTEPDROPDOWN  Sync the per-file dropdown to the current
+        %   selection. Items show basenames; ItemsData carries full paths
+        %   so EEGDatasetDropDown.Value matches SelectedFilesforTEP.
+            sel = app.SelectedFilesforTEP;
+            if isempty(sel)
+                app.EEGDatasetDropDown.Items     = {};
+                app.EEGDatasetDropDown.ItemsData = {};
+                return
+            end
+            if ~iscell(sel); sel = {sel}; end
+            names = cell(1, numel(sel));
+            for i = 1:numel(sel)
+                [~, nm, ex] = fileparts(sel{i});
+                names{i}    = [nm ex];
+            end
+            app.EEGDatasetDropDown.Items     = names;
+            app.EEGDatasetDropDown.ItemsData = sel;
         end
 
         % Value changed function: FilesListBox
         function FilesListBoxValueChanged(app, event)
             app.EEG_SelectedTEPFiles_Loaded = false;
-            app.EEGofAllSelectedFiles = []; % Every time the new file is checked clear the all loaded EEG data
-            if ~isempty(event.Value) || event.Value ~= 0
-                % fname = event.Value;
-                % ind = event.ValueIndex;
-                app.SelectedFilesforTEP = event.Value;
+            app.EEGofAllSelectedFiles = {}; % new selection - clear cached EEG
+            sel = event.Value;              % ItemsData = full paths
+            if isempty(sel)
+                app.SelectedFilesforTEP = {};
+            else
+                if ~iscell(sel); sel = {sel}; end
+                app.SelectedFilesforTEP = sel;
                 app.SelectAllCheckBox.Value = 0;
             end
-            app.EEGDatasetDropDown.Items = app.SelectedFilesforTEP;
+            refreshTEPDropdown(app);
         end
 
         % Button pushed function: TOPOPLOTButton
@@ -2129,13 +2181,17 @@ classdef nestapp < matlab.apps.AppBase
         function SelectAllCheckBoxValueChanged(app, ~)
             value = app.SelectAllCheckBox.Value;
             if value
-                app.SelectedFilesforTEP = app.TEPfiles;
-                app.FilesListBox.ValueIndex = 1:max(size(app.TEPfiles));
-                % ind = app.FilesListBox.ValueIndex;
+                % ItemsData holds the full paths for every listed file.
+                app.SelectedFilesforTEP = app.FilesListBox.ItemsData;
+                app.FilesListBox.Value  = app.FilesListBox.ItemsData;
             else
-                app.SelectedFilesforTEP = [];
-                app.FilesListBox.ValueIndex = [];
+                app.SelectedFilesforTEP = {};
+                app.FilesListBox.Value  = {};
             end
+            % Selection changed - invalidate cached EEG and resync dropdown.
+            app.EEG_SelectedTEPFiles_Loaded = false;
+            app.EEGofAllSelectedFiles = {};
+            refreshTEPDropdown(app);
         end
 
         % Value changed function: DontfindcommonelectrodesCheckBox
@@ -2321,8 +2377,9 @@ classdef nestapp < matlab.apps.AppBase
             if isequal(fname, 0); return; end
             csvPath = fullfile(fpath, fname);
 
-            tepPaths = cellfun(@(f) fullfile(app.PathofSelectedFilesforTEP, f), ...
-                app.SelectedFilesforTEP, 'UniformOutput', false);
+            % SelectedFilesforTEP already holds full paths (may span folders).
+            tepPaths = app.SelectedFilesforTEP;
+            if ~iscell(tepPaths); tepPaths = {tepPaths}; end
 
             d = uiprogressdlg(app.UIFigure, ...
                 'Title',          'Extracting TEP Peaks', ...
