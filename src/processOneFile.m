@@ -689,8 +689,20 @@ for si = 1:nSteps
                         vars{nInd} = vars{nInd}';
                     end
                 end
+                % pop_tesa_compselect classifies AND removes (its internal
+                % pop_subcomp reduces EEG.icawinv to survivors). Grab the
+                % full decomposition now so the QC snapshot can show every
+                % component and which TESA flagged for removal.
+                tesaPreWinv = EEG.icawinv;
+                tesaPreChan = EEG.chanlocs;
+                tesaPreCind = EEG.icachansind;
                 EEG = pop_tesa_compselect( EEG,vars{:});
                 EEG = eeg_checkset( EEG );
+                tesaSnap = tesaICASnapshot(EEG, tesaPreWinv, ...
+                    tesaPreChan, tesaPreCind, si, stepName);
+                if isstruct(tesaSnap) && ~isempty(fieldnames(tesaSnap))
+                    latestICASnapshot = tesaSnap;   % keep prior snap if this failed
+                end
 
             case 'Find Artifacts EDM (TESA)'
                 vars = convertContainedStringsToChars(varin);
@@ -1186,6 +1198,58 @@ end
 function codes = tesaICAClassCodes()
 % TESA compClass integer codes, matched positionally to tesaICACategories().
 codes = [3, 4, 5, 6, 7, 8, 2];
+end
+
+function snap = tesaICASnapshot(EEG, preWinv, preChan, preCind, stepIdx, stepName)
+% TESAICASNAPSHOT  Pre-removal ICA snapshot from TESA compselect output.
+%   pop_tesa_compselect stores per-component classes in EEG.icaCompClass
+%   (full set) and removes the flagged ones via an internal pop_subcomp.
+%   preWinv is the decomposition captured BEFORE that call, so it still
+%   holds every component and aligns with the full compClass vector. The
+%   returned struct matches what renderQualityFigure's buildICAView wants.
+snap = struct([]);
+if ~isfield(EEG, 'icaCompClass') || ~isstruct(EEG.icaCompClass) || ...
+        isempty(fieldnames(EEG.icaCompClass))
+    return
+end
+keys = fieldnames(EEG.icaCompClass);
+cl   = EEG.icaCompClass.(keys{end});
+if ~isfield(cl, 'compClass') || isempty(cl.compClass)
+    return
+end
+codes = cl.compClass(:)';
+n     = numel(codes);
+if isempty(preWinv) || size(preWinv, 2) ~= n
+    return   % can't align topos with classes - skip rather than mislabel
+end
+
+snap = struct();
+snap.icawinv      = preWinv;
+snap.chanlocs     = preChan;
+snap.icachansind  = preCind;
+snap.rejMask      = codes > 1;                 % code 1 = Keep
+snap.classLabels  = tesaCompClassLabels(codes);
+snap.source       = 'TESA';
+if isfield(cl, 'compVars') && numel(cl.compVars) >= n
+    snap.compVarPct = double(reshape(cl.compVars(1:n), 1, []));
+end
+snap.capturedStep = stepIdx;
+snap.capturedName = stepName;
+end
+
+function labels = tesaCompClassLabels(codes)
+% TESACOMPCLASSLABELS  Map TESA compClass codes (1..8) to display labels.
+%   Codes mirror pop_tesa_compselect; the strings line up with the colour
+%   families in renderQualityFigure/classColor.
+map    = {'Keep','Reject','TMS Muscle','Blink','Eye Move','Muscle', ...
+          'Elec Noise','Sensory'};
+labels = repmat({'Reject'}, 1, numel(codes));
+for k = 1:numel(codes)
+    c = codes(k);
+    if c >= 1 && c <= numel(map)
+        labels{k} = map{c};
+    end
+end
 end
 
 

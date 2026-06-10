@@ -314,7 +314,9 @@ tf = isstruct(snap) && ~isempty(fieldnames(snap)) ...
 end
 
 function src = snapshotSource(snap)
-if isfield(snap, 'iclabelProbs') && ~isempty(snap.iclabelProbs)
+if isfield(snap, 'source') && ~isempty(snap.source)
+    src = snap.source;                       % caller-declared (e.g. 'TESA')
+elseif isfield(snap, 'iclabelProbs') && ~isempty(snap.iclabelProbs)
     src = 'ICLabel';
 elseif isfield(snap, 'classLabels') && ~isempty(snap.classLabels)
     src = 'Flags';

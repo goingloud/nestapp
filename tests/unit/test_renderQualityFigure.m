@@ -95,6 +95,22 @@ classdef test_renderQualityFigure < matlab.unittest.TestCase
             tc.verifyGreaterThan(d.bytes, 10000);
         end
 
+        function tesa_style_snapshot_renders(tc)
+            % TESA snapshot uses per-comp classLabels + an explicit source,
+            % not ICLabel probabilities. Confirm the renderer honours both.
+            EEG  = test_renderQualityFigure.makeEpochedEEG(12, 20, 400, 1000);
+            snap = test_renderQualityFigure.makeICASnapshot(12, 8, [3 5]);
+            snap = rmfield(snap, {'iclabelProbs', 'iclabelClasses'});
+            lbl = repmat({'Keep'}, 1, 8);
+            lbl{3} = 'TMS Muscle'; lbl{5} = 'Eye Move';
+            snap.classLabels = lbl;
+            snap.source      = 'TESA';
+            outPath = fullfile(tempdir, ['qc_tesa_', char(matlab.lang.internal.uuid()), '.png']);
+            tc.addTeardown(@() safeDelete(outPath));
+            renderQualityFigure(EEG, outPath, struct('icaSnapshot', snap));
+            tc.verifyTrue(exist(outPath, 'file') == 2);
+        end
+
         function creates_missing_parent_dir(tc)
             EEG = test_renderQualityFigure.makeEpochedEEG(8, 10, 500, 1000);
             nestedDir = fullfile(tempdir, ['qc_nested_', char(matlab.lang.internal.uuid())]);
