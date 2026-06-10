@@ -27,6 +27,31 @@ classdef test_renderQualityFigure < matlab.unittest.TestCase
             EEG.pnts    = nPnts;
             EEG.chanlocs = struct('X',{},'Y',{},'Z',{},'labels',{});
         end
+
+        function snap = makeICASnapshot(nCh, nComp, rejIdx)
+            % Mimic the pre-rejection snapshot processOneFile captures
+            % before pop_subcomp: full decomposition + reject flags + size.
+            snap.icawinv = randn(nCh, nComp);
+            th = linspace(0, 330, nCh);
+            chan = struct('labels',{},'theta',{},'radius',{},'X',{},'Y',{},'Z',{});
+            for c = 1:nCh
+                chan(c).labels = sprintf('E%d', c);
+                chan(c).theta  = th(c); chan(c).radius = 0.45;
+                chan(c).X = cosd(th(c)); chan(c).Y = sind(th(c)); chan(c).Z = 0.2;
+            end
+            snap.chanlocs    = chan;
+            snap.icachansind = 1:nCh;
+            rej = false(1, nComp); rej(rejIdx) = true;
+            snap.rejMask     = rej;
+            snap.compVarPct  = linspace(20, 1, nComp);  % descending size
+            P = zeros(nComp, 7); P(:,1) = 0.9;          % Brain by default
+            for r = rejIdx, P(r,:) = 0; P(r,3) = 0.9; end  % rejected = Eye
+            snap.iclabelProbs   = P;
+            snap.iclabelClasses = {'Brain','Muscle','Eye','Heart', ...
+                'Line Noise','Channel Noise','Other'};
+            snap.capturedStep = 14;
+            snap.capturedName = 'Remove Flagged ICA Components';
+        end
     end
 
     methods (Test)
@@ -54,6 +79,20 @@ classdef test_renderQualityFigure < matlab.unittest.TestCase
             tc.verifyTrue(exist(outPath, 'file') == 2);
             d = dir(outPath);
             tc.verifyGreaterThan(d.bytes, 5000);
+        end
+
+        function snapshot_panel_renders_with_cap(tc)
+            % 30-component pre-rejection snapshot, cap 25, with a small
+            % rejected IC (#28) that must survive the size cap. Exercises
+            % buildICAView / metricsFromSnapshot / pickDisplayOrder.
+            EEG  = test_renderQualityFigure.makeEpochedEEG(12, 20, 400, 1000);
+            snap = test_renderQualityFigure.makeICASnapshot(12, 30, [5 6 28]);
+            outPath = fullfile(tempdir, ['qc_snap_', char(matlab.lang.internal.uuid()), '.png']);
+            tc.addTeardown(@() safeDelete(outPath));
+            renderQualityFigure(EEG, outPath, struct('icaSnapshot', snap, 'maxICs', 25));
+            tc.verifyTrue(exist(outPath, 'file') == 2);
+            d = dir(outPath);
+            tc.verifyGreaterThan(d.bytes, 10000);
         end
 
         function creates_missing_parent_dir(tc)

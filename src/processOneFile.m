@@ -84,6 +84,7 @@ end
 ICA_Rejected_Comp = {};
 interpElecs       = {};
 pendingICAStats   = struct();
+latestICASnapshot = struct([]);   % most recent pre-rejection ICA state for QC
 histLenBefore     = 0;
 
 nSteps = numel(spec);
@@ -526,6 +527,24 @@ for si = 1:nSteps
                 % to a category even without ICLabel.
                 if isfield(EEG,'etc') && isfield(EEG.etc,'nestappICClass')
                     pendingICAStats.classLabels = EEG.etc.nestappICClass;
+                end
+
+                % Render-ready snapshot of the FULL pre-rejection
+                % decomposition so the QC figure can show every component
+                % and which were rejected - pop_subcomp below deletes the
+                % flagged ones. Topos + size + labels only (no .data), so
+                % it stays small and serialises across parfor workers.
+                latestICASnapshot = pendingICAStats;
+                latestICASnapshot.icawinv     = EEG.icawinv;
+                latestICASnapshot.chanlocs    = EEG.chanlocs;
+                latestICASnapshot.icachansind = EEG.icachansind;
+                latestICASnapshot.capturedStep = si;
+                latestICASnapshot.capturedName = stepName;
+                if isfield(EEG,'etc') && isfield(EEG.etc,'ic_classification') && ...
+                        isfield(EEG.etc.ic_classification,'ICLabel') && ...
+                        isfield(EEG.etc.ic_classification.ICLabel,'classes')
+                    latestICASnapshot.iclabelClasses = ...
+                        EEG.etc.ic_classification.ICLabel.classes;
                 end
 
                 if ~(isnumeric(EEG.reject.gcompreject) || islogical(EEG.reject.gcompreject))
@@ -996,6 +1015,10 @@ for si = 1:nSteps
                     'size',      [1600 1200]);
                 qcOpts.panels = struct('attribMatrix',true,'icaGrid',true, ...
                                        'butterfly',true,'psd',true);
+                % Most recent pre-rejection ICA state - lets the ICA panel
+                % show all components (rejected ones marked) instead of the
+                % post-pop_subcomp survivors sitting in the live EEG.
+                qcOpts.icaSnapshot = latestICASnapshot;
                 % Hand rejected-trial info to the renderer so the
                 % heatmap can show gaps + red bars at the original
                 % positions of removed epochs.
