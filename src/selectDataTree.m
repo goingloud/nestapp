@@ -365,7 +365,21 @@ function selected = selectDataTree(startFolder, exts)
     % Recursively gather every loadable file under a folder on disk. Used
     % when a folder checkbox cascades to files that may not be materialised.
     function files = collectLoadableUnder(folder)
-        files = scanLoadableFiles(folder, exts);
+        % Files a folder-checkbox should cascade to. With a filter active,
+        % cascade ONLY to the files currently visible under the folder (the
+        % ones matching the filter) - not everything on disk - so checking a
+        % folder queues exactly what the user sees. Unfiltered, cascade to
+        % every loadable file beneath it.
+        query = strtrim(searchField.Value);
+        if isempty(query)
+            files = scanLoadableFiles(folder, exts);
+            return
+        end
+        if ~ensureScanned(); files = {}; return; end
+        prefix      = [folder filesep];
+        underFolder = startsWith(allFiles, prefix);
+        matches     = contains(allRelLower, lower(query));   % allRelLower is lowercased
+        files       = allFiles(underFolder & matches);
     end
 
     % Depth-first list of all materialised file nodes in the tree.
