@@ -207,6 +207,7 @@ classdef nestapp < matlab.apps.AppBase
         tepComponentDefs = struct([]) % component window definitions used by tepPeakFinder
         allPipelineReports = {}    % cell array of report entry structs from current session
         loadedReports      = {}    % cell array of report entry structs loaded from disk
+        reportsLoadFolder  = ''    % folder the loaded reports were read from (for Refresh)
         preSelectedChanFile = ''   % channel location file selected once before a run
         ParallelCheckBox           % uicheckbox - enable parallel participant processing
 
@@ -984,21 +985,23 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         function LoadReportsButtonPushed(app, ~)
-        % Browse for a folder containing *_report_*.mat files and load them.
+        % Browse for a folder of pipeline report .mat files and load them.
             folder = uigetdir(getpref('nestapp','lastDataFolder',''), ...
                 'Select Folder with Pipeline Reports');
             if isequal(folder, 0); return; end
 
-            matFiles = dir(fullfile(folder, '*_report_*.mat'));
+            matFiles = findReportMatFiles(app, folder);
             if isempty(matFiles)
-                uialert(app.UIFigure, 'No *_report_*.mat files found in that folder.', ...
-                    'No Reports Found');
+                uialert(app.UIFigure, ...
+                    ['No report .mat files (*_report.mat) found in that ' ...
+                     'folder or its subfolders.'], 'No Reports Found');
                 return
             end
+            app.reportsLoadFolder = folder;
 
             loaded = 0;
             for k = 1:numel(matFiles)
-                fpath = fullfile(folder, matFiles(k).name);
+                fpath = fullfile(matFiles(k).folder, matFiles(k).name);
                 try
                     S = load(fpath, 'pipelineReport');
                     if ~isfield(S, 'pipelineReport'); continue; end
@@ -1023,23 +1026,17 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         function RefreshReportsButtonPushed(app, ~)
-        % Reload reports from disk for any loadedReports entries, then refresh tab.
-            if isempty(app.loadedReports)
-                updateReportsTabImpl(app);
-                return
-            end
-            % Re-derive the folder from the first loaded report
-            firstPath = app.loadedReports{1}.report.inputFile;
-            folder = fileparts(firstPath);
-            if ~isfolder(folder)
-                updateReportsTabImpl(app);
+        % Reload the disk reports from the folder they were loaded from.
+            folder = app.reportsLoadFolder;
+            if isempty(folder) || ~isfolder(folder)
+                updateReportsTabImpl(app);   % nothing loaded from disk - just refresh
                 return
             end
             % Clear disk-loaded reports and reload
             app.loadedReports = {};
-            matFiles = dir(fullfile(folder, '*_report_*.mat'));
+            matFiles = findReportMatFiles(app, folder);
             for k = 1:numel(matFiles)
-                fpath = fullfile(folder, matFiles(k).name);
+                fpath = fullfile(matFiles(k).folder, matFiles(k).name);
                 try
                     S = load(fpath, 'pipelineReport');
                     if ~isfield(S, 'pipelineReport'); continue; end
@@ -1051,6 +1048,19 @@ classdef nestapp < matlab.apps.AppBase
                 end
             end
             updateReportsTabImpl(app);
+        end
+
+        function matFiles = findReportMatFiles(~, folder)
+        % FINDREPORTMATFILES  Pipeline report .mat files under a folder.
+        %   Matches BOTH names reportArtifactName emits: "<base>_report.mat"
+        %   (overwriteReports on) and "<base>_report_<timestamp>.mat" (off) -
+        %   the old '*_report_*.mat' glob silently missed the first form. The
+        %   search recurses, so pointing at a batch folder, its reports/
+        %   subfolder, or a parent all find the reports.
+            matFiles = dir(fullfile(folder, '**', '*_report*.mat'));
+            if ~isempty(matFiles)
+                matFiles = matFiles(~[matFiles.isdir]);
+            end
         end
 
         function ExportReportsCSVButtonPushed(app, ~)
