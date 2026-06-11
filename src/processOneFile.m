@@ -897,9 +897,7 @@ for si = 1:nSteps
             end
             fileReport.channels.final = EEG.nbchan;
             if nChanAfter < nChanBefore
-                if any(strcmp(stepName, {'Remove Bad Channels','Remove un-needed Channels', ...
-                        'Automatic Cleaning Data','Clean Artifacts', ...
-                        'Automatic Continuous Rejection'}))
+                if any(strcmp(stepName, channelRejectionSteps()))
                     fileReport.channels.nRejected = fileReport.channels.nRejected + ...
                         (nChanBefore - nChanAfter);
                 end

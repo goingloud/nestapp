@@ -106,6 +106,20 @@ testCase.verifyTrue(contains(lower(txt), 'interpolat'), ...
     'Methods text must mention interpolation when channels were interpolated');
 end
 
+function test_artistBadChannels_countedAsRejected(testCase)
+% BUG: "Remove Bad Channels (ARTIST)" pop_select-removes RANSAC bad channels
+%      (reducing nbchan) but was absent from the channel-rejection step list,
+%      so processOneFile never added them to channels.nRejected - the ARTIST
+%      pipeline under-counted rejected channels in the session summary.
+% FIX: channelRejectionSteps() includes the ARTIST step, counted the same as
+%      the standard "Remove Bad Channels".
+names = channelRejectionSteps();
+testCase.verifyTrue(ismember('Remove Bad Channels (ARTIST)', names), ...
+    'ARTIST bad-channel removal must count toward channels.nRejected');
+testCase.verifyTrue(ismember('Remove Bad Channels', names), ...
+    'Standard bad-channel removal must remain a counted rejection step');
+end
+
 % ── No input() in nestapp.m ───────────────────────────────────────────────
 
 function test_noInputCallsInNestapp(testCase)
@@ -162,17 +176,18 @@ end
 function test_selectDataButton2ResetsEEGLoaded(testCase)
 % BUG: EEG_SelectedTEPFiles_Loaded was never reset on new file selection,
 %      so the old EEG data was silently reused.
-% FIX: SelectDataButton_2Pushed resets the flag.
+% FIX: a new Visualize-tab selection (SelectDataButton_2Pushed ->
+%      setTEPFileList -> applyTEPSelection) resets the flag. The reset now
+%      lives in applyTEPSelection, the one place every selection change funnels
+%      through, so verify it there.
 src = fileread(nestappFile());
-% Find the SelectDataButton_2 callback body and check it contains the reset
-idx = strfind(src, 'SelectDataButton_2Pushed');
-testCase.verifyFalse(isempty(idx), 'SelectDataButton_2Pushed must exist in nestapp.m');
-% Extract a window of text after the callback definition
-window = src(idx(1):min(idx(1)+2000, numel(src)));
+idx = strfind(src, 'function applyTEPSelection');
+testCase.verifyFalse(isempty(idx), 'applyTEPSelection must exist in nestapp.m');
+window = src(idx(1):min(idx(1)+800, numel(src)));
 testCase.verifyTrue( ...
     contains(window, 'EEG_SelectedTEPFiles_Loaded') && ...
     (contains(window, '= false') || contains(window, '= 0')), ...
-    'SelectDataButton_2Pushed must reset EEG_SelectedTEPFiles_Loaded');
+    'applyTEPSelection must reset EEG_SelectedTEPFiles_Loaded on a new selection');
 end
 
 % ── Dynamic button access guard ───────────────────────────────────────────
