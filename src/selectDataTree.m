@@ -44,11 +44,19 @@ function selected = selectDataTree(startFolder, exts)
     % ---- build the window ----------------------------------------------
     fig = uifigure('Name', 'Select Data Files', ...
         'Position', [200 140 760 600], 'Resize', 'off');
+    % Keep the browser above the main window (not WindowStyle='modal',
+    % whose close button is unreliable).
     try
-        fig.WindowStyle = 'modal';   % keep the browser on top
+        fig.WindowStyle = 'alwaysontop';
     catch
     end
-    fig.CloseRequestFcn = @(~,~) onCancel();
+    % Close handling: every exit path simply DELETES the figure, and the
+    % bottom of this function blocks on waitfor(fig) (which returns the
+    % moment the figure is destroyed). This avoids uiwait/uiresume, whose
+    % close-on-X path could leave the window up and soft-lock the app. The
+    % X uses a plain delete so it can never be vetoed by a callback error;
+    % "selected" keeps its default {} (cancel) when the window is X-ed.
+    fig.CloseRequestFcn = @(src, ~) delete(src);
 
     uilabel(fig, 'Text', 'Parent folder:', 'Position', [15 562 85 22]);
     parentField = uieditfield(fig, 'text', 'Editable', 'off', ...
@@ -85,8 +93,15 @@ function selected = selectDataTree(startFolder, exts)
         onChoose();
     end
 
-    uiwait(fig);
-    if isvalid(fig); delete(fig); end
+    waitfor(fig);   % blocks until a button or the X deletes the figure
+
+    % Remember the browse ROOT (the data folder), not the subfolder the
+    % chosen files sit in, so the next open returns here and the Preferences
+    % "Data folder" setting is respected rather than clobbered. Only on a
+    % confirmed selection - cancelling/X leaves the setting untouched.
+    if ~isempty(selected) && ~isempty(parentDir) && isfolder(parentDir)
+        setpref('nestapp', 'lastDataFolder', parentDir);
+    end
 
     % ====================================================================
     %  Folder choice / (re)build
@@ -330,12 +345,12 @@ function selected = selectDataTree(startFolder, exts)
             return
         end
         selected = sort(keys(checkedSet));
-        uiresume(fig);
+        delete(fig);            % releases waitfor and closes the window
     end
 
     function onCancel()
         selected = {};
-        uiresume(fig);
+        delete(fig);
     end
 
     function updateCount()

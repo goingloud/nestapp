@@ -185,11 +185,9 @@ classdef nestapp < matlab.apps.AppBase
         originalSize     % [w h] of UIFigure at creation - used by UIFigureSizeChanged
         clickedItem = [];
         doubleClicked = 0;
-        TEPfiles % File list for calculating TEPs
-        
+
         % Tab Visualizing
         PathofSelectedFilesforTEP
-        NumberOfSelecFilesforTEP
         SelectedFilesforTEP % Selected files to plot the TEP
         Common_Labels % Commong electrod name among files
         ROIelecsLabels % Selected electrodes as Region of Interest
@@ -1693,22 +1691,11 @@ classdef nestapp < matlab.apps.AppBase
             fullPaths = fullPaths(:)';
             if isempty(fullPaths); return; end
 
-            parents       = cellfun(@fileparts, fullPaths, 'UniformOutput', false);
-            uniqueParents = unique(parents);
-            labels        = cell(1, numel(fullPaths));
+            [labels, uniqueParents, parents] = buildFileLabels(app, fullPaths);
             if isscalar(uniqueParents)
                 app.path = uniqueParents{1};
-                for i = 1:numel(fullPaths)
-                    [~, nm, ex] = fileparts(fullPaths{i});
-                    labels{i}   = [nm ex];
-                end
             else
                 app.path = '';   % files span folders - no single path
-                for i = 1:numel(fullPaths)
-                    [folder, nm, ex] = fileparts(fullPaths{i});
-                    [~, folderName]  = fileparts(folder);
-                    labels{i}        = [folderName '/' nm ex];
-                end
             end
 
             app.filePaths   = fullPaths;
@@ -1716,7 +1703,8 @@ classdef nestapp < matlab.apps.AppBase
             app.NSelecFiles = numel(fullPaths);
             app.SelectedFilesListBox.Items = labels;
 
-            setpref('nestapp', 'lastDataFolder', parents{1});
+            % Note: the "Data folder" pref (lastDataFolder) is updated by
+            % selectDataTree to the browse root, not clobbered to a subfolder.
             pushRecent(app, 'recentFiles', parents{1});
             buildRecentFilesMenu(app);
             updateStatusBar(app);
@@ -1728,6 +1716,30 @@ classdef nestapp < matlab.apps.AppBase
         function exts = dataFileExts(~)
         % DATAFILEEXTS  Glob patterns for the data formats nestapp loads.
             exts = {'*.set', '*.vhdr', '*.cdt', '*.cnt'};
+        end
+
+        function [labels, uniqueParents, parents] = buildFileLabels(~, fullPaths)
+        % BUILDFILELABELS  Display labels for a flat list of full file paths.
+        %   Basenames when every file shares one folder; parentFolder/basename
+        %   when the list spans folders, so same-named files from different
+        %   subjects stay distinguishable. Also returns the unique parent
+        %   folders (callers use the count / common path) and each file's
+        %   parent. Shared by the Cleaning (setFileQueue) and Visualize
+        %   (setTEPFileList) tabs so the labelling rule lives in one place.
+            [parents, names, exts] = cellfun(@fileparts, fullPaths, ...
+                'UniformOutput', false);
+            uniqueParents = unique(parents);
+            labels = cell(1, numel(fullPaths));
+            if isscalar(uniqueParents)
+                for i = 1:numel(fullPaths)
+                    labels{i} = [names{i} exts{i}];
+                end
+            else
+                for i = 1:numel(fullPaths)
+                    [~, folderName] = fileparts(parents{i});
+                    labels{i}       = [folderName '/' names{i} exts{i}];
+                end
+            end
         end
 
         % Button pushed function: ReStartStepsButton
@@ -2093,40 +2105,23 @@ classdef nestapp < matlab.apps.AppBase
             fullPaths = fullPaths(:)';
             if isempty(fullPaths); return; end
 
-            parents       = cellfun(@fileparts, fullPaths, 'UniformOutput', false);
-            uniqueParents = unique(parents);
-            labels        = cell(1, numel(fullPaths));
+            [labels, uniqueParents] = buildFileLabels(app, fullPaths);
             if isscalar(uniqueParents)
-                for i = 1:numel(fullPaths)
-                    [~, nm, ex] = fileparts(fullPaths{i});
-                    labels{i}   = [nm ex];
-                end
                 app.PathofSelectedFilesforTEP = uniqueParents{1};
                 app.FolderEditField_2.Value   = uniqueParents{1};
             else
-                for i = 1:numel(fullPaths)
-                    [folder, nm, ex] = fileparts(fullPaths{i});
-                    [~, folderName]  = fileparts(folder);
-                    labels{i}        = [folderName '/' nm ex];
-                end
                 app.PathofSelectedFilesforTEP = '';   % files span folders
                 app.FolderEditField_2.Value   = sprintf('(%d folders)', numel(uniqueParents));
             end
 
-            app.TEPfiles                 = labels;
-            app.NumberOfSelecFilesforTEP = numel(fullPaths);
-            app.FilesListBox.Value       = {};          % clear before swapping items
-            app.FilesListBox.Items       = labels;
-            app.FilesListBox.ItemsData   = fullPaths;   % selections carry full paths
+            app.FilesListBox.Value     = {};          % clear before swapping items
+            app.FilesListBox.Items     = labels;
+            app.FilesListBox.ItemsData = fullPaths;   % selections carry full paths
 
-            % New file set - drop any cached selection / loaded EEG.
-            app.SelectedFilesforTEP         = {};
-            app.EEGofAllSelectedFiles       = {};
-            app.EEG_SelectedTEPFiles_Loaded = false;
-            app.SelectAllCheckBox.Value     = 0;
-            refreshTEPDropdown(app);
-
-            setpref('nestapp', 'lastDataFolder', parents{1});
+            % New file set - nothing selected yet; clear derived state.
+            % (lastDataFolder is maintained by selectDataTree, not here.)
+            applyTEPSelection(app, {});
+            app.SelectAllCheckBox.Value = 0;
 
             app.TOPOPLOTButton.Enable        = 'on';
             app.ExportTEPFigureButton.Enable = "on";
@@ -2135,17 +2130,28 @@ classdef nestapp < matlab.apps.AppBase
             app.EEGDatasetDropDown.Enable    = "on";
         end
 
+        function applyTEPSelection(app, sel)
+        % APPLYTEPSELECTION  Adopt a new TEP file selection (full paths) and
+        %   invalidate everything derived from the previous one. sel is
+        %   always stored as a cell so downstream code never re-checks its
+        %   type. Shared by the listbox, Select-all, and new-file-set paths.
+            if ~iscell(sel); sel = {sel}; end
+            app.SelectedFilesforTEP         = sel;
+            app.EEGofAllSelectedFiles       = {};
+            app.EEG_SelectedTEPFiles_Loaded = false;
+            refreshTEPDropdown(app);
+        end
+
         function refreshTEPDropdown(app)
         % REFRESHTEPDROPDOWN  Sync the per-file dropdown to the current
         %   selection. Items show basenames; ItemsData carries full paths
         %   so EEGDatasetDropDown.Value matches SelectedFilesforTEP.
-            sel = app.SelectedFilesforTEP;
+            sel = app.SelectedFilesforTEP;   % always a cell (via applyTEPSelection)
             if isempty(sel)
                 app.EEGDatasetDropDown.Items     = {};
                 app.EEGDatasetDropDown.ItemsData = {};
                 return
             end
-            if ~iscell(sel); sel = {sel}; end
             names = cell(1, numel(sel));
             for i = 1:numel(sel)
                 [~, nm, ex] = fileparts(sel{i});
@@ -2157,17 +2163,11 @@ classdef nestapp < matlab.apps.AppBase
 
         % Value changed function: FilesListBox
         function FilesListBoxValueChanged(app, event)
-            app.EEG_SelectedTEPFiles_Loaded = false;
-            app.EEGofAllSelectedFiles = {}; % new selection - clear cached EEG
             sel = event.Value;              % ItemsData = full paths
-            if isempty(sel)
-                app.SelectedFilesforTEP = {};
-            else
-                if ~iscell(sel); sel = {sel}; end
-                app.SelectedFilesforTEP = sel;
-                app.SelectAllCheckBox.Value = 0;
+            applyTEPSelection(app, sel);
+            if ~isempty(sel)
+                app.SelectAllCheckBox.Value = 0;   % manual pick is not "all"
             end
-            refreshTEPDropdown(app);
         end
 
         % Button pushed function: TOPOPLOTButton
@@ -2179,19 +2179,12 @@ classdef nestapp < matlab.apps.AppBase
 
         % Value changed function: SelectAllCheckBox
         function SelectAllCheckBoxValueChanged(app, ~)
-            value = app.SelectAllCheckBox.Value;
-            if value
-                % ItemsData holds the full paths for every listed file.
-                app.SelectedFilesforTEP = app.FilesListBox.ItemsData;
-                app.FilesListBox.Value  = app.FilesListBox.ItemsData;
+            if app.SelectAllCheckBox.Value
+                app.FilesListBox.Value = app.FilesListBox.ItemsData;  % every row
             else
-                app.SelectedFilesforTEP = {};
-                app.FilesListBox.Value  = {};
+                app.FilesListBox.Value = {};
             end
-            % Selection changed - invalidate cached EEG and resync dropdown.
-            app.EEG_SelectedTEPFiles_Loaded = false;
-            app.EEGofAllSelectedFiles = {};
-            refreshTEPDropdown(app);
+            applyTEPSelection(app, app.FilesListBox.Value);
         end
 
         % Value changed function: DontfindcommonelectrodesCheckBox
@@ -2379,7 +2372,6 @@ classdef nestapp < matlab.apps.AppBase
 
             % SelectedFilesforTEP already holds full paths (may span folders).
             tepPaths = app.SelectedFilesforTEP;
-            if ~iscell(tepPaths); tepPaths = {tepPaths}; end
 
             d = uiprogressdlg(app.UIFigure, ...
                 'Title',          'Extracting TEP Peaks', ...
