@@ -235,20 +235,14 @@ parentAx = gca;
 parentPos = parentAx.Position;
 delete(parentAx);
 ax0 = axes('Position', parentPos);
-if nShow < nTotal
-    showNote = sprintf(' (showing %d of %d largest; rejected always shown)', ...
-        nShow, nTotal);
-else
-    showNote = '';
-end
-title(ax0, sprintf(['ICA components (%s)%s%s\n' ...
-    'border = class; gray = kept; REJ = removed'], src, capNote, showNote), ...
-    'FontSize', 9);
+% Short single-line title - green/red borders carry the kept/rejected
+% meaning, so the title stays clear of the figure's main title.
+title(ax0, sprintf('ICA components (%s)%s', src, capNote), 'FontSize', 9);
 axis(ax0, 'off');
 
 innerWidth  = parentPos(3) / nCol;
-innerHeight = parentPos(4) / nRow * 0.92;   % leave space for the 2-line title
-yTop = parentPos(2) + parentPos(4) * 0.92;
+innerHeight = parentPos(4) / nRow * 0.95;
+yTop = parentPos(2) + parentPos(4) * 0.95;
 fig  = ancestor(ax0, 'figure');
 
 for i = 1:nShow
@@ -264,13 +258,19 @@ for i = 1:nShow
         text(0.5, 0.5, '?', 'HorizontalAlignment','center','Units','normalized','Parent',ax);
         axis(ax,'off');
     end
-    % topoplot calls "axis off", which hides the axes box - so the
-    % class-colored border can't live on the axes. Draw it as a figure
-    % annotation rectangle over the tile instead, where it always shows.
-    borderColor = classColor(metrics(k).classification, metrics(k).kept);
+    % topoplot calls "axis off", which hides the axes box - so the border
+    % can't live on the axes. Draw it as a figure annotation rectangle over
+    % the tile: green = accepted (kept), red = rejected.
+    if metrics(k).kept
+        borderColor = [0.15 0.65 0.20];   % green - accepted
+    else
+        borderColor = [0.85 0.20 0.20];   % red - rejected
+    end
     annotation(fig, 'rectangle', tilePos, 'Color', borderColor, 'LineWidth', 2);
-    if metrics(k).kept, suffix = ''; else, suffix = ' REJ'; end
-    title(ax, sprintf('%d %s%s', k, metrics(k).classification, suffix), 'FontSize', 8);
+    % Tile title: index, class, and the component's % variance (when known).
+    pv = view.compSize(k);
+    if isnan(pv), vtxt = ''; else, vtxt = sprintf('  %.1f%%', pv); end
+    title(ax, sprintf('%d %s%s', k, metrics(k).classification, vtxt), 'FontSize', 8);
 end
 end
 
@@ -469,38 +469,6 @@ switch mode
         name = 'High-frequency activity (muscle / movement)';
     otherwise
         name = mode;   % unknown mode - fall back to the raw token
-end
-end
-
-function c = classColor(cls, kept)
-% Border color per component classification. Source-agnostic - merges
-% TESA, ICLabel, and Heuristic category names into a small palette so
-% the visualization reads the same regardless of which classifier ran.
-%   kept = true  -> always gray, regardless of label (Brain / Keep / OK).
-%   kept = false -> color by artifact family:
-%                     muscle/EMG          -> red
-%                     electrode noise     -> orange
-%                     eye / blink / EOG   -> yellow
-%                     other / unknown     -> magenta
-GRAY    = [0.70 0.70 0.70];
-RED     = [0.85 0.20 0.20];
-ORANGE  = [0.95 0.50 0.10];
-YELLOW  = [0.90 0.80 0.10];
-MAGENTA = [0.80 0.30 0.80];
-
-if nargin >= 2 && kept
-    c = GRAY;
-    return
-end
-
-switch cls
-    case {'EMG', 'Muscle', 'TMS Muscle'},                       c = RED;
-    case {'Electrode', 'Elec Noise', 'Channel Noise',  ...
-          'Line Noise'},                                        c = ORANGE;
-    case {'EOG', 'Blink', 'Eye', 'Eye Move'},                   c = YELLOW;
-    case {'Heart', 'Sensory', 'Reject', 'Other'},               c = MAGENTA;
-    case {'OK', 'Keep', 'Brain'},                               c = GRAY;
-    otherwise,                                                  c = MAGENTA;
 end
 end
 

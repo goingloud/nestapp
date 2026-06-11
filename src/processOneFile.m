@@ -1272,8 +1272,8 @@ end
 
 function labels = tesaCompClassLabels(codes)
 % TESACOMPCLASSLABELS  Map TESA compClass codes (1..8) to display labels.
-%   Codes mirror pop_tesa_compselect; the strings line up with the colour
-%   families in renderQualityFigure/classColor.
+%   Codes mirror pop_tesa_compselect; the strings are shown on each QC
+%   topo tile next to the component's variance.
 map    = {'Keep','Reject','TMS Muscle','Blink','Eye Move','Muscle', ...
           'Elec Noise','Sensory'};
 labels = repmat({'Reject'}, 1, numel(codes));
