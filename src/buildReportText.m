@@ -14,6 +14,23 @@ lines{end+1} = '=== Pipeline Report ===';
 lines{end+1} = sprintf('File:      %s', report.inputFile);
 lines{end+1} = sprintf('Processed: %s', string(report.processedAt, 'yyyy-MM-dd HH:mm:ss'));
 
+% Failure banner - shown when the file was abandoned mid-pipeline and this
+% is a partial report (set by processOneFile on a Quality-Gate fail-skip or
+% a step error).
+if isfield(report, 'failure') && isstruct(report.failure) ...
+        && isfield(report.failure, 'failed') && report.failure.failed
+    f = report.failure;
+    stepTxt = '';
+    if isfield(f, 'stepIndex') && isfield(f, 'stepName')
+        stepTxt = sprintf(' at step %d (%s)', f.stepIndex, f.stepName);
+    end
+    msg = '';
+    if isfield(f, 'message'); msg = f.message; end
+    lines{end+1} = '';
+    lines{end+1} = '*** PROCESSING FAILED - partial report ***';
+    lines{end+1} = sprintf('Failed%s: %s', stepTxt, msg);
+end
+
 % Quality reports - single folder path (all PNGs share a parent).
 if isfield(report, 'quality') && isfield(report.quality, 'figures') ...
         && ~isempty(report.quality.figures)

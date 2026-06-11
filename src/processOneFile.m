@@ -1069,6 +1069,9 @@ for si = 1:nSteps
         % needs the original 'nestapp:qualityFail' message shape to tag
         % the file as 'skipped' rather than 'errored'.
         if strcmp(err.identifier, 'nestapp:qualityFail')
+            % Leave a partial, FAIL-labelled report on disk so a skipped
+            % file is still documented (not silently dropped).
+            persistFailedReport(fileReport, opts, 'qualityFail', si, stepName, err.message);
             if ~isempty(opts.progressQueue)
                 send(opts.progressQueue, struct( ...
                     'fi', opts.fileIndex, 'si', 0, ...
@@ -1111,6 +1114,9 @@ for si = 1:nSteps
             else
                 % Parallel mode (no prompt): mark this file failed with
                 % structured step info so runPipelineCore can summarize.
+                % Leave a partial, FAIL-labelled report on disk so the
+                % failed file is still documented.
+                persistFailedReport(fileReport, opts, 'error', si, stepName, err.message);
                 % Release the dialog slot first - the success sentinel at the
                 % bottom of this function is unreachable from here, and without
                 % a release later files' progress messages get dropped.
@@ -1167,6 +1173,33 @@ end
 end
 
 % -- local helpers ---------------------------------------------------------
+
+function persistFailedReport(report, opts, kind, si, stepName, message)
+% PERSISTFAILEDREPORT  Write a partial, FAIL-labelled report to disk so a
+%   file abandoned mid-pipeline still leaves a report instead of vanishing.
+%   kind: 'qualityFail' (failed a Quality Gate with skip-on-fail) or 'error'
+%   (a step threw). Best-effort - reporting problems must never mask the
+%   original failure, so everything is wrapped in try/catch.
+if isempty(opts.batchCtx)
+    return   % no batch context (e.g. ad-hoc run) - nowhere structured to write
+end
+if ~isfield(report, 'quality') || ~isstruct(report.quality)
+    report.quality = struct('figures', {{}}, 'gates', {{}}, 'worstVerdict', 'Fail');
+end
+report.quality.worstVerdict = 'Fail';        % overall outcome = failed
+report.failure = struct('failed', true, 'kind', kind, ...
+    'stepIndex', si, 'stepName', stepName, 'message', message);
+try
+    exportReport(report, opts.batchCtx);
+    if opts.autoExportPDF
+        exportFileReportPDF(report, opts.batchCtx);
+    end
+catch writeErr
+    warning('nestapp:failedReport', ...
+        'Could not write partial failed report for "%s": %s', ...
+        report.inputFile, writeErr.message);
+end
+end
 
 function fileReport = recordRejectedTrials(fileReport, localIdx)
 % Map locally-indexed rejected trials back to original-trial numbers

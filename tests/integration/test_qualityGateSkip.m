@@ -26,7 +26,7 @@ evalc('eeglab(''nogui'')');
 % Snapshot every pref any test body in this file writes to, so the
 % user's interactive settings aren't stomped by a test run.
 testCase.TestData.prefSnapshot = snapshotPrefs( ...
-    {'skipOnQualityFail', 'autoQualityReport'});
+    {'skipOnQualityFail', 'autoQualityReport', 'autoExportPDF'});
 end
 
 function teardownOnce(testCase)
@@ -80,6 +80,7 @@ end
 
 setpref('nestapp', 'skipOnQualityFail', true);
 setpref('nestapp', 'autoQualityReport', false);
+setpref('nestapp', 'autoExportPDF', false);   % .mat report only, keep test fast
 
 spec(1).name   = 'Load Data';
 spec(1).params = struct();
@@ -112,6 +113,20 @@ for k = 1:2
     saveTarget = fullfile(tmpDir, [baseName, '_should_never_run.set']);
     testCase.verifyFalse(exist(saveTarget, 'file') == 2, ...
         sprintf('Save New Set should not have run for %s.', baseName));
+end
+
+% Each skipped file should still leave a partial, FAIL-labelled report
+% on disk (not silently vanish).
+reportMats = dir(fullfile(tmpDir, '**', '*_report*.mat'));
+testCase.verifyNumElements(reportMats, 2, ...
+    'Each failed file should leave one partial report .mat.');
+for k = 1:numel(reportMats)
+    S = load(fullfile(reportMats(k).folder, reportMats(k).name), 'pipelineReport');
+    testCase.verifyEqual(S.pipelineReport.quality.worstVerdict, 'Fail');
+    testCase.verifyTrue(isfield(S.pipelineReport, 'failure') ...
+        && S.pipelineReport.failure.failed, ...
+        'Partial report should be flagged as failed.');
+    testCase.verifyEqual(S.pipelineReport.failure.kind, 'qualityFail');
 end
 end
 
