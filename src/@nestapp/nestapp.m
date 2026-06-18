@@ -119,6 +119,14 @@ classdef nestapp < matlab.apps.AppBase
         PlottingModeButtonGroup         matlab.ui.container.ButtonGroup
         AddtocurrentFigureButton        matlab.ui.control.RadioButton
         NewFigureButton                 matlab.ui.control.RadioButton
+        PlotTypeButtonGroup             matlab.ui.container.ButtonGroup
+        PlotTypeTEPButton               matlab.ui.control.RadioButton
+        PlotTypeGMFPButton              matlab.ui.control.RadioButton
+        PlotTypeLMFPButton              matlab.ui.control.RadioButton
+        WindowStartEditField            matlab.ui.control.NumericEditField
+        WindowEndEditField              matlab.ui.control.NumericEditField
+        WindowMsLabel                   matlab.ui.control.Label
+        WindowMeanLabel                 matlab.ui.control.Label
         ExportTEPFigureButton           matlab.ui.control.Button
         TOPOPLOTButton                  matlab.ui.control.Button
         WindowsizefortimeaveragedTopoplotEditField  matlab.ui.control.NumericEditField
@@ -197,6 +205,7 @@ classdef nestapp < matlab.apps.AppBase
         DefaulTEPxLim = [-50 300]; % Default xLim for time in TEP
         EEGtime
         TEP2Export
+        TEPDisplayCurve = [] % smoothed grand-mean curve currently shown on UIAxes (TEP/GMFP/LMFP) - drives the window-average readout
         MenuRecentFiles     % Handle to 'Recent Files' submenu - rebuilt on open
         MenuRecentPipelines % Handle to 'Recent Pipelines' submenu - rebuilt on open
         StatusBar           % uilabel pinned to bottom of UIFigure - visible on both tabs
@@ -1305,26 +1314,34 @@ classdef nestapp < matlab.apps.AppBase
                 EEG = app.EEGofAllSelectedFiles{nn};
                 all_labels{nn} = {EEG.chanlocs.labels};
             end
-            % Common labels
+            % Common labels across every selected file. Still needed by
+            % findTEPelecs, which builds the ROI from the ticked common-label
+            % buttons.
             app.Common_Labels.Items = app.elecList;
             for i = 1:length(all_labels)
                 app.Common_Labels.Items = intersect(app.Common_Labels.Items, all_labels{i});
             end
-            % All lables across selected files
-            total_labels = app.elecList;
-            for i = 1:length(all_labels)
-                total_labels = union(total_labels, all_labels{i});
-            end
-            % Uncommon labels = total - common
-            uncommon_labels.Items = intersect(app.elecList,setdiff(total_labels, app.Common_Labels.Items));
-            for nn = 1:length(uncommon_labels.Items)
-                propName = [upper(uncommon_labels.Items{nn}), 'Button'];
-                if isprop(app, propName)
+            % Enable an electrode button only when that electrode is present in
+            % EVERY selected file; disable (and untick) the rest. The state is
+            % applied EXHAUSTIVELY every call - both 'on' and 'off' - so a
+            % button greyed out for a previous file selection is re-enabled when
+            % a later dataset (e.g. one with all channels re-interpolated) once
+            % again contains it. Previously only 'off' was ever set, so stale
+            % disabled buttons persisted. See electrodeAvailability for the
+            % pure, unit-tested core.
+            isAvail = electrodeAvailability(app.elecList, all_labels);
+            for nn = 1:numel(app.elecList)
+                propName = [upper(app.elecList{nn}), 'Button'];
+                if ~isprop(app, propName)
+                    continue
+                end
+                if isAvail(nn)
+                    app.(propName).Enable = 'on';
+                else
                     app.(propName).Enable = 'off';
                     app.(propName).Value  = 0;
                 end
             end
-            
         end
         
         function findTEPelecs(app)
@@ -1347,23 +1364,42 @@ classdef nestapp < matlab.apps.AppBase
             end
         end
         
+        function ptype = currentPlotType(app)
+        % CURRENTPLOTTYPE  Active Visualizing-tab curve: 'TEP', 'GMFP' or 'LMFP'.
+        %   Falls back to 'TEP' when the Plot Type selector is absent (older
+        %   layouts) or has no selection.
+            ptype = 'TEP';
+            if isprop(app, 'PlotTypeButtonGroup') && ~isempty(app.PlotTypeButtonGroup) ...
+                    && isvalid(app.PlotTypeButtonGroup) ...
+                    && ~isempty(app.PlotTypeButtonGroup.SelectedObject)
+                ptype = app.PlotTypeButtonGroup.SelectedObject.Text;
+            end
+        end
+
         function plotTEP(app)
             if ~app.EEG_SelectedTEPFiles_Loaded
                 LoadSelecEEGdata(app)
             end
+            plotType = currentPlotType(app);
             nFiles  = numel(app.EEGofAllSelectedFiles);
             nTimes  = numel(app.EEGtime);
-            TEP_ROI = zeros(nFiles, nTimes);
+            % One curve per file, averaged across files below. TEP is the
+            % ROI-mean waveform; GMFP/LMFP are the spatial standard deviation
+            % (mean field power, Lehmann & Skrandies 1980) taken across ALL
+            % channels (global) or across the ROI only (local), computed on the
+            % trial-averaged data. std(...,1,...) uses the population (1/N)
+            % normalisation, the conventional GMFP definition.
+            curveByFile = zeros(nFiles, nTimes);
             for nfile = 1:nFiles
                 EEGaux = app.EEGofAllSelectedFiles{1, nfile};
                 ROIind = find(ismember({EEGaux.chanlocs.labels}, app.ROIelecsLabels));
-                TEP_ROI(nfile,:) = mean(mean(EEGaux.data(ROIind,:,:), 3, 'omitmissing'), 1, 'omitmissing');
+                curveByFile(nfile,:) = tepFieldCurve(EEGaux.data, ROIind, plotType);
             end
 
             SMOOTH_WIN_PTS = 5;       % 5-point moving average (~5 ms at 1 kHz)
-            app.TEP2Export = TEP_ROI;
-            grandMean = mean(TEP_ROI, 1, 'omitmissing');
-            TEP_ROISD = std(TEP_ROI, 1, 1) / sqrt(nFiles);
+            app.TEP2Export = curveByFile;
+            grandMean = mean(curveByFile, 1, 'omitmissing');
+            TEP_ROISD = std(curveByFile, 1, 1) / sqrt(nFiles);
             co    = app.UIAxes.ColorOrder;
             meanx = smoothdata(grandMean,  'movmean', SMOOTH_WIN_PTS);
             sdx   = smoothdata(TEP_ROISD, 'movmean', SMOOTH_WIN_PTS);
@@ -1411,7 +1447,38 @@ classdef nestapp < matlab.apps.AppBase
                 ylim(app.UIAxes, [min(prevYLim(1), newYLim(1)), max(prevYLim(2), newYLim(2))]);
             end
 
+            % Self-describe the axis for the active curve. cla(...,'reset') on
+            % the New Figure path wipes the labels created in createComponents,
+            % so (re)apply title/labels on every plot.
+            switch plotType
+                case 'GMFP'
+                    title(app.UIAxes,  'Global Mean Field Power');
+                    ylabel(app.UIAxes, 'GMFP (\muV)');
+                case 'LMFP'
+                    title(app.UIAxes,  'Local Mean Field Power');
+                    ylabel(app.UIAxes, 'LMFP (\muV)');
+                otherwise
+                    title(app.UIAxes,  'TMS Evoked Potential');
+                    ylabel(app.UIAxes, 'TEP (\muV)');
+            end
+            xlabel(app.UIAxes, 'Time (ms)');
+
             legend(app.UIAxes, 'show', 'Location', 'best');
+
+            % Update the window-average readout/shading for whichever curve is
+            % shown (meanx is the smoothed grand-mean curve being displayed).
+            app.TEPDisplayCurve = meanx;
+            updateWindowMeasurement(app);
+
+            % TEP component peaks (N15/P30/...) are defined on the signed TEP
+            % waveform; they are meaningless on the positive-only mean-field
+            % power curves, so only detect them for TEP. For GMFP/LMFP clear any
+            % stale peaks/overlay and the component table.
+            if ~strcmp(plotType, 'TEP')
+                app.tepPeaks = [];
+                populateTEPComponentTable(app);
+                return
+            end
 
             % Component detection runs on the SMOOTHED grand mean - the same
             % waveform that is plotted (meanx) and the same smoothing the batch
@@ -1437,7 +1504,44 @@ classdef nestapp < matlab.apps.AppBase
                 end
             end
         end
-        
+
+        function updateWindowMeasurement(app)
+        % UPDATEWINDOWMEASUREMENT  Refresh the windowed-average readout/shading.
+        %   Computes the mean of the currently displayed curve (TEPDisplayCurve,
+        %   set by plotTEP for whichever of TEP/GMFP/LMFP is shown) over the
+        %   editable [start end] ms window, updates the readout label, and
+        %   shades the window on UIAxes. Safe to call before any plot exists.
+            if isempty(app.TEPDisplayCurve) || isempty(app.EEGtime)
+                return
+            end
+            t1 = app.WindowStartEditField.Value;
+            t2 = app.WindowEndEditField.Value;
+            m  = computeWindowMean(app.TEPDisplayCurve, app.EEGtime, t1, t2);
+            if isnan(m)
+                app.WindowMeanLabel.Text = 'Win mean: -- uV';
+            else
+                app.WindowMeanLabel.Text = sprintf('Win mean: %.2f uV', m);
+            end
+            drawWindowShade(app, t1, t2);
+        end
+
+        function drawWindowShade(app, t1, t2)
+        % DRAWWINDOWSHADE  Shade the measurement window on UIAxes (behind curves).
+            delete(findobj(app.UIAxes, 'Tag', 'WinShade'));
+            lo = min(t1, t2);
+            hi = max(t1, t2);
+            if ~(isfinite(lo) && isfinite(hi) && hi > lo)
+                return
+            end
+            yl = ylim(app.UIAxes);
+            hold(app.UIAxes, 'on');
+            patch(app.UIAxes, [lo hi hi lo], [yl(1) yl(1) yl(2) yl(2)], ...
+                [0.3 0.3 0.3], 'FaceAlpha', 0.12, 'EdgeColor', 'none', ...
+                'HandleVisibility', 'off', 'Tag', 'WinShade');
+            hold(app.UIAxes, 'off');
+            uistack(findobj(app.UIAxes, 'Tag', 'WinShade'), 'bottom');
+        end
+
         function EEG_topoplot(app)
             cla(app.UIAxes2)
             TOPOPLOT_INTRAD = 0.55;   % EEGLAB default interpolation radius
@@ -2060,6 +2164,22 @@ classdef nestapp < matlab.apps.AppBase
                 app.TEPvarNameEditFieldLabel.Enable = 'on';
                 app.TEPvarNameEditField.Enable    = 'on';
             end
+        end
+
+        % Selection changed function: PlotTypeButtonGroup
+        function PlotTypeButtonGroupSelectionChanged(app, ~)
+            % Swap the displayed curve (TEP/GMFP/LMFP) in place. Only re-plot
+            % once a TEP has been drawn; otherwise the next PLOT TEP press picks
+            % up the new selection.
+            if app.TEPCreated && app.EEG_SelectedTEPFiles_Loaded
+                findTEPelecs(app);
+                plotTEP(app);
+            end
+        end
+
+        % Value changed function: WindowStartEditField, WindowEndEditField
+        function WindowEditFieldValueChanged(app, ~)
+            updateWindowMeasurement(app);
         end
 
         % Value changed function: UseCurrentlyCleanedDataCheckBox

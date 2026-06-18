@@ -375,6 +375,56 @@ function createComponents(app)
             app.AddtocurrentFigureButton.Text = 'Add to current Figure';
             app.AddtocurrentFigureButton.Position = [11 -1 135 22];
 
+            % Create PlotTypeButtonGroup
+            app.PlotTypeButtonGroup = uibuttongroup(app.VisualizingTab);
+            app.PlotTypeButtonGroup.AutoResizeChildren = 'off';
+            app.PlotTypeButtonGroup.BorderType = 'none';
+            app.PlotTypeButtonGroup.Title = 'Plot Type';
+            app.PlotTypeButtonGroup.SelectionChangedFcn = createCallbackFcn(app, @PlotTypeButtonGroupSelectionChanged, true);
+            app.PlotTypeButtonGroup.Position = [150 108 195 52];
+
+            % Create PlotTypeTEPButton
+            app.PlotTypeTEPButton = uiradiobutton(app.PlotTypeButtonGroup);
+            app.PlotTypeTEPButton.Text = 'TEP';
+            app.PlotTypeTEPButton.Position = [6 4 48 22];
+            app.PlotTypeTEPButton.Value = true;
+
+            % Create PlotTypeGMFPButton
+            app.PlotTypeGMFPButton = uiradiobutton(app.PlotTypeButtonGroup);
+            app.PlotTypeGMFPButton.Text = 'GMFP';
+            app.PlotTypeGMFPButton.Position = [58 4 60 22];
+
+            % Create PlotTypeLMFPButton
+            app.PlotTypeLMFPButton = uiradiobutton(app.PlotTypeButtonGroup);
+            app.PlotTypeLMFPButton.Text = 'LMFP';
+            app.PlotTypeLMFPButton.Position = [122 4 60 22];
+
+            % Create WindowStartEditField (mean-measurement window start, ms)
+            app.WindowStartEditField = uieditfield(app.VisualizingTab, 'numeric');
+            app.WindowStartEditField.ValueDisplayFormat = '%.0f';
+            app.WindowStartEditField.Value = 90;
+            app.WindowStartEditField.Tooltip = 'Average-window start (ms)';
+            app.WindowStartEditField.ValueChangedFcn = createCallbackFcn(app, @WindowEditFieldValueChanged, true);
+            app.WindowStartEditField.Position = [5 143 42 22];
+
+            % Create WindowEndEditField (mean-measurement window end, ms)
+            app.WindowEndEditField = uieditfield(app.VisualizingTab, 'numeric');
+            app.WindowEndEditField.ValueDisplayFormat = '%.0f';
+            app.WindowEndEditField.Value = 140;
+            app.WindowEndEditField.Tooltip = 'Average-window end (ms)';
+            app.WindowEndEditField.ValueChangedFcn = createCallbackFcn(app, @WindowEditFieldValueChanged, true);
+            app.WindowEndEditField.Position = [50 143 42 22];
+
+            % Create WindowMsLabel
+            app.WindowMsLabel = uilabel(app.VisualizingTab);
+            app.WindowMsLabel.Position = [96 143 40 22];
+            app.WindowMsLabel.Text = 'ms win';
+
+            % Create WindowMeanLabel (windowed-average readout)
+            app.WindowMeanLabel = uilabel(app.VisualizingTab);
+            app.WindowMeanLabel.Position = [5 120 140 22];
+            app.WindowMeanLabel.Text = 'Win mean: -- uV';
+
             % Create AF3Button
             app.AF3Button = uibutton(app.VisualizingTab, 'state');
             app.AF3Button.IconAlignment = 'center';
