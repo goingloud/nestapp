@@ -46,6 +46,11 @@ report.channels.original      = 0;
 report.channels.nRejected     = 0;
 report.channels.nInterpolated = 0;
 report.channels.final         = 0;
+% Labels (not just counts) of the channels removed by rejection steps and of
+% the channels restored by interpolation steps, accumulated across the
+% pipeline so the report can name them. See processOneFile post-step block.
+report.channels.rejectedNames     = {};
+report.channels.interpolatedNames = {};
 
 report.trials.original         = 0;
 report.trials.rejected         = 0;

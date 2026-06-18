@@ -73,12 +73,31 @@ origCh = report.channels.original;
 rejCh  = report.channels.nRejected;
 intpCh = report.channels.nInterpolated;
 finCh  = report.channels.final;
+% Names are optional - older reports predate them, so read defensively.
+if isfield(report.channels, 'rejectedNames')
+    rejNames = report.channels.rejectedNames;
+else
+    rejNames = {};
+end
+if isfield(report.channels, 'interpolatedNames')
+    intpNames = report.channels.interpolatedNames;
+else
+    intpNames = {};
+end
 lines{end+1} = sprintf('  Original:     %d', origCh);
 if rejCh > 0
-    lines{end+1} = sprintf('  Rejected:     %d', rejCh);
+    if ~isempty(rejNames)
+        lines{end+1} = sprintf('  Rejected:     %d (%s)', rejCh, strjoin(rejNames, ', '));
+    else
+        lines{end+1} = sprintf('  Rejected:     %d', rejCh);
+    end
 end
 if intpCh > 0
-    lines{end+1} = sprintf('  Interpolated: %d', intpCh);
+    if ~isempty(intpNames)
+        lines{end+1} = sprintf('  Interpolated: %d (%s)', intpCh, strjoin(intpNames, ', '));
+    else
+        lines{end+1} = sprintf('  Interpolated: %d', intpCh);
+    end
 end
 lines{end+1} = sprintf('  Final:        %d', finCh);
 lines{end+1} = '';

@@ -50,6 +50,16 @@ testCase.verifyEqual(ch.nInterpolated, 0);
 testCase.verifyEqual(ch.final,         0);
 end
 
+function test_initReportChannelNameFields(testCase)
+% Rejected/interpolated channel NAME lists default to empty cell arrays.
+report = initPipelineReport('subject01.set');
+ch = report.channels;
+testCase.verifyTrue(isfield(ch, 'rejectedNames'),     'Missing channels.rejectedNames');
+testCase.verifyTrue(isfield(ch, 'interpolatedNames'), 'Missing channels.interpolatedNames');
+testCase.verifyEqual(ch.rejectedNames,     {});
+testCase.verifyEqual(ch.interpolatedNames, {});
+end
+
 function test_initReportTrialFields(testCase)
 report = initPipelineReport('subject01.set');
 tr = report.trials;
@@ -134,6 +144,36 @@ report = initPipelineReport('test.set');
 testCase.verifyFalse(isempty(summaryText), 'summaryText must be non-empty');
 % matPath may be empty if no valid output dir — that is acceptable
 testCase.verifyTrue(ischar(matPath) || isstring(matPath), 'matPath must be text type');
+end
+
+function test_channelSummaryListsRejectedNames(testCase)
+% The CHANNELS block names the rejected/interpolated electrodes, not just
+% the counts, when the name lists are populated.
+report = initPipelineReport('test.set');
+report.channels.original          = 64;
+report.channels.nRejected         = 2;
+report.channels.rejectedNames     = {'TP7', 'FT8'};
+report.channels.nInterpolated     = 2;
+report.channels.interpolatedNames = {'TP7', 'FT8'};
+report.channels.final             = 64;
+txt = exportReport(report, '');
+testCase.verifyTrue(contains(txt, 'Rejected:     2 (TP7, FT8)'), ...
+    'CHANNELS block must list rejected electrode names');
+testCase.verifyTrue(contains(txt, 'Interpolated: 2 (TP7, FT8)'), ...
+    'CHANNELS block must list interpolated electrode names');
+end
+
+function test_channelSummaryBackwardCompatNoNameFields(testCase)
+% Legacy reports saved before the name fields existed must still format
+% (counts only) without erroring.
+report = initPipelineReport('test.set');
+report.channels.original  = 64;
+report.channels.nRejected = 3;
+report.channels.final     = 61;
+report.channels = rmfield(report.channels, {'rejectedNames','interpolatedNames'});
+txt = exportReport(report, '');
+testCase.verifyTrue(contains(txt, 'Rejected:     3'), 'Counts must still print');
+testCase.verifyFalse(contains(txt, 'Rejected:     3 ('), 'No names when fields absent');
 end
 
 % ── exportReport — METHODS branch coverage ───────────────────────────────

@@ -121,9 +121,15 @@ for si = 1:nSteps
     if isstruct(EEG) && ~isempty(EEG)
         nChanBefore  = EEG.nbchan;
         nEpochBefore = size(EEG.data, 3);
+        if isfield(EEG, 'chanlocs') && ~isempty(EEG.chanlocs)
+            labelsBefore = {EEG.chanlocs.labels};
+        else
+            labelsBefore = {};
+        end
     else
         nChanBefore  = 0;
         nEpochBefore = 0;
+        labelsBefore = {};
     end
     t0 = tic;
 
@@ -892,6 +898,11 @@ for si = 1:nSteps
         if isstruct(EEG) && ~isempty(EEG)
             nChanAfter  = EEG.nbchan;
             nEpochAfter = size(EEG.data, 3);
+            if isfield(EEG, 'chanlocs') && ~isempty(EEG.chanlocs)
+                labelsAfter = {EEG.chanlocs.labels};
+            else
+                labelsAfter = {};
+            end
             if strcmp(stepName, 'Load Data')
                 fileReport.channels.original = EEG.nbchan;
             end
@@ -900,12 +911,21 @@ for si = 1:nSteps
                 if any(strcmp(stepName, channelRejectionSteps()))
                     fileReport.channels.nRejected = fileReport.channels.nRejected + ...
                         (nChanBefore - nChanAfter);
+                    % Record which labels disappeared so the report can name
+                    % the rejected channels, not just count them. 'stable'
+                    % keeps montage order; force a row for clean concatenation.
+                    removedNames = setdiff(labelsBefore, labelsAfter, 'stable');
+                    fileReport.channels.rejectedNames = ...
+                        [fileReport.channels.rejectedNames, removedNames(:)'];
                 end
             end
             if any(strcmp(stepName, {'Interpolate Channels','Interpolate Missing Data (TESA)'})) ...
                     && nChanAfter > nChanBefore
                 fileReport.channels.nInterpolated = fileReport.channels.nInterpolated + ...
                     (nChanAfter - nChanBefore);
+                addedNames = setdiff(labelsAfter, labelsBefore, 'stable');
+                fileReport.channels.interpolatedNames = ...
+                    [fileReport.channels.interpolatedNames, addedNames(:)'];
             end
             if strcmp(stepName, 'Epoching') && fileReport.trials.original == 0
                 fileReport.trials.original    = size(EEG.data, 3);
