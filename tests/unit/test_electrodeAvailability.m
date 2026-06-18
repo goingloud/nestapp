@@ -56,6 +56,16 @@ second = electrodeAvailability(elecList, {{'Cz','Fz','Pz'}});     % Fz back
 testCase.verifyTrue(second(2));
 end
 
+function test_caseInsensitiveMatching(testCase)
+% Regression: a button labelled 'FP1' must count as available when the file
+% spells the channel 'Fp1' (EEG montages vary in case). A case-sensitive
+% match wrongly greyed Fp1/Fp2 even though they were present in every file.
+elecList  = {'FP1','FP2','Cz'};
+labelSets = {{'Fp1','Fp2','Cz'}, {'FP1','fp2','CZ'}};
+got = electrodeAvailability(elecList, labelSets);
+testCase.verifyEqual(got, [true true true]);
+end
+
 function test_outputIsRowLogicalRegardlessOfInputShape(testCase)
 elecList  = {'Cz';'Fz'};                 % column input
 labelSets = {{'Cz','Fz'}};

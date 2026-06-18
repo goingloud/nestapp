@@ -1314,22 +1314,21 @@ classdef nestapp < matlab.apps.AppBase
                 EEG = app.EEGofAllSelectedFiles{nn};
                 all_labels{nn} = {EEG.chanlocs.labels};
             end
-            % Common labels across every selected file. Still needed by
-            % findTEPelecs, which builds the ROI from the ticked common-label
-            % buttons.
-            app.Common_Labels.Items = app.elecList;
-            for i = 1:length(all_labels)
-                app.Common_Labels.Items = intersect(app.Common_Labels.Items, all_labels{i});
-            end
-            % Enable an electrode button only when that electrode is present in
-            % EVERY selected file; disable (and untick) the rest. The state is
-            % applied EXHAUSTIVELY every call - both 'on' and 'off' - so a
-            % button greyed out for a previous file selection is re-enabled when
-            % a later dataset (e.g. one with all channels re-interpolated) once
-            % again contains it. Previously only 'off' was ever set, so stale
-            % disabled buttons persisted. See electrodeAvailability for the
-            % pure, unit-tested core.
+            % Availability = electrode present (case-insensitively) in EVERY
+            % selected file. See electrodeAvailability for the pure, unit-tested
+            % core. Common_Labels holds the canonical button labels for the
+            % available electrodes; findTEPelecs and the topoplot read it. Using
+            % elecList(isAvail) keeps the canonical case (e.g. 'FP1') even when a
+            % file spells it 'Fp1', so a clicked button maps back to its channel.
             isAvail = electrodeAvailability(app.elecList, all_labels);
+            app.Common_Labels.Items = app.elecList(isAvail);
+            % Enable an electrode button only when that electrode is available;
+            % disable (and untick) the rest. The state is applied EXHAUSTIVELY
+            % every call - both 'on' and 'off' - so a button greyed out for a
+            % previous file selection is re-enabled when a later dataset (e.g.
+            % one with all channels re-interpolated) once again contains it.
+            % Previously only 'off' was ever set, so stale disabled buttons
+            % persisted.
             for nn = 1:numel(app.elecList)
                 propName = [upper(app.elecList{nn}), 'Button'];
                 if ~isprop(app, propName)
@@ -1392,7 +1391,7 @@ classdef nestapp < matlab.apps.AppBase
             curveByFile = zeros(nFiles, nTimes);
             for nfile = 1:nFiles
                 EEGaux = app.EEGofAllSelectedFiles{1, nfile};
-                ROIind = find(ismember({EEGaux.chanlocs.labels}, app.ROIelecsLabels));
+                ROIind = find(ismember(lower({EEGaux.chanlocs.labels}), lower(app.ROIelecsLabels)));
                 curveByFile(nfile,:) = tepFieldCurve(EEGaux.data, ROIind, plotType);
             end
 
@@ -1555,7 +1554,7 @@ classdef nestapp < matlab.apps.AppBase
             for nfile = 1:numel(app.EEGofAllSelectedFiles)
                 EEGaux = app.EEGofAllSelectedFiles{1,nfile};
                 ChansLocs = EEGaux.chanlocs;
-                commonElectrodsInd = ismember({ChansLocs.labels},app.Common_Labels.Items);
+                commonElectrodsInd = ismember(lower({ChansLocs.labels}),lower(app.Common_Labels.Items));
                 BIGEEG(:,:,nfile) = mean(EEGaux.data(commonElectrodsInd,:,:),3,"omitmissing");
                 
             end

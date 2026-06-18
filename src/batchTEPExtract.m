@@ -105,8 +105,10 @@ for fi = 1:nFiles
 
     %% Resolve ROI channels
     allLabels  = {EEG.chanlocs.labels};
-    roiPresent = intersect(opts.roiElectrodes, allLabels, 'stable');
-    nRoiFound  = numel(roiPresent);
+    % Case-insensitive ROI match: montage labels vary in case (e.g. a file's
+    % 'Fp1' vs a requested 'FP1'), so compare on lowercased labels.
+    roiIdx     = find(ismember(lower(allLabels), lower(opts.roiElectrodes)));
+    nRoiFound  = numel(roiIdx);
     if nRoiFound == 0
         warnings{end+1} = sprintf('%s: skipped - none of the requested ROI electrodes found', fname); %#ok<AGROW>
         rows = appendNaNRows(rows, fname, opts.roiElectrodes, compDefs);
@@ -116,7 +118,6 @@ for fi = 1:nFiles
         warnings{end+1} = sprintf('%s: partial ROI - %d of %d requested electrodes found', ...
             fname, nRoiFound, numel(opts.roiElectrodes)); %#ok<AGROW>
     end
-    roiIdx = find(ismember(allLabels, roiPresent));
 
     %% Grand-mean waveform (ROI average, trial average, smoothed)
     roiData  = mean(EEG.data(roiIdx, :, :), 1);          % 1 x T x nTrials
@@ -134,7 +135,7 @@ for fi = 1:nFiles
     end
 
     %% Append one row per component
-    roiStr = strjoin(roiPresent, ',');
+    roiStr = strjoin(allLabels(roiIdx), ',');
     for ci = 1:numel(peaks)
         pk = peaks(ci);
         cd = compDefs(ci);

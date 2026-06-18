@@ -19,17 +19,18 @@ function isAvailable = electrodeAvailability(elecList, labelSets)
 %     isAvailable - 1xnumel(elecList) logical; true where the electrode is
 %                   common to all files (and therefore clickable).
 %
-%   Matching is case-sensitive, mirroring the historical LoadLabels behaviour
-%   (elecList entries are expected to match the EEG channel labels exactly).
+%   Matching is case-INsensitive: EEG montages vary in case (e.g. a file's
+%   'Fp1' versus the button label 'FP1'), and a case-sensitive compare would
+%   wrongly grey a present electrode. This mirrors the IgnoreCase the
+%   bad-channel protection path already uses.
 
     elecList = elecList(:)';   % normalise to a row for consistent output shape
 
-    % Intersect down to the labels shared by every file. With no files the
-    % common set stays the full elecList, so every electrode is available.
-    common = elecList;
+    % An electrode is available when it appears in EVERY file. With no files
+    % the mask stays all-true, so every electrode is available.
+    isAvailable = true(1, numel(elecList));
+    elecLower   = lower(elecList);
     for i = 1:numel(labelSets)
-        common = intersect(common, labelSets{i});
+        isAvailable = isAvailable & ismember(elecLower, lower(labelSets{i}));
     end
-
-    isAvailable = ismember(elecList, common);
 end
