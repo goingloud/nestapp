@@ -20,9 +20,15 @@ function L = captureBaseLayout(app)
 %
 %   See also: rescaleComponents, UIFigureSizeChanged
 
+    % Excluded from rescale: the figure / tabs / status bar (handled specially),
+    % and the children of the fixed-size radio groups - those ride along with the
+    % repositioned (unscaled-size) group, so rescaling them would overflow it.
     exclude = {'UIFigure', 'TabGroup', 'StatusBar', ...
-               'CleaningTab', 'VisualizingTab', 'AnalysisTab', 'ReportsTab'};
-    fontMap = fontScaledMap();
+               'CleaningTab', 'VisualizingTab', 'AnalysisTab', 'ReportsTab', ...
+               'PlotTypeTEPButton', 'PlotTypeGMFPButton', 'PlotTypeLMFPButton', ...
+               'NewFigureButton', 'AddtocurrentFigureButton'};
+    fontMap   = fontScaledMap();
+    fixedSize = fixedSizeComponents();
 
     L       = struct();
     mc      = metaclass(app);
@@ -44,7 +50,8 @@ function L = captureBaseLayout(app)
         if ~(isscalar(h) && isgraphics(h) && isprop(h, 'Position') && numel(h.Position) == 4)
             continue
         end
-        e = struct('pos', h.Position, 'fixedH', isFixedHeightControl(h), 'font', []);
+        e = struct('pos', h.Position, 'fixedH', isFixedHeightControl(h), ...
+                   'fixedSize', any(strcmp(name, fixedSize)), 'font', []);
         if isfield(fontMap, name)
             e.font = fontMap.(name);
         end
@@ -64,6 +71,14 @@ function tf = isFixedHeightControl(h)
          isa(h, 'matlab.ui.control.RangeSlider')     || ...
          isa(h, 'matlab.ui.control.DropDown')        || ...
          isa(h, 'matlab.ui.control.Slider');
+end
+
+function names = fixedSizeComponents()
+% Compact radio selectors that should keep their designed size and only
+% reposition. Their horizontal/snug internal layout distorts if width scales
+% (fixed-size labels left-aligned in widening boxes), so the whole widget moves
+% as a unit. Their child radios are excluded from rescale and ride along.
+    names = {'PlotTypeButtonGroup', 'PlottingModeButtonGroup'};
 end
 
 function m = fontScaledMap()
