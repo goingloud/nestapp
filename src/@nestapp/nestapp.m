@@ -189,6 +189,7 @@ classdef nestapp < matlab.apps.AppBase
         currentParamKey  = ''  % param key selected in UITable (transient)
         currentParamType = ''  % type of selected param (transient)
         originalSize     % [w h] of UIFigure at creation - used by UIFigureSizeChanged
+        baseLayout = []  % per-component base geometry captured at startup - drives rescaleComponents
         clickedItem = [];
         doubleClicked = 0;
 
@@ -1719,6 +1720,10 @@ classdef nestapp < matlab.apps.AppBase
             app.SelectedListBox.ItemsData(:) = [];
             app.UITable.Data = [];
             app.ItemNum = 1;
+            % Snapshot base geometry before originalSize so the resize handler
+            % (guarded on originalSize) always has it. Components are still at
+            % their createComponents positions here (no resize has scaled them).
+            app.baseLayout        = captureBaseLayout(app);
             app.originalSize      = app.UIFigure.Position(3:4);
             app.tepComponentDefs  = defaultTEPComponentDefs();
             refreshAnalysisWindows(app);   % show the default windows up-front
