@@ -27,7 +27,7 @@ nestapp has two halves that share one engine:
 ```
 
 The same `spec` (a struct array of `{name, params}`) drives both the GUI run
-button and headless callers like `batchTEPExtract` and the test suite.
+button and headless callers like `batchWindowExtract` and the test suite.
 
 ## Module map (`src/`)
 
@@ -37,7 +37,7 @@ button and headless callers like `batchTEPExtract` and the test suite.
 | **Step registry** | `stepRegistry.m`, `makePipelineStep.m`, `checkStepDependencies.m` | The catalogue of pipeline steps: each step's name, default params, UI metadata, and dependency requirements. The single source of truth for "what steps exist." |
 | **Execution** | `runPipelineCore.m`, `processOneFile.m`, `paramsToVarin.m`, `varinToStruct.m`, `stripVarinKeys.m`, `stripEmptyVarin.m`, `nestLog.m` | The batch engine and the per-file dispatch `switch`. Each step name maps to an EEGLAB/TESA call or a nestapp helper here. |
 | **Templates** | `buildTemplates.m`, `templates/*.mat`, `templateCitation.m`, `specFromSaved.m` | Built-in pipelines. `buildTemplates.m` is the source; the `.mat` files are **generated artifacts** (see gotchas). |
-| **Step helpers** | `aaratepMuscleClassifier.m`, `artist*.m`, `ensureAaratepOnPath.m`, `computeICAActivation.m`, `tepPeakFinder.m`, `batchTEPExtract.m`, `defaultTEPComponentDefs.m`, `tepPeakFinder.m` | Algorithm implementations behind specific steps and analyses. |
+| **Step helpers** | `aaratepMuscleClassifier.m`, `artist*.m`, `ensureAaratepOnPath.m`, `computeICAActivation.m`, `tepPeakFinder.m`, `batchWindowExtract.m`, `tepFieldCurve.m`, `tepWindowTable.m`, `computeWindowMeasures.m`, `defaultTEPComponentDefs.m` | Algorithm implementations behind specific steps and analyses. |
 | **Quality control** | `qa/*.m` | Quality Gate scoring, batch verdicts, QC images, dashboard, attribute matrices. |
 | **Reporting / IO** | `buildReportText.m`, `initPipelineReport.m`, `exportReport.m`, `summarizeReports.m`, `buildHistoryEntry.m`, `io/*.m` | Per-file reports, methods paragraphs, provenance, and output-path layout. |
 | **Version** | `nestappVersion.m` | Single source of truth for the app version (SemVer). |
@@ -51,7 +51,7 @@ button and headless callers like `batchTEPExtract` and the test suite.
 | Change/add a built-in template | `buildTemplates.m`, then run `buildTemplates()` and commit the regenerated `templates/*.mat` | The `.mat` is generated — never edit it directly. |
 | Add a citation for a template | `templateCitation.m` | Logged per run by `runPipelineCore.m`. |
 | Change a Quality Gate metric | `qa/qualityGate.m` (+ `qa/finalizeBatchVerdicts.m` for batch mode) | Step params live in `stepRegistry.m`. |
-| Change TEP peak detection | `tepPeakFinder.m` (interactive) / `batchTEPExtract.m` (CSV) | Both feed the smoothed waveform to `tepPeakFinder`. |
+| Change TEP peak detection | `tepPeakFinder.m` (interactive overlay) / `batchWindowExtract.m` + `computeWindowMeasures.m` (table/CSV) | The overlay uses `tepPeakFinder`; the windows-of-interest table/CSV use `computeWindowMeasures`. |
 | Change a tab's UI/behaviour | `@nestapp/nestapp.m` (callbacks) + `@nestapp/createComponents.m` (layout) | Plain-text class; diffable. |
 | Change report contents | `buildReportText.m`, `initPipelineReport.m` | |
 | Bump the version | `nestappVersion.m` + `CHANGELOG.md` (+ git tag) | A CI check keeps the three in sync. |

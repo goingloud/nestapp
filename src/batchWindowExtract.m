@@ -18,7 +18,7 @@ function [results, warnings] = batchWindowExtract(filePaths, roiElectrodes, mode
 %     'progressFcn' @(iFile, nFiles) called before each file
 %     'loadFcn'     @(path)->EEG override for tests (default pop_loadset)
 %
-%   See also: batchTEPExtract, tepFieldCurve, tepWindowTable, computeWindowMeasures
+%   See also: tepFieldCurve, tepWindowTable, computeWindowMeasures
 
     p = inputParser;
     p.addRequired('filePaths',     @(x) iscell(x) && ~isempty(x));
