@@ -57,6 +57,18 @@ m = computeWindowMeasures(curve, times, 11, 19, 'auto');
 testCase.verifyFalse(m.found);
 testCase.verifyTrue(isnan(m.mean));
 testCase.verifyTrue(isnan(m.peakAmp));
+testCase.verifyTrue(isnan(m.area));
+end
+
+function test_areaIsTrapezoidalIntegral(testCase)
+times = 0:10:100;
+curve = ones(size(times));   % constant 1 over width 100 -> area = 100
+m = computeWindowMeasures(curve, times, 0, 100, 'auto');
+testCase.verifyEqual(m.area, 100, 'AbsTol', 1e-9);
+% A triangle 0->10 over [0,20] integrates to trapz([0 10 ... ]).
+ramp = times;                % y = t
+m2 = computeWindowMeasures(ramp, times, 0, 100, 'auto');
+testCase.verifyEqual(m2.area, trapz(times, ramp), 'AbsTol', 1e-9);
 end
 
 function test_defaultPolarityIsAuto(testCase)

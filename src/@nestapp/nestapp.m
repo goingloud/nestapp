@@ -1600,11 +1600,14 @@ classdef nestapp < matlab.apps.AppBase
             if isTEP
                 app.TEPComponentTable.ColumnName    = {'Window','T1 (ms)','T2 (ms)','Mean (uV)','Peak (ms)','Peak (uV)'};
                 app.TEPComponentTable.ColumnEditable = [true true true false false false];
+                app.TEPComponentTable.ColumnWidth   = {70, 55, 55, 75, 70, 70};
                 nCol = 6;
             else
-                app.TEPComponentTable.ColumnName    = {'Window','T1 (ms)','T2 (ms)',[mode ' Mean (uV)']};
-                app.TEPComponentTable.ColumnEditable = [true true true false];
-                nCol = 4;
+                % GMFP/LMFP: mean plus area under the curve (cumulative field power).
+                app.TEPComponentTable.ColumnName    = {'Window','T1 (ms)','T2 (ms)',[mode ' Mean (uV)'],'AUC (uV*ms)'};
+                app.TEPComponentTable.ColumnEditable = [true true true false false];
+                app.TEPComponentTable.ColumnWidth   = {70, 55, 55, 90, 95};
+                nCol = 5;
             end
 
             n = numel(defs);
@@ -1614,7 +1617,7 @@ classdef nestapp < matlab.apps.AppBase
                 data{i,1} = defs(i).name;
                 data{i,2} = defs(i).winStart;
                 data{i,3} = defs(i).winEnd;
-                m = struct('mean', NaN, 'peakLatency', NaN, 'peakAmp', NaN);
+                m = struct('mean', NaN, 'area', NaN, 'peakLatency', NaN, 'peakAmp', NaN);
                 if haveCurve
                     pol = 'auto';
                     if isfield(defs, 'polarity') && ~isempty(defs(i).polarity)
@@ -1627,6 +1630,8 @@ classdef nestapp < matlab.apps.AppBase
                 if isTEP
                     data{i,5} = numOrDash(app, m.peakLatency);
                     data{i,6} = numOrDash(app, m.peakAmp);
+                else
+                    data{i,5} = numOrDash(app, m.area);
                 end
             end
             app.TEPComponentTable.Data = data;

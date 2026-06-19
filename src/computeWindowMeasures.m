@@ -8,6 +8,9 @@ function m = computeWindowMeasures(curve, times, t1, t2, polarity)
 %   single curve (TEP/GMFP/LMFP grand mean) over the closed window
 %   [min(t1,t2), max(t1,t2)] and returns a struct with fields:
 %     .mean        - mean amplitude over the window (NaN if window empty)
+%     .area        - area under the curve over the window (trapezoidal),
+%                    in amplitude*time units (e.g. uV*ms); the cumulative
+%                    field power for GMFP/LMFP. NaN if the window is empty.
 %     .peakLatency - time (same units as t1/t2) of the selected extremum
 %     .peakAmp     - amplitude at that extremum
 %     .found       - true when the window contained at least one sample
@@ -24,7 +27,7 @@ function m = computeWindowMeasures(curve, times, t1, t2, polarity)
         polarity = 'auto';
     end
 
-    m = struct('mean', NaN, 'peakLatency', NaN, 'peakAmp', NaN, 'found', false);
+    m = struct('mean', NaN, 'area', NaN, 'peakLatency', NaN, 'peakAmp', NaN, 'found', false);
 
     lo = min(t1, t2);
     hi = max(t1, t2);
@@ -38,6 +41,15 @@ function m = computeWindowMeasures(curve, times, t1, t2, polarity)
 
     segVals  = curve(inWindow);
     segTimes = times(inWindow);
+
+    % Area under the curve (trapezoidal). For GMFP/LMFP this is the cumulative
+    % mean-field power over the window; a single-sample window has zero width.
+    if numel(segVals) >= 2
+        m.area = trapz(segTimes, segVals);
+    else
+        m.area = 0;
+    end
+
     switch lower(polarity)
         case 'neg'
             [m.peakAmp, idx] = min(segVals);

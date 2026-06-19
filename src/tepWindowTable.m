@@ -32,6 +32,7 @@ function T = tepWindowTable(fileLabels, curves, time, windows, mode)
     t1     = zeros(nRows, 1);
     t2     = zeros(nRows, 1);
     meanv  = nan(nRows, 1);
+    areav  = nan(nRows, 1);
     peakMs = nan(nRows, 1);
     peakUv = nan(nRows, 1);
 
@@ -50,6 +51,7 @@ function T = tepWindowTable(fileLabels, curves, time, windows, mode)
             t1(k)     = windows(w).winStart;
             t2(k)     = windows(w).winEnd;
             meanv(k)  = m.mean;
+            areav(k)  = m.area;
             peakMs(k) = m.peakLatency;
             peakUv(k) = m.peakAmp;
         end
@@ -60,6 +62,9 @@ function T = tepWindowTable(fileLabels, curves, time, windows, mode)
     if isTEP
         T.peak_ms = peakMs;
         T.peak_uV = peakUv;
+    else
+        % AUC (cumulative field power) is the natural extra measure for GMFP/LMFP.
+        T.area_uV_ms = areav;
     end
     T.mode = repmat({upper(char(mode))}, nRows, 1);
 end

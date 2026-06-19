@@ -51,6 +51,7 @@ EEG = fakeEEG();
 testCase.verifyEqual(height(T), 2);
 testCase.verifyTrue(all(T.mean_uV >= 0));                 % GMFP is non-negative
 testCase.verifyFalse(any(ismember({'peak_ms'}, T.Properties.VariableNames)));
+testCase.verifyTrue(ismember('area_uV_ms', T.Properties.VariableNames));
 testCase.verifyEmpty(warns);
 end
 

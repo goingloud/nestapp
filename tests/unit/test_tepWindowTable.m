@@ -35,6 +35,19 @@ testCase.verifyTrue(all(ismember({'peak_ms','peak_uV'}, Ttep.Properties.Variable
 testCase.verifyFalse(any(ismember({'peak_ms','peak_uV'}, Tgmfp.Properties.VariableNames)));
 end
 
+function test_gmfpHasAreaColumn_tepDoesNot(testCase)
+% AUC is the GMFP/LMFP extra measure; TEP carries peaks instead.
+time  = 0:10:100;
+curve = time;
+Tg = tepWindowTable({'f1'}, curve, time, windows(), 'GMFP');
+Tt = tepWindowTable({'f1'}, curve, time, windows(), 'TEP');
+testCase.verifyTrue(ismember('area_uV_ms', Tg.Properties.VariableNames));
+testCase.verifyFalse(ismember('area_uV_ms', Tt.Properties.VariableNames));
+% Value matches the trapezoidal integral over the first window [10 30].
+m = computeWindowMeasures(curve, time, 10, 30, 'neg');
+testCase.verifyEqual(Tg.area_uV_ms(1), m.area, 'AbsTol', 1e-12);
+end
+
 function test_meanMatchesComputeWindowMeasures(testCase)
 time   = 0:10:100;
 curve  = sin(time/20);
