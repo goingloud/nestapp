@@ -28,10 +28,7 @@ function rescaleComponents(app, sX, sY)
         if ~(isscalar(h) && isgraphics(h)); continue; end
         e = L.(n);
         p = e.pos;
-        if e.fixedSize
-            % Reposition only - keep the widget's designed width and height.
-            h.Position = [round(p(1)*sX), round(p(2)*sY), p(3), p(4)];
-        elseif e.fixedH
+        if e.fixedH
             h.Position = [round(p(1)*sX), round(p(2)*sY), round(p(3)*sX), p(4)];
         else
             h.Position = round(p .* [sX, sY, sX, sY]);

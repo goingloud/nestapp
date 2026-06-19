@@ -20,15 +20,11 @@ function L = captureBaseLayout(app)
 %
 %   See also: rescaleComponents, UIFigureSizeChanged
 
-    % Excluded from rescale: the figure / tabs / status bar (handled specially),
-    % and the children of the fixed-size radio groups - those ride along with the
-    % repositioned (unscaled-size) group, so rescaling them would overflow it.
+    % Excluded from rescale: the figure / tabs (managed by the TabGroup) and the
+    % status bar / TabGroup, which rescaleComponents lays out explicitly.
     exclude = {'UIFigure', 'TabGroup', 'StatusBar', ...
-               'CleaningTab', 'VisualizingTab', 'AnalysisTab', 'ReportsTab', ...
-               'PlotTypeTEPButton', 'PlotTypeGMFPButton', 'PlotTypeLMFPButton', ...
-               'NewFigureButton', 'AddtocurrentFigureButton'};
-    fontMap   = fontScaledMap();
-    fixedSize = fixedSizeComponents();
+               'CleaningTab', 'VisualizingTab', 'AnalysisTab', 'ReportsTab'};
+    fontMap = fontScaledMap();
 
     L       = struct();
     mc      = metaclass(app);
@@ -50,8 +46,7 @@ function L = captureBaseLayout(app)
         if ~(isscalar(h) && isgraphics(h) && isprop(h, 'Position') && numel(h.Position) == 4)
             continue
         end
-        e = struct('pos', h.Position, 'fixedH', isFixedHeightControl(h), ...
-                   'fixedSize', any(strcmp(name, fixedSize)), 'font', []);
+        e = struct('pos', h.Position, 'fixedH', isFixedHeightControl(h), 'font', []);
         if isfield(fontMap, name)
             e.font = fontMap.(name);
         end
@@ -71,14 +66,6 @@ function tf = isFixedHeightControl(h)
          isa(h, 'matlab.ui.control.RangeSlider')     || ...
          isa(h, 'matlab.ui.control.DropDown')        || ...
          isa(h, 'matlab.ui.control.Slider');
-end
-
-function names = fixedSizeComponents()
-% Compact radio selectors that should keep their designed size and only
-% reposition. Their horizontal/snug internal layout distorts if width scales
-% (fixed-size labels left-aligned in widening boxes), so the whole widget moves
-% as a unit. Their child radios are excluded from rescale and ride along.
-    names = {'PlotTypeButtonGroup', 'PlottingModeButtonGroup'};
 end
 
 function m = fontScaledMap()
