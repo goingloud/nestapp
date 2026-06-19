@@ -311,16 +311,16 @@ classdef nestapp < matlab.apps.AppBase
                 return
             end
             data = buildParamTableData(step, reg(regIdx));
-            % Show a parameter overridden by a mutually-exclusive sibling (e.g.
-            % "Remove channels" while "Keep channels" is set) as disabled. The
-            % '(' prefix makes styleParamTable grey the cell.
-            overridden = overriddenParamKeys(step.name, step.params);
-            if ~isempty(overridden)
+            % Show params that are disabled for this step - overridden by a
+            % mutually-exclusive sibling, or gated off by another param's value
+            % - greyed out. The '(' prefix makes styleParamTable grey the cell.
+            disabled = disabledParamKeys(reg(regIdx), step.params);
+            if ~isempty(disabled)
                 keys = {reg(regIdx).params.key};
-                for k = 1:numel(overridden)
-                    r = find(strcmp(keys, overridden{k}), 1);
+                for k = 1:numel(disabled)
+                    r = find(strcmp(keys, disabled{k}), 1);
                     if ~isempty(r)
-                        data{r,2} = '(overridden - clear the other list to edit)';
+                        data{r,2} = '(disabled)';
                     end
                 end
             end
@@ -2164,17 +2164,14 @@ classdef nestapp < matlab.apps.AppBase
 
             row    = event.Indices(1);
             params = reg(regIdx).params;
-            % Reject edits to a parameter that a mutually-exclusive sibling is
-            % overriding (e.g. "Remove channels" while "Keep channels" is set):
-            % they are two ways of writing one list. Revert the cell and explain.
+            % Reject edits to a parameter that is disabled for this step -
+            % overridden by a mutually-exclusive sibling, or gated off by
+            % another param's value. Revert the cell and explain why.
             if row <= numel(params)
-                overridden = overriddenParamKeys(step.name, step.params);
-                if any(strcmp(params(row).key, overridden))
-                    uialert(app.UIFigure, ...
-                        ['"' params(row).friendlyName '" and "Keep channels" are two ' ...
-                         'ways of writing the same channel selection. Clear the ' ...
-                         'list that is currently set before editing this one.'], ...
-                        'Parameter overridden');
+                [disabled, reasons] = disabledParamKeys(reg(regIdx), step.params);
+                key = params(row).key;
+                if any(strcmp(key, disabled))
+                    uialert(app.UIFigure, reasons.(key), 'Parameter disabled');
                     refreshParamTable(app, stepIdx);   % revert the edited cell
                     return
                 end

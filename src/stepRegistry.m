@@ -32,7 +32,8 @@ if ~isempty(cachedSteps)
     return
 end
 
-steps = struct('name',{},'defaults',{},'info',{},'params',{},'requires',{});
+steps = struct('name',{},'defaults',{},'info',{},'params',{},'requires',{}, ...
+    'exclusiveParamGroups',{},'paramEnableWhen',{});
 
 %% ---- Load Data -------------------------------------------------------
 s = blankStep();
@@ -128,6 +129,8 @@ s.params = [ ...
        'Labels to remove, e.g. {''TP9'',''TP10''}. Disabled while "Keep channels" is set.', 'type', 'stringlist'), ...
     makeParam('channel',  'Keep channels', '','cell of labels or []', ...
        'Keep ONLY these channels (overrides "Remove channels"). Two ways of writing one list - set just one.', 'placeholder', '(keep all)', 'type', 'stringlist')];
+% "Keep channels" overrides "Remove channels" (two ways of writing one selection).
+s.exclusiveParamGroups = {{'channel','nochannel'}};
 steps(end+1) = s;
 
 %% ---- Remove Baseline -------------------------------------------------
@@ -145,9 +148,11 @@ s.params = [ ...
     makeParam('timerange', 'Time range',  'ms','[tmin tmax] or []', ...
        'Baseline window in ms. [] uses all available pre-stimulus time.', 'placeholder', '(full pre-stimulus)', 'type', 'vector'), ...
     makeParam('pointrange','Point range', 'samples','[p1 p2] or []', ...
-       'Baseline as sample indices (alternative to time range).', 'placeholder', '(use timerange instead)', 'type', 'vector'), ...
+       'Baseline as sample indices (alternative to time range; disabled while time range is set).', 'placeholder', '(samples)', 'type', 'vector'), ...
     makeParam('chanlist',  'Channels',    '','[] = all', ...
        'Restrict baseline removal to these channel indices.', 'placeholder', '(all channels)', 'type', 'vector')];
+% Time range (ms) and point range (samples) are two ways to write one window.
+s.exclusiveParamGroups = {{'timerange','pointrange'}};
 steps(end+1) = s;
 
 %% ---- Remove Bad Channels ---------------------------------------------
@@ -177,6 +182,8 @@ s.params = [ ...
        'kurt = kurtosis, prob = probability, spec = spectral power.', 'type', 'string'), ...
     makeParam('freqrange', 'Frequency range',     'Hz','[flo fhi]', ...
        'Frequency band for spectral measure (ignored for kurt/prob).', 'type', 'vector')];
+% Frequency range only applies to the spectral measure.
+s.paramEnableWhen = struct('param','freqrange','controller','measure','values',{{'spec'}});
 steps(end+1) = s;
 
 %% ---- Clean Artifacts -------------------------------------------------
@@ -826,6 +833,13 @@ s.params = [ ...
        'Number of pulses per rTMS train.', 'placeholder', '(not applicable)', 'type', 'integer')];
 s.requires = req('pop_tesa_findpulse', 'TESA', ...
     'EEGLAB Plugin Manager -> search "TESA" (v1.1.1 or later)');
+% Paired-pulse params apply only when paired = yes; rTMS params only when
+% repetitive = yes.
+s.paramEnableWhen = [ ...
+    struct('param','ISI',      'controller','paired',    'values',{{'yes'}}), ...
+    struct('param','pairlabel','controller','paired',    'values',{{'yes'}}), ...
+    struct('param','ITI',      'controller','repetitive','values',{{'yes'}}), ...
+    struct('param','pulseNum', 'controller','repetitive','values',{{'yes'}})];
 steps(end+1) = s;
 
 %% ---- Remove TMS Artifacts (TESA) ------------------------------------
@@ -884,6 +898,8 @@ s.params = [ ...
        'Inter-stimulus interval for paired-pulse correction.', 'placeholder', '(single pulse)', 'type', 'scalar')];
 s.requires = req('tesa_fixevent', 'TESA', ...
     'EEGLAB Plugin Manager -> search "TESA" (v1.1.1 or later)');
+% ISI applies only to paired-pulse correction.
+s.paramEnableWhen = struct('param','ISI','controller','paired','values',{{'yes'}});
 steps(end+1) = s;
 
 %% ---- Interpolate Channels -------------------------------------------
@@ -1030,6 +1046,8 @@ s.params = [ ...
        'Inter-stimulus interval for paired-pulse paradigm.', 'placeholder', '(single pulse)', 'type', 'scalar')];
 s.requires = req('pop_tesa_tepextract', 'TESA', ...
     'EEGLAB Plugin Manager -> search "TESA" (v1.1.1 or later)');
+% Electrodes apply only to ROI extraction (GMFA uses all channels).
+s.paramEnableWhen = struct('param','elecs','controller','type','values',{{'ROI'}});
 steps(end+1) = s;
 
 %% ---- Find TEP Peaks (TESA) ------------------------------------------
@@ -1097,6 +1115,8 @@ s.params = [ ...
        'Display a table of peak results in the MATLAB command window after computation.', 'type', 'logical')];
 s.requires = req('pop_tesa_peakoutput', 'TESA', ...
     'EEGLAB Plugin Manager -> search "TESA" (v1.1.1 or later)');
+% Fixed-peak window applies only when the peak window type is "fixed".
+s.paramEnableWhen = struct('param','fixedPeak','controller','winType','values',{{'fixed'}});
 steps(end+1) = s;
 
 %% ---- Remove Recording Noise (SOUND) ----------------------------------
@@ -1491,6 +1511,14 @@ end % stepRegistry
 function s = blankStep()
 % Returns an empty step struct with correct field names.
 s = struct('name','','defaults',struct(),'info','','params',struct([]),'requires',struct([]));
+% Param-relationship metadata (both optional / empty by default). See
+% disabledParamKeys for how these grey out and lock params in the GUI.
+%   exclusiveParamGroups - cell of ordered key-lists; only one member of each
+%                          group may hold a value (index 1 = precedence).
+%   paramEnableWhen      - rules struct array; a param is disabled unless its
+%                          controlling param holds one of the listed values.
+s.exclusiveParamGroups = {};
+s.paramEnableWhen      = struct('param', {}, 'controller', {}, 'values', {});
 end
 
 function r = req(fn, plugin, installNote, fileExt)

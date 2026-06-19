@@ -340,18 +340,18 @@ for si = 1:nSteps
 
             case 'Remove Baseline'
                 vars = convertContainedStringsToChars(varin);
-                ind  = find(strcmpi(vars, 'timerange'));
-                timerange = vars{ind+1};
-                if ischar(timerange) && strcmp(timerange, '[]')
-                    timerange = [];
-                elseif ischar(timerange) || isstring(timerange)
-                    timerange = str2num(char(timerange)); %#ok<ST2NM>
-                end
+                % "Time range" (ms) and "Point range" (samples) are alternative
+                % ways to specify the baseline window; timerange wins if both
+                % are set. "Channels" restricts which channels are corrected.
+                % pop_rmbase(EEG, timerange, pointrange, chanlist).
+                timerange  = parseRmbaseVec(vars, 'timerange');
+                pointrange = parseRmbaseVec(vars, 'pointrange');
+                chanlist   = parseRmbaseVec(vars, 'chanlist');
                 if isnumeric(timerange) && numel(timerange) == 2
                     timerange(1) = max(timerange(1), EEG.times(1));
                     timerange(2) = min(timerange(2), EEG.times(end));
                 end
-                EEG = pop_rmbase(EEG, timerange);
+                EEG = pop_rmbase(EEG, timerange, pointrange, chanlist);
                 EEG = eeg_checkset(EEG);
 
             case 'De-Trend Epoch'
@@ -1324,4 +1324,22 @@ end
 ts = char(datetime('now', 'Format', 'HH:mm:ss.SSS'));
 send(q, struct('log', true, 'ts', ts, 'label', label, ...
                'text', sprintf(fmt, varargin{:})));
+end
+
+function v = parseRmbaseVec(vars, key)
+% Extract a numeric-vector param from a key-value varin cell, coercing the
+% '[]' placeholder and string forms to a numeric value (or [] when absent).
+v = [];
+ind = find(strcmpi(vars, key), 1);
+if isempty(ind) || ind + 1 > numel(vars)
+    return
+end
+v = vars{ind + 1};
+if ischar(v) || isstring(v)
+    if strcmp(char(v), '[]')
+        v = [];
+    else
+        v = str2num(char(v)); %#ok<ST2NM>
+    end
+end
 end
