@@ -1478,37 +1478,28 @@ classdef nestapp < matlab.apps.AppBase
 
             % Remember the displayed curve so the Analysis tab can measure it.
             app.TEPDisplayCurve = meanx;
-
-            % "Show Components" overlays the signed TEP component peaks on the
-            % plot; that is meaningful only for TEP. For GMFP/LMFP (positive-only
-            % mean-field power) there are no signed peaks, so clear them.
-            if strcmp(plotType, 'TEP')
-                % Detection runs on the SMOOTHED grand mean (meanx) - the same
-                % waveform that is plotted - so baseline wiggles do not register
-                % as spurious extrema.
-                try
-                    app.tepPeaks = tepPeakFinder(meanx, app.EEGtime, app.tepComponentDefs);
-                    if app.ShowComponentsButton.Value
-                        overlayTEPComponents(app);
-                    end
-                catch ME
-                    if strcmp(ME.identifier, 'tepPeakFinder:noTESA')
-                        uialert(app.UIFigure, ...
-                            ['TESA not found. Add TESA to the MATLAB path to enable ' ...
-                             'the component overlay (Show Components).'], 'TESA Required');
-                        app.ShowComponentsButton.Value = false;
-                        app.tepPeaks = [];
-                    else
-                        rethrow(ME);
-                    end
-                end
-            else
+            if ~strcmp(plotType, 'TEP')
                 app.tepPeaks = [];
             end
 
-            % Refresh the Analysis-tab windows-of-interest table for the curve
-            % just plotted (mean for every mode; +peak for TEP).
+            % Fill the Analysis windows table. For TEP this also (re)detects the
+            % component peaks on the displayed curve, which the overlay reuses,
+            % so the table and the plot stay in agreement.
             refreshAnalysisWindows(app);
+
+            % "Show Components" overlays the signed TEP component peaks; that is
+            % meaningful only for TEP (GMFP/LMFP are positive-only mean-field
+            % power, with no signed peaks).
+            if strcmp(plotType, 'TEP') && app.ShowComponentsButton.Value
+                if isempty(app.tepPeaks)
+                    uialert(app.UIFigure, ...
+                        ['TESA not found. Add TESA to the MATLAB path to enable ' ...
+                         'the component overlay (Show Components).'], 'TESA Required');
+                    app.ShowComponentsButton.Value = false;
+                else
+                    overlayTEPComponents(app);
+                end
+            end
         end
 
         function EEG_topoplot(app)
@@ -1563,12 +1554,14 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         function overlayTEPComponents(app)
-        % Draw dashed vertical lines and text labels for each detected TEP component.
-        % Assumes app.tepPeaks is already populated by tepPeakFinder.
+        % Draw dashed vertical lines and text labels for each detected TEP
+        % component. Re-callable: any previous overlay is cleared first, so it
+        % can be redrawn after the windows are edited. Reads app.tepPeaks.
+            ax = app.UIAxes;
+            delete(findobj(ax, 'Tag', 'tepCompOverlay'));
             if isempty(app.tepPeaks)
                 return
             end
-            ax = app.UIAxes;
             yLims = ylim(ax);
             % Place labels near the top of the axes (80% height)
             labelY = yLims(1) + 0.80 * (yLims(2) - yLims(1));
@@ -1579,11 +1572,11 @@ classdef nestapp < matlab.apps.AppBase
                     continue
                 end
                 xline(ax, pk.latencyMs, '--', 'Color', [0.4 0.4 0.4], ...
-                    'LineWidth', 1, 'HandleVisibility', 'off');
+                    'LineWidth', 1, 'HandleVisibility', 'off', 'Tag', 'tepCompOverlay');
                 text(ax, pk.latencyMs, labelY, ...
                     sprintf('%s\n%.0f ms\n%.1f uV', pk.name, pk.latencyMs, pk.amplitudeUV), ...
                     'FontSize', 7, 'HorizontalAlignment', 'center', ...
-                    'Color', [0.3 0.3 0.3], 'VerticalAlignment', 'top');
+                    'Color', [0.3 0.3 0.3], 'VerticalAlignment', 'top', 'Tag', 'tepCompOverlay');
             end
             hold(ax, 'off');
         end
@@ -1591,11 +1584,29 @@ classdef nestapp < matlab.apps.AppBase
         function refreshAnalysisWindows(app)
         % REFRESHANALYSISWINDOWS  Fill the Windows-of-Interest table for the
         %   currently displayed curve. Mode-aware: every mode shows the window
-        %   Mean; TEP also shows the peak latency/amplitude. Name/T1/T2 mirror
-        %   app.tepComponentDefs (the editable window list).
+        %   Mean; TEP adds the component peak latency/amplitude detected by the
+        %   SAME tepPeakFinder that draws the on-plot overlay - so the table and
+        %   the graph agree, including showing '-' where no peak was found. GMFP
+        %   and LMFP add the window's area under the curve instead.
             defs  = app.tepComponentDefs;
             mode  = currentPlotType(app);
             isTEP = strcmp(mode, 'TEP');
+            haveCurve = ~isempty(app.TEPDisplayCurve) && ~isempty(app.EEGtime);
+
+            % For TEP, (re)detect component peaks on the displayed curve so the
+            % table tracks the overlay and updates when windows are edited.
+            if isTEP && haveCurve
+                try
+                    app.tepPeaks = tepPeakFinder(app.TEPDisplayCurve, app.EEGtime, defs);
+                catch ME
+                    if strcmp(ME.identifier, 'tepPeakFinder:noTESA')
+                        app.tepPeaks = [];
+                    else
+                        rethrow(ME);
+                    end
+                end
+            end
+
             if isTEP
                 app.TEPComponentTable.ColumnName    = {'Window','T1 (ms)','T2 (ms)','Mean (uV)','Peak (ms)','Peak (uV)'};
                 app.TEPComponentTable.ColumnEditable = [true true true false false false];
@@ -1611,25 +1622,41 @@ classdef nestapp < matlab.apps.AppBase
 
             n = numel(defs);
             data = cell(n, nCol);
-            haveCurve = ~isempty(app.TEPDisplayCurve) && ~isempty(app.EEGtime);
+            hasPeaks = isTEP && numel(app.tepPeaks) == n;
             for i = 1:n
                 data{i,1} = defs(i).name;
                 data{i,2} = defs(i).winStart;
                 data{i,3} = defs(i).winEnd;
-                m = struct('mean', NaN, 'area', NaN, 'peakLatency', NaN, 'peakAmp', NaN);
+                m = struct('mean', NaN, 'area', NaN);
                 if haveCurve
                     m = computeWindowMeasures(app.TEPDisplayCurve, app.EEGtime, ...
                         defs(i).winStart, defs(i).winEnd, windowPolarity(defs(i)));
                 end
                 data{i,4} = numOrDash(app, m.mean);
                 if isTEP
-                    data{i,5} = numOrDash(app, m.peakLatency);
-                    data{i,6} = numOrDash(app, m.peakAmp);
+                    % Peak from the overlay's detector, so table and plot match
+                    % (and show '-' for components it did not find).
+                    if hasPeaks && app.tepPeaks(i).found
+                        data{i,5} = round(app.tepPeaks(i).latencyMs, 2);
+                        data{i,6} = round(app.tepPeaks(i).amplitudeUV, 2);
+                    else
+                        data{i,5} = '-';
+                        data{i,6} = '-';
+                    end
                 else
                     data{i,5} = numOrDash(app, m.area);
                 end
             end
             app.TEPComponentTable.Data = data;
+        end
+
+        function afterWindowsChanged(app)
+        % Re-measure the windows after the list changed and, for a shown TEP,
+        % redraw the component overlay so the table and the plot stay consistent.
+            refreshAnalysisWindows(app);
+            if app.TEPCreated && strcmp(currentPlotType(app), 'TEP') && app.ShowComponentsButton.Value
+                overlayTEPComponents(app);
+            end
         end
 
         function s = numOrDash(~, v)
@@ -2471,7 +2498,7 @@ classdef nestapp < matlab.apps.AppBase
                 case 3
                     app.tepComponentDefs(r).winEnd = event.NewData;
             end
-            refreshAnalysisWindows(app);
+            afterWindowsChanged(app);
         end
 
         % Button pushed function: AddWindowButton
@@ -2484,7 +2511,7 @@ classdef nestapp < matlab.apps.AppBase
             else
                 app.tepComponentDefs(n+1) = newDef;
             end
-            refreshAnalysisWindows(app);
+            afterWindowsChanged(app);
         end
 
         % Button pushed function: RemoveWindowButton
@@ -2497,13 +2524,13 @@ classdef nestapp < matlab.apps.AppBase
             rows = unique(sel(:));
             rows(rows > numel(app.tepComponentDefs)) = [];
             app.tepComponentDefs(rows) = [];
-            refreshAnalysisWindows(app);
+            afterWindowsChanged(app);
         end
 
         % Button pushed function: ResetWindowsButton
         function ResetWindowsButtonPushed(app, ~)
             app.tepComponentDefs = defaultTEPComponentDefs();
-            refreshAnalysisWindows(app);
+            afterWindowsChanged(app);
         end
 
         % -- Analysis Tab callbacks ----------------------------------------
