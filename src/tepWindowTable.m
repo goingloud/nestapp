@@ -40,12 +40,8 @@ function T = tepWindowTable(fileLabels, curves, time, windows, mode)
     for f = 1:nF
         for w = 1:nW
             k = k + 1;
-            pol = 'auto';
-            if isfield(windows, 'polarity') && ~isempty(windows(w).polarity)
-                pol = windows(w).polarity;
-            end
             m = computeWindowMeasures(curves(f,:), time, ...
-                windows(w).winStart, windows(w).winEnd, pol);
+                windows(w).winStart, windows(w).winEnd, windowPolarity(windows(w)));
             file{k}   = fileLabels{f};
             win{k}    = windows(w).name;
             t1(k)     = windows(w).winStart;

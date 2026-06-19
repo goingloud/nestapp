@@ -105,9 +105,7 @@ for fi = 1:nFiles
 
     %% Resolve ROI channels
     allLabels  = {EEG.chanlocs.labels};
-    % Case-insensitive ROI match: montage labels vary in case (e.g. a file's
-    % 'Fp1' vs a requested 'FP1'), so compare on lowercased labels.
-    roiIdx     = find(ismember(lower(allLabels), lower(opts.roiElectrodes)));
+    roiIdx     = roiChannelIndex(allLabels, opts.roiElectrodes);
     nRoiFound  = numel(roiIdx);
     if nRoiFound == 0
         warnings{end+1} = sprintf('%s: skipped - none of the requested ROI electrodes found', fname); %#ok<AGROW>

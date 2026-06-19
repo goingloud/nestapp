@@ -55,7 +55,7 @@ function [results, warnings] = batchWindowExtract(filePaths, roiElectrodes, mode
             end
         catch ME
             warnings{end+1} = sprintf('%s: load failed - %s', fname, ME.message); %#ok<AGROW>
-            parts{fi} = nanWindowTable(fname, opts.windows, mode);
+            parts{fi} = tepWindowTable({fname}, NaN, [], opts.windows, mode);
             continue
         end
 
@@ -64,16 +64,16 @@ function [results, warnings] = batchWindowExtract(filePaths, roiElectrodes, mode
             nTrials = 0;
             if isstruct(EEG) && isfield(EEG, 'trials'), nTrials = EEG.trials; end
             warnings{end+1} = sprintf('%s: skipped - not epoched (trials=%d)', fname, nTrials); %#ok<AGROW>
-            parts{fi} = nanWindowTable(fname, opts.windows, mode);
+            parts{fi} = tepWindowTable({fname}, NaN, [], opts.windows, mode);
             continue
         end
 
         % -- resolve ROI (case-insensitive; needed only for TEP/LMFP) --
         allLabels = {EEG.chanlocs.labels};
-        roiIdx    = find(ismember(lower(allLabels), lower(opts.roiElectrodes)));
+        roiIdx    = roiChannelIndex(allLabels, opts.roiElectrodes);
         if needsROI && isempty(roiIdx)
             warnings{end+1} = sprintf('%s: skipped - none of the requested ROI electrodes found', fname); %#ok<AGROW>
-            parts{fi} = nanWindowTable(fname, opts.windows, mode);
+            parts{fi} = tepWindowTable({fname}, NaN, [], opts.windows, mode);
             continue
         end
         if needsROI && numel(roiIdx) < numel(opts.roiElectrodes)
@@ -92,23 +92,4 @@ function [results, warnings] = batchWindowExtract(filePaths, roiElectrodes, mode
     if ~isempty(opts.csvPath)
         writetable(results, opts.csvPath);
     end
-end
-
-% ── local helper ─────────────────────────────────────────────────────────────
-
-function T = nanWindowTable(label, windows, mode)
-% Schema-matching all-NaN rows for a file that could not be measured.
-    nW    = numel(windows);
-    file  = repmat({label}, nW, 1);
-    win   = reshape({windows.name}, nW, 1);
-    t1    = reshape([windows.winStart], nW, 1);
-    t2    = reshape([windows.winEnd], nW, 1);
-    meanv = nan(nW, 1);
-    T = table(file, win, t1, t2, meanv, ...
-        'VariableNames', {'file', 'window', 't1_ms', 't2_ms', 'mean_uV'});
-    if strcmpi(mode, 'TEP')
-        T.peak_ms = nan(nW, 1);
-        T.peak_uV = nan(nW, 1);
-    end
-    T.mode = repmat({upper(char(mode))}, nW, 1);
 end
