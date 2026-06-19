@@ -311,7 +311,21 @@ classdef nestapp < matlab.apps.AppBase
                 app.UITable.Data = [];
                 return
             end
-            app.UITable.Data = buildParamTableData(step, reg(regIdx));
+            data = buildParamTableData(step, reg(regIdx));
+            % Show a parameter overridden by a mutually-exclusive sibling (e.g.
+            % "Remove channels" while "Keep channels" is set) as disabled. The
+            % '(' prefix makes styleParamTable grey the cell.
+            overridden = overriddenParamKeys(step.name, step.params);
+            if ~isempty(overridden)
+                keys = {reg(regIdx).params.key};
+                for k = 1:numel(overridden)
+                    r = find(strcmp(keys, overridden{k}), 1);
+                    if ~isempty(r)
+                        data{r,2} = '(overridden - clear the other list to edit)';
+                    end
+                end
+            end
+            app.UITable.Data = data;
             styleParamTable(app);
         end
 
@@ -2133,9 +2147,30 @@ classdef nestapp < matlab.apps.AppBase
             regIdx = find(strcmp({reg.name}, step.name), 1);
             if isempty(regIdx); return; end
 
-            app.spec = applyParamEdit(app.spec, stepIdx, event.Indices(1), event.NewData, reg(regIdx));
+            row    = event.Indices(1);
+            params = reg(regIdx).params;
+            % Reject edits to a parameter that a mutually-exclusive sibling is
+            % overriding (e.g. "Remove channels" while "Keep channels" is set):
+            % they are two ways of writing one list. Revert the cell and explain.
+            if row <= numel(params)
+                overridden = overriddenParamKeys(step.name, step.params);
+                if any(strcmp(params(row).key, overridden))
+                    uialert(app.UIFigure, ...
+                        ['"' params(row).friendlyName '" and "Keep channels" are two ' ...
+                         'ways of writing the same channel selection. Clear the ' ...
+                         'list that is currently set before editing this one.'], ...
+                        'Parameter overridden');
+                    refreshParamTable(app, stepIdx);   % revert the edited cell
+                    return
+                end
+            end
+
+            app.spec = applyParamEdit(app.spec, stepIdx, row, event.NewData, reg(regIdx));
             app.pipelineDirty = true;
             updateStatusBar(app);
+            % Re-render so setting/clearing one mutually-exclusive param updates
+            % the disabled state of its sibling.
+            refreshParamTable(app, stepIdx);
         end
 
         % Value changed function: SelectedListBox
