@@ -178,10 +178,11 @@ function rescaleComponents(app, sX, sY)
             %% Analysis Tab
             app.AnalysisSelPanel.Position          = p([10 430 847 55]);
             app.AnalysisSelectionLabel.Position    = p([10 5 820 32]);
-            app.AnalysisCompWindowsLabel.Position  = p([10 407 300 18]);
-            app.TEPComponentTable.Position         = p([10 225 360 178]);
-            app.TEPComponentTable.ColumnWidth      = {'auto', 'auto', 'auto'};
-            app.EditComponentWindowsButton.Position = p([10 196 220 25]);
+            app.AnalysisCompWindowsLabel.Position  = p([10 407 430 18]);
+            app.TEPComponentTable.Position         = p([10 200 430 203]);
+            app.AddWindowButton.Position           = p([10 170 100 25]);
+            app.RemoveWindowButton.Position        = p([115 170 110 25]);
+            app.ResetWindowsButton.Position        = p([230 170 110 25]);
             app.AnalysisWorkspaceLabel.Position    = p([450 407 380 18]);
             app.ExportTEPDataButton.Position       = p([450 374 220 28]);
             app.TEPvarNameEditFieldLabel.Position  = p([450 348 60 22]);

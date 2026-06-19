@@ -399,31 +399,6 @@ function createComponents(app)
             app.PlotTypeLMFPButton.Text = 'LMFP';
             app.PlotTypeLMFPButton.Position = [122 4 60 22];
 
-            % Create WindowStartEditField (mean-measurement window start, ms)
-            app.WindowStartEditField = uieditfield(app.VisualizingTab, 'numeric');
-            app.WindowStartEditField.ValueDisplayFormat = '%.0f';
-            app.WindowStartEditField.Value = 90;
-            app.WindowStartEditField.Tooltip = 'Average-window start (ms)';
-            app.WindowStartEditField.ValueChangedFcn = createCallbackFcn(app, @WindowEditFieldValueChanged, true);
-            app.WindowStartEditField.Position = [5 143 42 22];
-
-            % Create WindowEndEditField (mean-measurement window end, ms)
-            app.WindowEndEditField = uieditfield(app.VisualizingTab, 'numeric');
-            app.WindowEndEditField.ValueDisplayFormat = '%.0f';
-            app.WindowEndEditField.Value = 140;
-            app.WindowEndEditField.Tooltip = 'Average-window end (ms)';
-            app.WindowEndEditField.ValueChangedFcn = createCallbackFcn(app, @WindowEditFieldValueChanged, true);
-            app.WindowEndEditField.Position = [50 143 42 22];
-
-            % Create WindowMsLabel
-            app.WindowMsLabel = uilabel(app.VisualizingTab);
-            app.WindowMsLabel.Position = [96 143 40 22];
-            app.WindowMsLabel.Text = 'ms win';
-
-            % Create WindowMeanLabel (windowed-average readout)
-            app.WindowMeanLabel = uilabel(app.VisualizingTab);
-            app.WindowMeanLabel.Position = [5 120 140 22];
-            app.WindowMeanLabel.Text = 'Win mean: -- uV';
 
             % Create AF3Button
             app.AF3Button = uibutton(app.VisualizingTab, 'state');
@@ -1116,22 +1091,35 @@ function createComponents(app)
                 'Text', 'Select files and ROI electrodes on the Visualizing tab.', ...
                 'WordWrap', 'on', 'FontSize', 11);
 
-            % Analysis tab - LEFT column: component windows
-            app.AnalysisCompWindowsLabel = uilabel(app.AnalysisTab, 'Position', [10 407 300 18], ...
-                'Text', 'COMPONENT WINDOWS', 'FontWeight', 'bold', 'FontSize', 10);
+            % Analysis tab - LEFT column: windows of interest
+            app.AnalysisCompWindowsLabel = uilabel(app.AnalysisTab, 'Position', [10 407 430 18], ...
+                'Text', 'WINDOWS OF INTEREST', 'FontWeight', 'bold', 'FontSize', 10);
 
-            % TEPComponentTable - taller to show all 6 components without scrolling
+            % WOI table - Name/T1/T2 editable inline; measures filled per mode.
             app.TEPComponentTable = uitable(app.AnalysisTab);
-            app.TEPComponentTable.ColumnName  = {'Component', 'Latency (ms)', 'Amplitude (uV)'};
-            app.TEPComponentTable.ColumnWidth = {'auto', 'auto', 'auto'};
-            app.TEPComponentTable.RowName     = {};
-            app.TEPComponentTable.Enable      = 'on';
-            app.TEPComponentTable.Position    = [10 225 360 178];
+            app.TEPComponentTable.ColumnName    = {'Window', 'T1 (ms)', 'T2 (ms)', 'Mean (uV)', 'Peak (ms)', 'Peak (uV)'};
+            app.TEPComponentTable.ColumnEditable = [true true true false false false];
+            app.TEPComponentTable.ColumnWidth   = {70, 60, 60, 75, 70, 70};
+            app.TEPComponentTable.RowName       = {};
+            app.TEPComponentTable.SelectionType = 'row';
+            app.TEPComponentTable.Enable        = 'on';
+            app.TEPComponentTable.CellEditCallback = createCallbackFcn(app, @WOITableCellEdit, true);
+            app.TEPComponentTable.Position      = [10 200 430 203];
 
-            app.EditComponentWindowsButton = uibutton(app.AnalysisTab, 'push');
-            app.EditComponentWindowsButton.ButtonPushedFcn = createCallbackFcn(app, @EditComponentWindowsButtonPushed, true);
-            app.EditComponentWindowsButton.Text     = 'Edit Component Windows...';
-            app.EditComponentWindowsButton.Position = [10 196 220 25];
+            app.AddWindowButton = uibutton(app.AnalysisTab, 'push');
+            app.AddWindowButton.ButtonPushedFcn = createCallbackFcn(app, @AddWindowButtonPushed, true);
+            app.AddWindowButton.Text     = 'Add Window';
+            app.AddWindowButton.Position = [10 170 100 25];
+
+            app.RemoveWindowButton = uibutton(app.AnalysisTab, 'push');
+            app.RemoveWindowButton.ButtonPushedFcn = createCallbackFcn(app, @RemoveWindowButtonPushed, true);
+            app.RemoveWindowButton.Text     = 'Remove Window';
+            app.RemoveWindowButton.Position = [115 170 110 25];
+
+            app.ResetWindowsButton = uibutton(app.AnalysisTab, 'push');
+            app.ResetWindowsButton.ButtonPushedFcn = createCallbackFcn(app, @ResetWindowsButtonPushed, true);
+            app.ResetWindowsButton.Text     = 'Reset Defaults';
+            app.ResetWindowsButton.Position = [230 170 110 25];
 
             % Analysis tab - RIGHT column: workspace export + batch extraction grouped
             app.AnalysisWorkspaceLabel = uilabel(app.AnalysisTab, 'Position', [450 407 380 18], ...
@@ -1140,7 +1128,7 @@ function createComponents(app)
             app.ExportTEPDataButton = uibutton(app.AnalysisTab, 'push');
             app.ExportTEPDataButton.ButtonPushedFcn = createCallbackFcn(app, @ExportTEPDataButtonPushed, true);
             app.ExportTEPDataButton.Enable   = 'off';
-            app.ExportTEPDataButton.Text     = 'Export TEP to Workspace';
+            app.ExportTEPDataButton.Text     = 'Export to Workspace';
             app.ExportTEPDataButton.Position = [450 374 220 28];
 
             app.TEPvarNameEditFieldLabel = uilabel(app.AnalysisTab);
@@ -1158,16 +1146,16 @@ function createComponents(app)
             app.AnalysisBatchLabel = uilabel(app.AnalysisTab, 'Position', [450 313 380 18], ...
                 'Text', 'BATCH EXTRACTION', 'FontWeight', 'bold', 'FontSize', 10);
             app.AnalysisBatchDescLabel = uilabel(app.AnalysisTab, 'Position', [450 291 380 18], ...
-                'Text', ['Extract peak latency and amplitude from each file. ' ...
-                    'Results saved as CSV for import into R/SPSS/Excel.'], ...
+                'Text', ['Extract each window''s mean (and peak, for TEP) from every ' ...
+                    'selected file. Saved as CSV for import into R/SPSS/Excel.'], ...
                 'WordWrap', 'on', 'FontSize', 9, 'FontColor', [0.4 0.4 0.4]);
 
             app.ExtractPeaksCSVButton = uibutton(app.AnalysisTab, 'push');
             app.ExtractPeaksCSVButton.ButtonPushedFcn = createCallbackFcn(app, @ExtractPeaksCSVButtonPushed, true);
-            app.ExtractPeaksCSVButton.Text    = 'Extract Peaks  ->  CSV';
+            app.ExtractPeaksCSVButton.Text    = 'Extract Windows  ->  CSV';
             app.ExtractPeaksCSVButton.Position = [450 254 220 32];
             app.ExtractPeaksCSVButton.Tooltip = ...
-                'Run peak detection across all selected files and save results as a CSV table';
+                'Compute each window-of-interest measure across all selected files and save as CSV';
 
             app.AnalysisStatusLabel = uilabel(app.AnalysisTab);
             app.AnalysisStatusLabel.Position   = [10 15 847 22];

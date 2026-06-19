@@ -123,10 +123,6 @@ classdef nestapp < matlab.apps.AppBase
         PlotTypeTEPButton               matlab.ui.control.RadioButton
         PlotTypeGMFPButton              matlab.ui.control.RadioButton
         PlotTypeLMFPButton              matlab.ui.control.RadioButton
-        WindowStartEditField            matlab.ui.control.NumericEditField
-        WindowEndEditField              matlab.ui.control.NumericEditField
-        WindowMsLabel                   matlab.ui.control.Label
-        WindowMeanLabel                 matlab.ui.control.Label
         ExportTEPFigureButton           matlab.ui.control.Button
         TOPOPLOTButton                  matlab.ui.control.Button
         WindowsizefortimeaveragedTopoplotEditField  matlab.ui.control.NumericEditField
@@ -142,7 +138,9 @@ classdef nestapp < matlab.apps.AppBase
         FolderEditField_2Label          matlab.ui.control.Label
         PLOTTEPButton                   matlab.ui.control.Button
         ShowComponentsButton            matlab.ui.control.StateButton
-        EditComponentWindowsButton      matlab.ui.control.Button
+        AddWindowButton                 matlab.ui.control.Button
+        RemoveWindowButton              matlab.ui.control.Button
+        ResetWindowsButton              matlab.ui.control.Button
         TEPComponentTable               matlab.ui.control.Table
         UIAxes2                         matlab.ui.control.UIAxes
         UIAxes                          matlab.ui.control.UIAxes
@@ -205,7 +203,7 @@ classdef nestapp < matlab.apps.AppBase
         DefaulTEPxLim = [-50 300]; % Default xLim for time in TEP
         EEGtime
         TEP2Export
-        TEPDisplayCurve = [] % smoothed grand-mean curve currently shown on UIAxes (TEP/GMFP/LMFP) - drives the window-average readout
+        TEPDisplayCurve = [] % smoothed grand-mean curve currently shown on UIAxes (TEP/GMFP/LMFP) - measured by the Analysis-tab windows of interest
         MenuRecentFiles     % Handle to 'Recent Files' submenu - rebuilt on open
         MenuRecentPipelines % Handle to 'Recent Pipelines' submenu - rebuilt on open
         StatusBar           % uilabel pinned to bottom of UIFigure - visible on both tabs
@@ -1478,81 +1476,39 @@ classdef nestapp < matlab.apps.AppBase
 
             legend(app.UIAxes, 'show', 'Location', 'best');
 
-            % Update the window-average readout/shading for whichever curve is
-            % shown (meanx is the smoothed grand-mean curve being displayed).
+            % Remember the displayed curve so the Analysis tab can measure it.
             app.TEPDisplayCurve = meanx;
-            updateWindowMeasurement(app);
 
-            % TEP component peaks (N15/P30/...) are defined on the signed TEP
-            % waveform; they are meaningless on the positive-only mean-field
-            % power curves, so only detect them for TEP. For GMFP/LMFP clear any
-            % stale peaks/overlay and the component table.
-            if ~strcmp(plotType, 'TEP')
-                app.tepPeaks = [];
-                populateTEPComponentTable(app);
-                return
-            end
-
-            % Component detection runs on the SMOOTHED grand mean - the same
-            % waveform that is plotted (meanx) and the same smoothing the batch
-            % CSV path applies in batchTEPExtract. Feeding TESA the raw grandMean
-            % let baseline noise wiggles register as spurious local extrema
-            % (e.g. a "negative peak" on a flat baseline or a shoulder on a
-            % monotonic rise), which defeats tesa_peakanalysis's own peak guard.
-            try
-                app.tepPeaks = tepPeakFinder(meanx, app.EEGtime, app.tepComponentDefs);
-                if app.ShowComponentsButton.Value
-                    overlayTEPComponents(app);
+            % "Show Components" overlays the signed TEP component peaks on the
+            % plot; that is meaningful only for TEP. For GMFP/LMFP (positive-only
+            % mean-field power) there are no signed peaks, so clear them.
+            if strcmp(plotType, 'TEP')
+                % Detection runs on the SMOOTHED grand mean (meanx) - the same
+                % waveform that is plotted - so baseline wiggles do not register
+                % as spurious extrema.
+                try
+                    app.tepPeaks = tepPeakFinder(meanx, app.EEGtime, app.tepComponentDefs);
+                    if app.ShowComponentsButton.Value
+                        overlayTEPComponents(app);
+                    end
+                catch ME
+                    if strcmp(ME.identifier, 'tepPeakFinder:noTESA')
+                        uialert(app.UIFigure, ...
+                            ['TESA not found. Add TESA to the MATLAB path to enable ' ...
+                             'the component overlay (Show Components).'], 'TESA Required');
+                        app.ShowComponentsButton.Value = false;
+                        app.tepPeaks = [];
+                    else
+                        rethrow(ME);
+                    end
                 end
-                populateTEPComponentTable(app);
-            catch ME
-                if strcmp(ME.identifier, 'tepPeakFinder:noTESA')
-                    uialert(app.UIFigure, ...
-                        ['TESA not found. Add TESA to the MATLAB path to enable ' ...
-                         'component detection (Show Components / Extract Peaks).'], ...
-                        'TESA Required');
-                    app.ShowComponentsButton.Value = false;
-                else
-                    rethrow(ME);
-                end
-            end
-        end
-
-        function updateWindowMeasurement(app)
-        % UPDATEWINDOWMEASUREMENT  Refresh the windowed-average readout/shading.
-        %   Computes the mean of the currently displayed curve (TEPDisplayCurve,
-        %   set by plotTEP for whichever of TEP/GMFP/LMFP is shown) over the
-        %   editable [start end] ms window, updates the readout label, and
-        %   shades the window on UIAxes. Safe to call before any plot exists.
-            if isempty(app.TEPDisplayCurve) || isempty(app.EEGtime)
-                return
-            end
-            t1 = app.WindowStartEditField.Value;
-            t2 = app.WindowEndEditField.Value;
-            m  = computeWindowMean(app.TEPDisplayCurve, app.EEGtime, t1, t2);
-            if isnan(m)
-                app.WindowMeanLabel.Text = 'Win mean: -- uV';
             else
-                app.WindowMeanLabel.Text = sprintf('Win mean: %.2f uV', m);
+                app.tepPeaks = [];
             end
-            drawWindowShade(app, t1, t2);
-        end
 
-        function drawWindowShade(app, t1, t2)
-        % DRAWWINDOWSHADE  Shade the measurement window on UIAxes (behind curves).
-            delete(findobj(app.UIAxes, 'Tag', 'WinShade'));
-            lo = min(t1, t2);
-            hi = max(t1, t2);
-            if ~(isfinite(lo) && isfinite(hi) && hi > lo)
-                return
-            end
-            yl = ylim(app.UIAxes);
-            hold(app.UIAxes, 'on');
-            patch(app.UIAxes, [lo hi hi lo], [yl(1) yl(1) yl(2) yl(2)], ...
-                [0.3 0.3 0.3], 'FaceAlpha', 0.12, 'EdgeColor', 'none', ...
-                'HandleVisibility', 'off', 'Tag', 'WinShade');
-            hold(app.UIAxes, 'off');
-            uistack(findobj(app.UIAxes, 'Tag', 'WinShade'), 'bottom');
+            % Refresh the Analysis-tab windows-of-interest table for the curve
+            % just plotted (mean for every mode; +peak for TEP).
+            refreshAnalysisWindows(app);
         end
 
         function EEG_topoplot(app)
@@ -1633,27 +1589,56 @@ classdef nestapp < matlab.apps.AppBase
             hold(ax, 'off');
         end
 
-        function populateTEPComponentTable(app)
-        % Fill TEPComponentTable from app.tepPeaks.
-        % Shows '-' for components not found.
-            if isempty(app.tepPeaks)
-                app.TEPComponentTable.Data = {};
-                return
+        function refreshAnalysisWindows(app)
+        % REFRESHANALYSISWINDOWS  Fill the Windows-of-Interest table for the
+        %   currently displayed curve. Mode-aware: every mode shows the window
+        %   Mean; TEP also shows the peak latency/amplitude. Name/T1/T2 mirror
+        %   app.tepComponentDefs (the editable window list).
+            defs  = app.tepComponentDefs;
+            mode  = currentPlotType(app);
+            isTEP = strcmp(mode, 'TEP');
+            if isTEP
+                app.TEPComponentTable.ColumnName    = {'Window','T1 (ms)','T2 (ms)','Mean (uV)','Peak (ms)','Peak (uV)'};
+                app.TEPComponentTable.ColumnEditable = [true true true false false false];
+                nCol = 6;
+            else
+                app.TEPComponentTable.ColumnName    = {'Window','T1 (ms)','T2 (ms)',[mode ' Mean (uV)']};
+                app.TEPComponentTable.ColumnEditable = [true true true false];
+                nCol = 4;
             end
-            nComp = numel(app.tepPeaks);
-            tableData = cell(nComp, 3);
-            for i = 1:nComp
-                pk = app.tepPeaks(i);
-                tableData{i, 1} = pk.name;
-                if pk.found
-                    tableData{i, 2} = pk.latencyMs;
-                    tableData{i, 3} = pk.amplitudeUV;
-                else
-                    tableData{i, 2} = '-';
-                    tableData{i, 3} = '-';
+
+            n = numel(defs);
+            data = cell(n, nCol);
+            haveCurve = ~isempty(app.TEPDisplayCurve) && ~isempty(app.EEGtime);
+            for i = 1:n
+                data{i,1} = defs(i).name;
+                data{i,2} = defs(i).winStart;
+                data{i,3} = defs(i).winEnd;
+                m = struct('mean', NaN, 'peakLatency', NaN, 'peakAmp', NaN);
+                if haveCurve
+                    pol = 'auto';
+                    if isfield(defs, 'polarity') && ~isempty(defs(i).polarity)
+                        pol = defs(i).polarity;
+                    end
+                    m = computeWindowMeasures(app.TEPDisplayCurve, app.EEGtime, ...
+                        defs(i).winStart, defs(i).winEnd, pol);
+                end
+                data{i,4} = numOrDash(app, m.mean);
+                if isTEP
+                    data{i,5} = numOrDash(app, m.peakLatency);
+                    data{i,6} = numOrDash(app, m.peakAmp);
                 end
             end
-            app.TEPComponentTable.Data = tableData;
+            app.TEPComponentTable.Data = data;
+        end
+
+        function s = numOrDash(~, v)
+        % Format a measure for the WOI table: 2-dp number, or '-' when NaN.
+            if isempty(v) || isnan(v)
+                s = '-';
+            else
+                s = round(v, 2);
+            end
         end
 
     end
@@ -1679,7 +1664,9 @@ classdef nestapp < matlab.apps.AppBase
             % Visualizing tab
             app.PLOTTEPButton.Tooltip         = 'Plot TMS-evoked potential waveforms for the selected files and electrodes';
             app.ShowComponentsButton.Tooltip          = 'Detect and overlay TEP component peaks on the TEP plot';
-            app.EditComponentWindowsButton.Tooltip    = 'Customise the search windows used for each TEP component';
+            app.AddWindowButton.Tooltip    = 'Add a new window of interest to the Analysis table';
+            app.RemoveWindowButton.Tooltip = 'Remove the selected window of interest';
+            app.ResetWindowsButton.Tooltip = 'Restore the default TEP component windows (Beck et al. 2024)';
             app.TOPOPLOTButton.Tooltip        = 'Plot a scalp topographic map at the specified time point';
             app.ExportTEPFigureButton.Tooltip = 'Export the current TEP plot as PNG or PDF';
             app.ReLoadAvailableElectrodesButton.Tooltip = ...
@@ -1707,6 +1694,7 @@ classdef nestapp < matlab.apps.AppBase
             app.ItemNum = 1;
             app.originalSize      = app.UIFigure.Position(3:4);
             app.tepComponentDefs  = defaultTEPComponentDefs();
+            refreshAnalysisWindows(app);   % show the default windows up-front
             applyTooltips(app);
             loadPrefs(app);
             buildRecentFilesMenu(app);
@@ -2208,13 +2196,13 @@ classdef nestapp < matlab.apps.AppBase
             if app.TEPCreated && app.EEG_SelectedTEPFiles_Loaded
                 findTEPelecs(app);
                 plotTEP(app);
+            else
+                % No plot yet - still update the Analysis table headers/columns
+                % so they reflect the newly selected mode.
+                refreshAnalysisWindows(app);
             end
         end
 
-        % Value changed function: WindowStartEditField, WindowEndEditField
-        function WindowEditFieldValueChanged(app, ~)
-            updateWindowMeasurement(app);
-        end
 
         % Value changed function: UseCurrentlyCleanedDataCheckBox
         function UseCurrentlyCleanedDataCheckBoxValueChanged(app, ~)
@@ -2415,7 +2403,42 @@ classdef nestapp < matlab.apps.AppBase
 
         % Button pushed function: ExportTEPDataButton
         function ExportTEPDataButtonPushed(app, ~)
-            assignin('base', app.TEPvarNameEditField.Value, app.TEP2Export)
+        % Export a struct to the base workspace: the per-file x per-window
+        % results table for the active mode, plus the raw curve matrix.
+            findTEPelecs(app);
+            res = analysisWindowResults(app);
+            out = struct( ...
+                'windows', res, ...
+                'curves',  app.TEP2Export, ...
+                'time',    app.EEGtime, ...
+                'mode',    currentPlotType(app), ...
+                'roi',     {app.ROIelecsLabels});
+            assignin('base', app.TEPvarNameEditField.Value, out);
+            app.AnalysisStatusLabel.Text = sprintf( ...
+                'Exported "%s" (%d window x file rows, %s) to workspace.', ...
+                app.TEPvarNameEditField.Value, height(res), currentPlotType(app));
+        end
+
+        function T = analysisWindowResults(app)
+        % ANALYSISWINDOWRESULTS  Per-file x per-window measures for the loaded
+        %   selection in the active mode. Computes each file's curve with
+        %   tepFieldCurve, then defers to the pure tepWindowTable builder.
+            mode   = currentPlotType(app);
+            nFiles = numel(app.EEGofAllSelectedFiles);
+            nT     = numel(app.EEGtime);
+            curves = zeros(nFiles, nT);
+            labels = cell(1, nFiles);
+            for f = 1:nFiles
+                EEGaux = app.EEGofAllSelectedFiles{f};
+                roiIdx = find(ismember(lower({EEGaux.chanlocs.labels}), lower(app.ROIelecsLabels)));
+                curves(f,:) = smoothdata(tepFieldCurve(EEGaux.data, roiIdx, mode), 'movmean', 5);
+                if iscell(app.SelectedFilesforTEP) && f <= numel(app.SelectedFilesforTEP)
+                    [~, labels{f}] = fileparts(app.SelectedFilesforTEP{f});
+                else
+                    labels{f} = sprintf('file%d', f);
+                end
+            end
+            T = tepWindowTable(labels, curves, app.EEGtime, app.tepComponentDefs, mode);
         end
 
         % Value changed function: TEPvarNameEditField
@@ -2434,75 +2457,53 @@ classdef nestapp < matlab.apps.AppBase
             end
         end
 
-        % Button pushed function: EditComponentWindowsButton
-        function EditComponentWindowsButtonPushed(app, ~)
-        % EDITCOMPONENTWINDOWSBUTTONPUSHED  Open a modal dialog for editing TEP component windows.
-            defs = app.tepComponentDefs;
-            nComp = numel(defs);
-
-            fig = uifigure('Name', 'TEP Component Windows', ...
-                'Position', [200 200 530 265], 'WindowStyle', 'modal');
-
-            % Build editable table
-            tableData = cell(nComp, 5);
-            for i = 1:nComp
-                tableData{i, 1} = defs(i).name;
-                tableData{i, 2} = defs(i).polarity;
-                tableData{i, 3} = defs(i).nomLatency;
-                tableData{i, 4} = defs(i).winStart;
-                tableData{i, 5} = defs(i).winEnd;
+        % Cell edit callback: TEPComponentTable (windows of interest)
+        function WOITableCellEdit(app, event)
+        % Edit a window's Name/T1/T2 inline, then recompute its measures.
+            r = event.Indices(1);
+            c = event.Indices(2);
+            if r > numel(app.tepComponentDefs); return; end
+            switch c
+                case 1
+                    app.tepComponentDefs(r).name = char(event.NewData);
+                case 2
+                    app.tepComponentDefs(r).winStart = event.NewData;
+                case 3
+                    app.tepComponentDefs(r).winEnd = event.NewData;
             end
+            refreshAnalysisWindows(app);
+        end
 
-            tbl = uitable(fig, ...
-                'Position',       [10 55 510 195], ...
-                'Data',           tableData, ...
-                'ColumnName',     {'Component', 'Polarity', 'Nom. Latency (ms)', 'Win Start (ms)', 'Win End (ms)'}, ...
-                'ColumnEditable', [false, false, true, true, true], ...
-                'ColumnWidth',    {80, 65, 130, 110, 100}, ...
-                'RowName',        {});
-
-            uibutton(fig, 'Text', 'Reset Defaults', ...
-                'Position', [10 12 130 30], ...
-                'ButtonPushedFcn', @(~,~) resetDefaults(tbl));
-
-            uibutton(fig, 'Text', 'Cancel', ...
-                'Position', [300 12 100 30], ...
-                'ButtonPushedFcn', @(~,~) close(fig));
-
-            uibutton(fig, 'Text', 'Apply', ...
-                'Position', [410 12 110 30], ...
-                'ButtonPushedFcn', @(~,~) applyAndClose(tbl, fig));
-
-            uiwait(fig);
-
-            function resetDefaults(t)
-                % app is accessible from the enclosing method scope
-                defaults = defaultTEPComponentDefs();
-                d = cell(numel(defaults), 5);
-                for k = 1:numel(defaults)
-                    d{k, 1} = defaults(k).name;
-                    d{k, 2} = defaults(k).polarity;
-                    d{k, 3} = defaults(k).nomLatency;
-                    d{k, 4} = defaults(k).winStart;
-                    d{k, 5} = defaults(k).winEnd;
-                end
-                t.Data = d;
+        % Button pushed function: AddWindowButton
+        function AddWindowButtonPushed(app, ~)
+            n = numel(app.tepComponentDefs);
+            newDef = struct('name', sprintf('W%d', n+1), 'polarity', 'auto', ...
+                'nomLatency', 100, 'winStart', 50, 'winEnd', 150);
+            if isempty(app.tepComponentDefs)
+                app.tepComponentDefs = newDef;
+            else
+                app.tepComponentDefs(n+1) = newDef;
             end
+            refreshAnalysisWindows(app);
+        end
 
-            function applyAndClose(t, f)
-                % app is accessible from the enclosing method scope
-                d = t.Data;
-                for k = 1:size(d, 1)
-                    app.tepComponentDefs(k).nomLatency = d{k, 3};
-                    app.tepComponentDefs(k).winStart   = d{k, 4};
-                    app.tepComponentDefs(k).winEnd     = d{k, 5};
-                end
-                % Re-detect and replot if TEP is already shown
-                if app.TEPCreated
-                    PLOTTEPButtonPushed(app, []);
-                end
-                close(f);
+        % Button pushed function: RemoveWindowButton
+        function RemoveWindowButtonPushed(app, ~)
+            sel = app.TEPComponentTable.Selection;
+            if isempty(sel)
+                uialert(app.UIFigure, 'Select a window row to remove.', 'No selection');
+                return
             end
+            rows = unique(sel(:));
+            rows(rows > numel(app.tepComponentDefs)) = [];
+            app.tepComponentDefs(rows) = [];
+            refreshAnalysisWindows(app);
+        end
+
+        % Button pushed function: ResetWindowsButton
+        function ResetWindowsButtonPushed(app, ~)
+            app.tepComponentDefs = defaultTEPComponentDefs();
+            refreshAnalysisWindows(app);
         end
 
         % -- Analysis Tab callbacks ----------------------------------------
@@ -2523,14 +2524,9 @@ classdef nestapp < matlab.apps.AppBase
                     'Extract Peaks');
                 return
             end
-            if isempty(which('tesa_peakanalysis'))
-                uialert(app.UIFigure, ...
-                    'TESA toolbox not found on path. Cannot run peak extraction.', ...
-                    'Extract Peaks');
-                return
-            end
-
-            [fname, fpath] = uiputfile('*.csv', 'Save TEP Peaks CSV', 'tep_peaks.csv');
+            mode = currentPlotType(app);
+            defName = sprintf('tep_windows_%s.csv', lower(mode));
+            [fname, fpath] = uiputfile('*.csv', 'Save Window Measures CSV', defName);
             if isequal(fname, 0); return; end
             csvPath = fullfile(fpath, fname);
 
@@ -2538,14 +2534,14 @@ classdef nestapp < matlab.apps.AppBase
             tepPaths = app.SelectedFilesforTEP;
 
             d = uiprogressdlg(app.UIFigure, ...
-                'Title',          'Extracting TEP Peaks', ...
+                'Title',          'Extracting Window Measures', ...
                 'Message',        'Starting...', ...
                 'Cancelable',     'off', ...
                 'ShowPercentage', 'on');
 
             try
-                [results, warnings] = batchTEPExtract(tepPaths, app.ROIelecsLabels, ...
-                    'compDefs',    app.tepComponentDefs, ...
+                [results, warnings] = batchWindowExtract(tepPaths, app.ROIelecsLabels, ...
+                    mode, app.tepComponentDefs, ...
                     'csvPath',     csvPath, ...
                     'progressFcn', @(i,n) updateExtractionProgress(d, i, n, tepPaths));
             catch ME
@@ -2583,6 +2579,7 @@ classdef nestapp < matlab.apps.AppBase
         function updateAnalysisSelectionSummary(app)
         % Update the read-only summary label on the Analysis tab.
             findTEPelecs(app);   % refresh ROI from current electrode button state
+            refreshAnalysisWindows(app);   % keep the WOI table/mode current
             nFiles = numel(app.SelectedFilesforTEP);
             nROI   = numel(app.ROIelecsLabels);
             if nFiles == 0 && nROI == 0
