@@ -200,7 +200,8 @@ function rescaleComponents(app, sX, sY)
             app.RefreshReportsButton.Position    = p([110 45 100 25]);
             app.ReportsFolderLabel.Position      = p([5 25 205 18]);
             app.ReportsStatusLabel.Position      = p([5 5 205 18]);
-            app.ExportReportsCSVButton.Position  = p([580 470 130 24]);
+            app.ExportReportsCSVButton.Position  = p([475 470 100 24]);
+            app.ExportPDFButton.Position         = p([580 470 130 24]);
             app.CopyMethodsButton.Position       = p([715 470 147 24]);
             app.ReportsTextArea.Position         = p([220 10 637 457]);
             app.ReportsTextArea.FontSize         = fs(10);
