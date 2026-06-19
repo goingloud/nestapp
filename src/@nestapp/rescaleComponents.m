@@ -77,6 +77,12 @@ function rescaleComponents(app, sX, sY)
             app.PlottingModeButtonGroup.Position  = p([152 36 150 67]);
             app.NewFigureButton.Position          = p([11 21 83 22]);
             app.AddtocurrentFigureButton.Position = p([11 -1 135 22]);
+            % Plot Type group sits above the Plotting Mode group (children are
+            % group-relative).
+            app.PlotTypeButtonGroup.Position      = p([150 108 195 52]);
+            app.PlotTypeTEPButton.Position        = p([6 4 48 22]);
+            app.PlotTypeGMFPButton.Position       = p([58 4 60 22]);
+            app.PlotTypeLMFPButton.Position       = p([122 4 60 22]);
             % Topoplot time and window on one line - 3-digit fields
             app.TopoplottimeSpinnerLabel.Position = p([152 10 35 22]);
             app.TopoplottimeSpinner.Position      = ph([189 10 52 22]);
