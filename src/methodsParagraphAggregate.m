@@ -26,10 +26,10 @@ function txt = methodsParagraphAggregate(reports)
     N = numel(reports);
 
     % Pipeline prose: only when every file ran the same step sequence (a mixed
-    % batch falls back to counts-only). Use the report that ran the most steps.
+    % batch falls back to counts-only).
     body = '';
-    rep  = representativeReport(reports);
-    if ~isempty(rep) && pipelinesConsistent(reports)
+    rep  = sharedPipelineReport(reports);
+    if ~isempty(rep)
         body = pipelineProse(rep);
     end
 
@@ -56,37 +56,21 @@ end
 
 % ── helpers ───────────────────────────────────────────────────────────────────
 
-function rep = representativeReport(reports)
-    nSteps = cellfun(@(r) numel(stepsWithParams(r)), reports);
-    [mx, ri] = max(nSteps);
-    if mx == 0
-        rep = [];
-    else
-        rep = reports{ri};
-    end
-end
-
-function s = stepsWithParams(report)
-    s = {};
-    if isfield(report, 'steps') && ~isempty(report.steps)
-        keep = cellfun(@(x) isstruct(x) && isfield(x, 'params'), report.steps);
-        s = report.steps(keep);
-    end
-end
-
-function tf = pipelinesConsistent(reports)
-% True when every report that ran steps ran the same step-name sequence.
+function rep = sharedPipelineReport(reports)
+% A report representative of the batch's shared pipeline, or [] when the files
+% ran different step sequences (or none ran steps). When the sequences match,
+% any report with steps is representative, so the first one is returned.
+    rep = [];
     seq = {};
     for i = 1:numel(reports)
         n = reportStepNames(reports{i});
         if isempty(n); continue; end
         if isempty(seq)
-            seq = n;
+            seq = n; rep = reports{i};
         elseif ~isequal(seq, n)
-            tf = false; return
+            rep = []; return    % divergent pipelines -> counts-only
         end
     end
-    tf = true;
 end
 
 function parts = aggregateCounts(reports)
@@ -124,18 +108,6 @@ function parts = aggregateCounts(reports)
         parts{end+1} = sprintf('%s of %s independent components were removed', ...
             meanSd(nRej(hasICA)), meanSd(nComp(hasICA)));
     end
-end
-
-function s = softwareSentence(report)
-    names    = reportStepNames(report);
-    isTMS    = any(contains(names, 'TMS')) || any(contains(names, '(TESA)'));
-    usesTesa = any(contains(names, '(TESA)'));
-    modality = 'EEG data';
-    if isTMS; modality = 'TMS-EEG data'; end
-    tool = 'EEGLAB';
-    if usesTesa; tool = 'EEGLAB and the TESA toolbox'; end
-    s = sprintf('%s were preprocessed in MATLAB using %s (nestapp %s).', ...
-        modality, tool, nestappVersion());
 end
 
 function s = meanSd(v)

@@ -138,3 +138,29 @@ for nm = {'Load Data','Load Channel Location','Find TMS Pulses (TESA)', ...
         sprintf('%s must contribute no methods sentence', nm{1}));
 end
 end
+
+% ── drift guard: every switch case must name a real registry step ─────────────
+
+function test_everyCaseLiteralIsARealRegistryStep(testCase)
+% methodsClause keys on exact step-name literals; a registry rename that misses
+% this file would silently drop a step's methods sentence (the otherwise branch
+% returns ''). Pin the coupling: every 'case' literal must be a stepRegistry name.
+src = fileread(which('methodsClause'));
+% Scan only the main dispatch switch (above the "per-step helpers" divider);
+% the local helpers below it have their own inner switches (filter type, ICA
+% algorithm, ...) whose case labels are not step names.
+cut = strfind(src, 'per-step helpers');
+if ~isempty(cut); src = src(1:cut(1)-1); end
+lines = regexp(src, 'case[^\n]*', 'match');     % every "case ..." line
+names = {};
+for i = 1:numel(lines)
+    toks = regexp(lines{i}, '''([^'']+)''', 'tokens');   % all quoted literals on the line
+    for j = 1:numel(toks); names{end+1} = toks{j}{1}; end %#ok<AGROW>
+end
+testCase.assertNotEmpty(names, 'Expected to find case literals in methodsClause.m');
+regNames = {stepRegistry().name};
+for i = 1:numel(names)
+    testCase.verifyTrue(ismember(names{i}, regNames), ...
+        sprintf('methodsClause case "%s" is not a stepRegistry step name (renamed step?)', names{i}));
+end
+end

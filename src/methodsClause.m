@@ -220,10 +220,11 @@ function cats = tesaCompCategories(p)
 end
 
 function s = rerefClause(p)
+% A named channel reference reads as itself; anything empty/'[]'/non-char is the
+% average reference.
     ref = getf(p, 'ref', 'Cz');
-    if isempty(ref) || (ischar(ref) && (isempty(strtrim(ref)) || strcmp(strtrim(ref),'[]')))
-        s = 'the data were re-referenced to the common average';
-    elseif ischar(ref) || isstring(ref)
+    if (ischar(ref) || isstring(ref)) && ~isempty(strtrim(char(ref))) ...
+            && ~strcmp(strtrim(char(ref)), '[]')
         s = sprintf('the data were re-referenced to %s', char(ref));
     else
         s = 'the data were re-referenced to the common average';

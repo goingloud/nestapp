@@ -30,20 +30,6 @@ end
 
 % ── helpers ───────────────────────────────────────────────────────────────────
 
-function s = softwareSentence(report)
-% "TMS-EEG data were preprocessed in MATLAB using EEGLAB[ and the TESA toolbox]
-%  (nestapp <ver>)." Modality/toolbox inferred from the steps that ran.
-    names    = reportStepNames(report);
-    isTMS    = any(contains(names, 'TMS')) || any(contains(names, '(TESA)'));
-    usesTesa = any(contains(names, '(TESA)'));
-    modality = 'EEG data';
-    if isTMS; modality = 'TMS-EEG data'; end
-    tool = 'EEGLAB';
-    if usesTesa; tool = 'EEGLAB and the TESA toolbox'; end
-    s = sprintf('%s were preprocessed in MATLAB using %s (nestapp %s).', ...
-        modality, tool, nestappVersion());
-end
-
 function s = outcomeSentence(report)
 % Closing outcome sentence for one file: channels/epochs retained + ICA removed.
     ret = {};
