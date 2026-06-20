@@ -35,6 +35,7 @@ if any(intpCh > 0)
     lines{end+1} = sprintf('  Interpolated: %s', fmtStat(intpCh));
 end
 lines{end+1} = sprintf('  Final:        %s', fmtStat(finalCh));
+lines = [lines, badChannelTallyLines(reports, N)];
 lines{end+1} = '';
 
 %% Trials
@@ -116,6 +117,41 @@ summaryText = strjoin(lines, newline);
 end
 
 %% ---- helpers ---------------------------------------------------------------
+
+function out = badChannelTallyLines(reports, N)
+% Cross-file tally of which electrodes the quality-based bad-channel steps
+% removed (kurt/spec/ARTIST/ASR; excludes the deliberate "Remove un-needed
+% Channels"). Counts the number of FILES each electrode was removed in and
+% surfaces recurrent picks, so a systematic pattern (e.g. a montage/reference
+% quirk) is visible here rather than buried in the per-file reports.
+out = {};
+perFile = cell(1, N);
+for i = 1:N
+    if isfield(reports{i}.channels, 'badChannelNames')
+        perFile{i} = unique(reports{i}.channels.badChannelNames);
+    else
+        perFile{i} = {};   % legacy report saved before the field existed
+    end
+end
+allLabels = unique([perFile{:}]);
+if isempty(allLabels)
+    return
+end
+counts = cellfun(@(lab) sum(cellfun(@(f) any(strcmp(lab, f)), perFile)), allLabels);
+[counts, ord] = sort(counts, 'descend');
+allLabels = allLabels(ord);
+
+out{end+1} = sprintf('  Bad-channel removals by electrode (%d files):', N);
+recur = counts >= 2;
+if any(recur)
+    parts = arrayfun(@(k) sprintf('%s (%d/%d)', allLabels{k}, counts(k), N), ...
+        find(recur), 'UniformOutput', false);
+    out{end+1} = ['    ' strjoin(parts, ', ')];
+end
+if any(~recur)
+    out{end+1} = ['    once: ' strjoin(allLabels(~recur), ', ')];
+end
+end
 
 function s = fmtStat(v)
 % Format a numeric vector as "mean +/- SD" or just the value when all equal.

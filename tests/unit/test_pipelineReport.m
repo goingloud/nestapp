@@ -58,6 +58,8 @@ testCase.verifyTrue(isfield(ch, 'rejectedNames'),     'Missing channels.rejected
 testCase.verifyTrue(isfield(ch, 'interpolatedNames'), 'Missing channels.interpolatedNames');
 testCase.verifyEqual(ch.rejectedNames,     {});
 testCase.verifyEqual(ch.interpolatedNames, {});
+testCase.verifyTrue(isfield(ch, 'badChannelNames'), 'Missing channels.badChannelNames');
+testCase.verifyEqual(ch.badChannelNames, {});
 end
 
 function test_initReportTrialFields(testCase)
@@ -368,4 +370,37 @@ testCase.verifyTrue(contains(txt, 'METHODS'), 'Summary must include a METHODS se
 testCase.verifyTrue(contains(txt, 'Across 2 files'), 'Summary methods must be cross-file prose');
 testCase.verifyTrue(contains(txt, 'CITATION'), 'Summary must include a CITATION section');
 testCase.verifyTrue(contains(txt, 'Cline C.C. et al. (2021)'), 'Summary must cite the AARATEP reference');
+end
+
+function test_summaryTalliesBadChannelElectrodes(testCase)
+% The session summary tallies which electrodes the quality-based bad-channel
+% steps removed across files: electrodes removed in >=2 files are listed with
+% their file count; one-off removals go under "once". This is what makes a
+% systematic pick (e.g. CP1/CP2 recurring) visible to the user.
+r1 = initPipelineReport('a.set');
+r1.channels.original = 64; r1.channels.final = 62;
+r1.channels.badChannelNames = {'CP1', 'FT10'};
+r2 = initPipelineReport('b.set');
+r2.channels.original = 64; r2.channels.final = 63;
+r2.channels.badChannelNames = {'CP1'};
+r3 = initPipelineReport('c.set');
+r3.channels.original = 64; r3.channels.final = 64;
+r3.channels.badChannelNames = {};
+txt = summarizeReports({r1, r2, r3});
+testCase.verifyTrue(contains(txt, 'Bad-channel removals by electrode (3 files):'), ...
+    'Summary must include the electrode tally header');
+testCase.verifyTrue(contains(txt, 'CP1 (2/3)'), ...
+    'Recurrent electrode must show how many files it was removed in');
+testCase.verifyTrue(contains(txt, 'once: FT10'), ...
+    'One-off removals must be listed under "once"');
+end
+
+function test_summaryNoTallyWhenNoBadChannels(testCase)
+% No tally block when no quality-based bad-channel removals occurred (e.g. only
+% deliberate "Remove un-needed Channels"), so the section stays clean.
+r1 = initPipelineReport('a.set'); r1.channels.original = 64; r1.channels.final = 64;
+r2 = initPipelineReport('b.set'); r2.channels.original = 64; r2.channels.final = 64;
+txt = summarizeReports({r1, r2});
+testCase.verifyFalse(contains(txt, 'Bad-channel removals by electrode'), ...
+    'Tally must be omitted when there are no bad-channel removals');
 end

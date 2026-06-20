@@ -917,6 +917,13 @@ for si = 1:nSteps
                     removedNames = setdiff(labelsBefore, labelsAfter, 'stable');
                     fileReport.channels.rejectedNames = ...
                         [fileReport.channels.rejectedNames, removedNames(:)'];
+                    % Tally quality-based bad-channel removals separately from
+                    % the deliberate "Remove un-needed Channels" step, so the
+                    % session summary can surface recurrent bad-channel picks.
+                    if ~strcmp(stepName, 'Remove un-needed Channels')
+                        fileReport.channels.badChannelNames = ...
+                            [fileReport.channels.badChannelNames, removedNames(:)'];
+                    end
                 end
             end
             if any(strcmp(stepName, {'Interpolate Channels','Interpolate Missing Data (TESA)'})) ...

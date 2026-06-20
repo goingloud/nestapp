@@ -51,6 +51,11 @@ report.channels.final         = 0;
 % pipeline so the report can name them. See processOneFile post-step block.
 report.channels.rejectedNames     = {};
 report.channels.interpolatedNames = {};
+% Labels removed specifically by quality-based bad-channel detection
+% (kurt/spec/ARTIST/ASR), EXCLUDING the deliberate "Remove un-needed Channels"
+% step. Feeds the cross-file electrode tally in summarizeReports so recurrent
+% removals (a possible montage/reference quirk) are visible, not hidden.
+report.channels.badChannelNames   = {};
 
 report.trials.original         = 0;
 report.trials.rejected         = 0;

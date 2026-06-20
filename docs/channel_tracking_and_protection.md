@@ -67,6 +67,17 @@ If protection is later wanted everywhere:
 Until then, the new report names make any protected-channel removal **visible**
 rather than silent.
 
+## Cross-file electrode tally (session summary)
+
+`processOneFile` accumulates `report.channels.badChannelNames` — the labels
+removed by **quality-based** bad-channel steps only (kurt/spec/ARTIST/ASR),
+excluding the deliberate `Remove un-needed Channels`. `summarizeReports` tallies
+these across the batch and prints, in the CHANNELS block, each electrode and how
+many files it was removed in (recurrent picks first, one-offs under `once:`).
+This makes a **systematic removal pattern visible** — e.g. RANSAC repeatedly
+dropping `CP1`/`CP2` across subjects is a signal to check for a montage/reference
+quirk rather than trust 7 independently "bad" electrodes.
+
 ## GMFP/GMFA — reuse TESA rather than re-derive
 
 GMFP is identical to TESA's GMFA. `tesa_tepextract.m` computes it as
