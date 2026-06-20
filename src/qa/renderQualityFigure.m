@@ -440,8 +440,19 @@ if isempty(EEG.data) || size(EEG.data, 2) < 256
     axis off; title('PSD per channel'); return
 end
 nbchan = size(EEG.data, 1);
-data2D = reshape(EEG.data, nbchan, []);
-[pxx, f] = pwelch(data2D', [], [], [], EEG.srate);
+data2D = reshape(EEG.data, nbchan, []);    % view; never transposed (see below)
+% Per-channel so we never materialise a full (samples x channels) copy, and so
+% qaWelchPsd bounds the spectrum (decimated bandwidth + fixed resolution). This
+% replaces an unbounded pwelch that, on raw 5 kHz multi-trial data, built ~10^5
+% bins and wedged exportgraphics on a parallel worker.
+[p, f, fsEff] = qaWelchPsd(data2D(1, :), EEG.srate);   % first channel sizes the output
+pxx = zeros(numel(p), nbchan);
+pxx(:, 1) = p;
+for c = 2:nbchan
+    pxx(:, c) = qaWelchPsd(data2D(c, :), EEG.srate);
+end
+% Bounded point count (~F_max/res points/channel) keeps the transparent overlay
+% cheap to rasterize, so we keep the original per-channel alpha.
 loglog(f, pxx, 'LineWidth', 0.5, 'Color', [0.5 0.5 0.5 0.4]);
 hold on
 loglog(f, mean(pxx, 2), 'k', 'LineWidth', 1.5);
@@ -451,7 +462,14 @@ ylabel('Power');
 title('PSD per channel (mean bold)');
 grid on
 if numel(f) >= 2
-    xlim([max(f(2), 0.5) min(f(end), EEG.srate/2)]);
+    xlim([max(f(2), 0.5) f(end)]);
+end
+% Disclose when this is a decimated estimate, so the panel is not mistaken for
+% the raw spectrum (different effective sample rate / bandwidth).
+if fsEff < EEG.srate
+    text(0.99, 0.02, sprintf('QA estimate: anti-alias decimated %g -> %g Hz', EEG.srate, fsEff), ...
+        'Units','normalized', 'HorizontalAlignment','right', 'VerticalAlignment','bottom', ...
+        'FontSize', 7, 'Color', [0.45 0.45 0.45], 'Interpreter','none');
 end
 end
 

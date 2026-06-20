@@ -252,7 +252,10 @@ if numel(comp) < 256
     ratio = NaN;
     return
 end
-[pxx, f] = pwelch(comp, [], [], [], srate);
+% Bounded Welch PSD (same helper as the QA PSD panel) so this stays cheap on raw
+% high-rate data; the 0-10 and 30-50 Hz bands used below sit well inside the
+% retained QA bandwidth, so the ratio is unchanged (and lower-variance).
+[pxx, f] = qaWelchPsd(comp, srate);
 lowMask  = f > 0  & f < 10;
 highMask = f > 30 & f < 50;
 if ~any(lowMask) || ~any(highMask)
