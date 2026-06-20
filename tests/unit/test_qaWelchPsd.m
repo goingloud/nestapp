@@ -22,12 +22,12 @@ testCase.assumeNotEmpty(which('pwelch'),   'Signal Processing Toolbox required')
 testCase.assumeNotEmpty(which('resample'), 'Signal Processing Toolbox required');
 end
 
-function test_decimatesHighRateAndBoundsBins(testCase)
+function test_downsamplesHighRateToTarget(testCase)
 fs = 5000;
 [pxx, f, fsEff] = qaWelchPsd(randn(fs * 30, 1), fs);   % 30 s at 5 kHz
-testCase.verifyLessThan(fsEff, fs, 'high rate must be decimated');
-testCase.verifyLessThanOrEqual(max(f), 320, 'bandwidth bounded to ~F_max');
-testCase.verifyLessThan(numel(f), 500, 'frequency-bin count bounded (~F_max/res)');
+testCase.verifyEqual(fsEff, 1000, 'AbsTol', 1e-9, 'high rate downsampled to the ~1 kHz target');
+testCase.verifyLessThanOrEqual(max(f), 510, 'bandwidth bounded to ~target Nyquist (~500 Hz)');
+testCase.verifyLessThan(numel(f), 700, 'frequency-bin count bounded (~rate/res)');
 testCase.verifyEqual(numel(pxx), numel(f));
 end
 
@@ -39,10 +39,10 @@ testCase.verifyEqual(numel(f1), numel(f2), ...
     'bin count must not scale with recording length (the original bug)');
 end
 
-function test_lowRateNotDecimated(testCase)
+function test_lowRateNotDownsampled(testCase)
 fs = 1000;
 [~, f, fsEff] = qaWelchPsd(randn(fs * 20, 1), fs);
-testCase.verifyEqual(fsEff, fs, 'rate <= 2*F_max must not be decimated');
+testCase.verifyEqual(fsEff, fs, 'rate <= target must not be downsampled (and never upsampled)');
 testCase.verifyLessThanOrEqual(max(f), fs / 2);
 end
 

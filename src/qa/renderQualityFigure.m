@@ -464,10 +464,10 @@ grid on
 if numel(f) >= 2
     xlim([max(f(2), 0.5) f(end)]);
 end
-% Disclose when this is a decimated estimate, so the panel is not mistaken for
-% the raw spectrum (different effective sample rate / bandwidth).
+% Note the working rate when the QA PSD was computed on downsampled data, so the
+% panel is not mistaken for the raw spectrum (lower effective rate / bandwidth).
 if fsEff < EEG.srate
-    text(0.99, 0.02, sprintf('QA estimate: anti-alias decimated %g -> %g Hz', EEG.srate, fsEff), ...
+    text(0.99, 0.02, sprintf('PSD computed at %g Hz (downsampled from %g Hz)', fsEff, EEG.srate), ...
         'Units','normalized', 'HorizontalAlignment','right', 'VerticalAlignment','bottom', ...
         'FontSize', 7, 'Color', [0.45 0.45 0.45], 'Interpreter','none');
 end
