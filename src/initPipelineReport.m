@@ -40,6 +40,9 @@ report.processedAt = datetime('now');
 % this name - see stepCitations.)
 report.pipelineName = '';
 
+% Per-step records appended by processOneFile: each has .name, .params (the
+% step's parameter struct, used to build the methods narrative), .chansBefore/
+% After, .trialsBefore/After, .duration, .timestamp.
 report.steps = {};
 
 report.channels.original      = 0;

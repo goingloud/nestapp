@@ -404,3 +404,62 @@ txt = summarizeReports({r1, r2});
 testCase.verifyFalse(contains(txt, 'Bad-channel removals by electrode'), ...
     'Tally must be omitted when there are no bad-channel removals');
 end
+
+% ── methods narrative (full parameterized prose) ─────────────────────────────
+
+function rec = stepRecP(name, params)
+% Step record carrying parameters (as processOneFile now stores) so the methods
+% narrative can describe the step.
+rec = struct('name', name, 'params', params, 'chansBefore', 0, 'chansAfter', 0, ...
+             'trialsBefore', 0, 'trialsAfter', 0, 'duration', 0);
+end
+
+function r = reportWithPipeline(fname)
+% A report whose steps carry params for a small TMS-style pipeline.
+r = initPipelineReport(fname);
+r.steps = {stepRecP('Epoching',                    struct('timelim',[-1 1],'types',{{'TMS'}})), ...
+           stepRecP('Remove TMS Artifacts (TESA)', struct('cutTimesTMS',[-2 10])), ...
+           stepRecP('Frequency Filter (TESA)',     struct('type','bandpass','high',1,'low',80,'ord',4)), ...
+           stepRecP('Re-Reference',                struct('ref','[]'))};
+r.channels.original = 63; r.channels.final = 61; r.channels.nRejected = 2;
+r.trials.original = 100;  r.trials.final = 90;   r.trials.rejected = 10;
+end
+
+function test_methodsNarrativeIsParameterized(testCase)
+txt = methodsNarrative(reportWithPipeline('s.set'));
+testCase.verifyTrue(contains(txt, 'using EEGLAB and the TESA toolbox'), 'software sentence');
+testCase.verifyTrue(contains(txt, '-1000 to 1000 ms'), 'epoch window present');
+testCase.verifyTrue(contains(txt, '1 to 80 Hz'),       'filter cutoffs present');
+testCase.verifyTrue(contains(txt, 'common average'),   'reference present');
+testCase.verifyTrue(contains(txt, '61 of 63 channels'),'outcome counts present');
+end
+
+function test_methodsNarrativeFallsBackWithoutParams(testCase)
+% A report whose steps carry no params degrades to the brief outcomes-only note.
+r = initPipelineReport('s.set');
+r.steps = {stepRecord('Epoching'), stepRecord('Re-Reference')};
+r.channels.original = 63; r.channels.final = 61; r.channels.nRejected = 2;
+txt = methodsNarrative(r);
+testCase.verifyTrue(contains(txt, 'preprocessed using nestapp'), 'brief fallback prose');
+testCase.verifyFalse(contains(txt, 'band-pass'), 'no parameterized clauses in fallback');
+end
+
+function test_aggregateRichSharedPipeline(testCase)
+r1 = reportWithPipeline('a.set');
+r2 = reportWithPipeline('b.set'); r2.channels.final = 60; r2.channels.nRejected = 3;
+txt = methodsParagraphAggregate({r1, r2});
+testCase.verifyTrue(contains(txt, '1 to 80 Hz'),          'shared pipeline prose present');
+testCase.verifyTrue(contains(txt, 'Across 2 files'),      'aggregated counts present');
+testCase.verifyTrue(contains(txt, 'mean +/- SD across files'), 'spread annotation present');
+end
+
+function test_aggregateMixedPipelineOmitsProse(testCase)
+% Files that ran different step sequences fall back to counts-only (no shared
+% pipeline prose), but still report across-file counts.
+r1 = reportWithPipeline('a.set');
+r2 = reportWithPipeline('b.set');
+r2.steps = {stepRecP('Re-Sample', struct('freq',1000))};   % divergent sequence
+txt = methodsParagraphAggregate({r1, r2});
+testCase.verifyTrue(contains(txt, 'Across 2 files'), 'counts still reported');
+testCase.verifyFalse(contains(txt, '1 to 80 Hz'),    'no shared prose for mixed pipelines');
+end

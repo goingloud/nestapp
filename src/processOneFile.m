@@ -1010,6 +1010,7 @@ for si = 1:nSteps
         end % if isstruct(EEG)
 
         stepRec.name         = stepName;
+        stepRec.params       = step.params;   % drives the methods narrative (methodsClause)
         stepRec.chansBefore  = nChanBefore;
         stepRec.chansAfter   = nChanAfter;
         stepRec.trialsBefore = nEpochBefore;

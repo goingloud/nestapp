@@ -1190,9 +1190,9 @@ classdef nestapp < matlab.apps.AppBase
 
         function CopyMethodsButtonPushed(app, ~)
         % Copy a methods paragraph to the clipboard. A single file report copies
-        % that file's prose; the Session Summary / Dashboard copies the
+        % that file's full narrative; the Session Summary / Dashboard copies the
         % cross-file aggregate (mean +/- SD). Shares the same builders the text
-        % reports use (methodsParagraph / methodsParagraphAggregate).
+        % reports use (methodsNarrative / methodsParagraphAggregate).
             idx = app.ReportsListBox.Value;
             if isempty(idx); return; end
             allEntries = [app.allPipelineReports, app.loadedReports];
@@ -1200,7 +1200,7 @@ classdef nestapp < matlab.apps.AppBase
             e = allEntries{idx};
 
             if isfield(e, 'report') && isstruct(e.report) && ~isempty(e.report)
-                methodsText = methodsParagraph(e.report);
+                methodsText = methodsNarrative(e.report);
             else
                 % Summary / Dashboard entry: aggregate over every per-file report.
                 reportStructs = {};
