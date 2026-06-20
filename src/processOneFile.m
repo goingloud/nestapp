@@ -917,10 +917,13 @@ for si = 1:nSteps
                     removedNames = setdiff(labelsBefore, labelsAfter, 'stable');
                     fileReport.channels.rejectedNames = ...
                         [fileReport.channels.rejectedNames, removedNames(:)'];
-                    % Tally quality-based bad-channel removals separately from
-                    % the deliberate "Remove un-needed Channels" step, so the
-                    % session summary can surface recurrent bad-channel picks.
-                    if ~strcmp(stepName, 'Remove un-needed Channels')
+                    % Split by reason so the report and summary can keep
+                    % intentional removals ("Remove un-needed Channels") distinct
+                    % from quality-based bad-channel detection.
+                    if strcmp(stepName, 'Remove un-needed Channels')
+                        fileReport.channels.unneededNames = ...
+                            [fileReport.channels.unneededNames, removedNames(:)'];
+                    else
                         fileReport.channels.badChannelNames = ...
                             [fileReport.channels.badChannelNames, removedNames(:)'];
                     end

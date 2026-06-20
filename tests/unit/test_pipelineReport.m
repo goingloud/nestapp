@@ -60,6 +60,24 @@ testCase.verifyEqual(ch.rejectedNames,     {});
 testCase.verifyEqual(ch.interpolatedNames, {});
 testCase.verifyTrue(isfield(ch, 'badChannelNames'), 'Missing channels.badChannelNames');
 testCase.verifyEqual(ch.badChannelNames, {});
+testCase.verifyTrue(isfield(ch, 'unneededNames'), 'Missing channels.unneededNames');
+testCase.verifyEqual(ch.unneededNames, {});
+end
+
+function test_channelReportDistinguishesBadFromUnneeded(testCase)
+% The per-file CHANNELS block lists bad-channel detection removals and
+% deliberate "un-needed" removals on separate, labelled lines (not conflated).
+report = initPipelineReport('test.set');
+report.channels.original        = 64;
+report.channels.nRejected       = 4;
+report.channels.rejectedNames   = {'TP9','TP10','C4','T8'};
+report.channels.unneededNames   = {'TP9','TP10'};
+report.channels.badChannelNames = {'C4','T8'};
+report.channels.final           = 60;
+txt = exportReport(report, '');
+testCase.verifyTrue(contains(txt, 'bad channels (2): C4, T8'), 'bad-channel line');
+testCase.verifyTrue(contains(txt, 'un-needed (2): TP9, TP10'), 'un-needed line');
+testCase.verifyFalse(contains(txt, 'Rejected:     4 (TP9'), 'must not lump names on one line');
 end
 
 function test_initReportTrialFields(testCase)
@@ -403,6 +421,23 @@ r2 = initPipelineReport('b.set'); r2.channels.original = 64; r2.channels.final =
 txt = summarizeReports({r1, r2});
 testCase.verifyFalse(contains(txt, 'Bad-channel removals by electrode'), ...
     'Tally must be omitted when there are no bad-channel removals');
+end
+
+function test_summaryShowsIntentionalRemovalsDistinctly(testCase)
+% Intentional "un-needed" removals are shown in the summary (not omitted) and
+% kept on their own line, separate from bad-channel detection. Uniform removals
+% (every file) appear without a file-count tag.
+r1 = initPipelineReport('a.set'); r1.channels.original = 64; r1.channels.final = 61;
+r1.channels.unneededNames = {'TP9','TP10'}; r1.channels.badChannelNames = {'C4'};
+r2 = initPipelineReport('b.set'); r2.channels.original = 64; r2.channels.final = 61;
+r2.channels.unneededNames = {'TP9','TP10'}; r2.channels.badChannelNames = {'C5'};
+txt = summarizeReports({r1, r2});
+testCase.verifyTrue(contains(txt, 'Intentionally removed (un-needed):'), 'un-needed line present');
+testCase.verifyTrue(contains(txt, 'TP9') && contains(txt, 'TP10'), 'both un-needed names shown');
+testCase.verifyFalse(contains(txt, 'TP9 (') || contains(txt, 'TP10 ('), ...
+    'uniform un-needed removals carry no per-file count tag');
+testCase.verifyTrue(contains(txt, 'Bad-channel removals by electrode'), ...
+    'bad-channel tally still present and separate');
 end
 
 % ── methods narrative (full parameterized prose) ─────────────────────────────

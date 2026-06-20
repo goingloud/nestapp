@@ -119,38 +119,68 @@ end
 %% ---- helpers ---------------------------------------------------------------
 
 function out = badChannelTallyLines(reports, N)
-% Cross-file tally of which electrodes the quality-based bad-channel steps
-% removed (kurt/spec/ARTIST/ASR; excludes the deliberate "Remove un-needed
-% Channels"). Counts the number of FILES each electrode was removed in and
-% surfaces recurrent picks, so a systematic pattern (e.g. a montage/reference
-% quirk) is visible here rather than buried in the per-file reports.
+% Cross-file tally of removed electrodes, kept distinct by reason so intentional
+% removals are shown but never conflated with bad-channel detection:
+%   - quality-based bad-channel steps (kurt/spec/ARTIST/ASR), surfacing
+%     recurrent picks so a systematic pattern (montage/reference quirk) is
+%     visible rather than buried in the per-file reports;
+%   - the deliberate "Remove un-needed Channels" step, listed separately.
 out = {};
+
+% Bad-channel detection: recurrent picks first, one-offs collapsed under "once".
+[labels, counts] = electrodeFileCounts(reports, 'badChannelNames');
+if ~isempty(labels)
+    out{end+1} = sprintf('  Bad-channel removals by electrode (%d files):', N);
+    recur = counts >= 2;
+    if any(recur)
+        parts = arrayfun(@(k) sprintf('%s (%d/%d)', labels{k}, counts(k), N), ...
+            find(recur), 'UniformOutput', false);
+        out{end+1} = ['    ' strjoin(parts, ', ')];
+    end
+    if any(~recur)
+        out{end+1} = ['    once: ' strjoin(labels(~recur), ', ')];
+    end
+end
+
+% Intentional (un-needed) removals: always shown, distinct from detection. A
+% file count is appended only when an electrode was not removed from every file.
+[ulabels, ucounts] = electrodeFileCounts(reports, 'unneededNames');
+if ~isempty(ulabels)
+    parts = arrayfun(@(k) tallyTag(ulabels{k}, ucounts(k), N), ...
+        1:numel(ulabels), 'UniformOutput', false);
+    out{end+1} = sprintf('  Intentionally removed (un-needed): %s', strjoin(parts, ', '));
+end
+end
+
+function tag = tallyTag(label, count, N)
+% "<label>" when removed from every file, else "<label> (count/N)".
+if count >= N
+    tag = label;
+else
+    tag = sprintf('%s (%d/%d)', label, count, N);
+end
+end
+
+function [labels, counts] = electrodeFileCounts(reports, field)
+% For one channel name-list field, the distinct electrode labels and the number
+% of FILES each was removed in, sorted by file count descending.
+N = numel(reports);
 perFile = cell(1, N);
 for i = 1:N
-    if isfield(reports{i}.channels, 'badChannelNames')
-        perFile{i} = unique(reports{i}.channels.badChannelNames);
+    if isfield(reports{i}.channels, field)
+        perFile{i} = unique(reports{i}.channels.(field));
     else
         perFile{i} = {};   % legacy report saved before the field existed
     end
 end
-allLabels = unique([perFile{:}]);
-if isempty(allLabels)
+labels = unique([perFile{:}]);
+if isempty(labels)
+    counts = [];
     return
 end
-counts = cellfun(@(lab) sum(cellfun(@(f) any(strcmp(lab, f)), perFile)), allLabels);
+counts = cellfun(@(lab) sum(cellfun(@(f) any(strcmp(lab, f)), perFile)), labels);
 [counts, ord] = sort(counts, 'descend');
-allLabels = allLabels(ord);
-
-out{end+1} = sprintf('  Bad-channel removals by electrode (%d files):', N);
-recur = counts >= 2;
-if any(recur)
-    parts = arrayfun(@(k) sprintf('%s (%d/%d)', allLabels{k}, counts(k), N), ...
-        find(recur), 'UniformOutput', false);
-    out{end+1} = ['    ' strjoin(parts, ', ')];
-end
-if any(~recur)
-    out{end+1} = ['    once: ' strjoin(allLabels(~recur), ', ')];
-end
+labels = labels(ord);
 end
 
 function s = fmtStat(v)

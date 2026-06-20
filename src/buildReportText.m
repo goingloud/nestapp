@@ -74,19 +74,23 @@ rejCh  = report.channels.nRejected;
 intpCh = report.channels.nInterpolated;
 finCh  = report.channels.final;
 % Names are optional - older reports predate them, so read defensively.
-if isfield(report.channels, 'rejectedNames')
-    rejNames = report.channels.rejectedNames;
-else
-    rejNames = {};
-end
-if isfield(report.channels, 'interpolatedNames')
-    intpNames = report.channels.interpolatedNames;
-else
-    intpNames = {};
-end
+rejNames  = chFieldOr(report.channels, 'rejectedNames');
+intpNames = chFieldOr(report.channels, 'interpolatedNames');
+badNames  = chFieldOr(report.channels, 'badChannelNames');
+unNames   = chFieldOr(report.channels, 'unneededNames');
 lines{end+1} = sprintf('  Original:     %d', origCh);
 if rejCh > 0
-    if ~isempty(rejNames)
+    % Distinguish detection from intent when the split is available; otherwise
+    % fall back to the flat named list (legacy reports) or the bare count.
+    if ~isempty(badNames) || ~isempty(unNames)
+        lines{end+1} = sprintf('  Rejected:     %d', rejCh);
+        if ~isempty(badNames)
+            lines{end+1} = sprintf('    bad channels (%d): %s', numel(badNames), strjoin(badNames, ', '));
+        end
+        if ~isempty(unNames)
+            lines{end+1} = sprintf('    un-needed (%d): %s', numel(unNames), strjoin(unNames, ', '));
+        end
+    elseif ~isempty(rejNames)
         lines{end+1} = sprintf('  Rejected:     %d (%s)', rejCh, strjoin(rejNames, ', '));
     else
         lines{end+1} = sprintf('  Rejected:     %d', rejCh);
@@ -216,6 +220,15 @@ end
 
 summaryText = strjoin(lines, newline);
 end
+function v = chFieldOr(channels, field)
+% A channel name-list field, or {} when absent (older reports predate it).
+if isfield(channels, field)
+    v = channels.(field);
+else
+    v = {};
+end
+end
+
 function lines = appendCategoryLines(lines, cats, showVar)
 for ci = 1:numel(cats.names)
     if cats.nRemoved(ci) > 0

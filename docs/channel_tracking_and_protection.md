@@ -9,9 +9,11 @@ with the QC figure on `rtmsct013_3_pre_SPL`.
 - The per-file channel counting is **correct**. On the test file the report's
   `Rejected: 8` is exactly `2` ("Remove un-needed Channels") `+ 6`
   ("Remove Bad Channels"), and all 8 were interpolated back (`final == original`).
-- The report total folds **deliberate** "un-needed" removals in with
-  **bad-channel** rejections. That conflation — not an undercount — is what made
-  "6 vs 8/15" look wrong.
+- The `nRejected` **total** still folds **deliberate** "un-needed" removals in
+  with **bad-channel** rejections (that conflation — not an undercount — is what
+  made "6 vs 8/15" look wrong), but the **named** lists no longer conflate them:
+  both the per-file report and the session summary now split removals into
+  *bad-channel detection* vs *intentional un-needed* (see below).
 - QC Panel 1 marks **flat/saturated** channels (`var < eps`, `|x| > 250 µV`)
   *still present in the data*, not removed channels. It uses different criteria
   than `pop_rejchan`, so it legitimately differs from the rejected count.
@@ -31,6 +33,14 @@ with the QC figure on `rtmsct013_3_pre_SPL`.
   before each step and `setdiff`s after, accumulating
   `report.channels.rejectedNames` / `interpolatedNames`. One mechanism gives both
   the count and the labels for every removal step.
+- Names by reason: the removed labels are also split into
+  `report.channels.badChannelNames` (every quality-based detection step) and
+  `report.channels.unneededNames` (the deliberate "Remove un-needed Channels"
+  step). `buildReportText` prints them on separate labelled lines
+  (`bad channels (n): …` / `un-needed (n): …`), and `summarizeReports` tallies
+  bad-channel picks by electrode while listing intentional removals on their own
+  `Intentionally removed (un-needed):` line — so an intentional, systematic
+  removal is always shown but never counted as a detected bad channel.
 
 ## Protected electrodes (`impelec`)
 
@@ -69,14 +79,17 @@ rather than silent.
 
 ## Cross-file electrode tally (session summary)
 
-`processOneFile` accumulates `report.channels.badChannelNames` — the labels
-removed by **quality-based** bad-channel steps only (kurt/spec/ARTIST/ASR),
-excluding the deliberate `Remove un-needed Channels`. `summarizeReports` tallies
-these across the batch and prints, in the CHANNELS block, each electrode and how
-many files it was removed in (recurrent picks first, one-offs under `once:`).
-This makes a **systematic removal pattern visible** — e.g. RANSAC repeatedly
-dropping `CP1`/`CP2` across subjects is a signal to check for a montage/reference
-quirk rather than trust 7 independently "bad" electrodes.
+`processOneFile` accumulates `report.channels.badChannelNames` (quality-based
+detection: kurt/spec/ARTIST/ASR) and `report.channels.unneededNames` (the
+deliberate `Remove un-needed Channels`) as two separate lists. In the CHANNELS
+block `summarizeReports` tallies the **bad-channel** picks by electrode — how
+many files each was removed in, recurrent picks first and one-offs under
+`once:` — which makes a **systematic detection pattern visible** (e.g. RANSAC
+repeatedly dropping `CP1`/`CP2` across subjects signals a montage/reference quirk
+rather than 7 independently "bad" electrodes). The **intentional** removals are
+listed separately on an `Intentionally removed (un-needed):` line (a per-file
+`count/N` tag is added only when a channel was not dropped from every file), so
+deliberate systematic removal is always shown but kept distinct from detection.
 
 ## GMFP/GMFA — reuse TESA rather than re-derive
 
