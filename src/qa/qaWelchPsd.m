@@ -48,6 +48,12 @@ PSD_RES_HZ         = 1;     % Welch frequency resolution = 1 / window-duration
                             % the window short, which maximises averaging (and so
                             % accuracy) on a long recording. Lower it for sharper
                             % features at the cost of fewer averages.
+PSD_PLOT_OVERSAMPLE = 8;    % FFT zero-pad factor (nfft = winLen x this, rounded
+                            % to a power of 2). DISPLAY ONLY: interpolates a
+                            % denser frequency grid so the curve is smooth on the
+                            % log x-axis (the linear ~PSD_RES_HZ grid is sparse in
+                            % the low-frequency decade). Adds plotted points, not
+                            % resolution or statistical accuracy.
 % -----------------------------------------------------------------------------
 
     x = double(x(:));
@@ -63,5 +69,6 @@ PSD_RES_HZ         = 1;     % Welch frequency resolution = 1 / window-duration
     % at 256 samples and never longer than the signal.
     winLen = min(round(fsEff / PSD_RES_HZ), floor(numel(x) / 4));
     winLen = min(numel(x), max(256, winLen));
-    [pxx, f] = pwelch(x, hamming(winLen), [], winLen, fsEff);
+    nfft   = 2^nextpow2(winLen * PSD_PLOT_OVERSAMPLE);   % zero-pad for a smooth curve
+    [pxx, f] = pwelch(x, hamming(winLen), [], nfft, fsEff);
 end
