@@ -222,7 +222,7 @@ function test_aaratepSoundLambdaMatchesSource(testCase)
 % AARATEP source: SOUNDlambda = 10^-1.5.
 templates = loadTemplates(testCase);
 t = templates(contains({templates.name}, 'AARATEP'));
-soundIdx = find(strcmp(t.steps, 'Remove Recording Noise (SOUND)'), 1);
+soundIdx = find(strcmp(t.steps, 'Source-Informed Sensor Cleaning (SOUND)'), 1);
 testCase.verifyEqual(t.spec(soundIdx).params.lambdaValue, 10^-1.5, ...
     'AbsTol', 1e-6, ...
     'AARATEP SOUND lambda must be 10^-1.5 per c_TMSEEG_Preprocess_AARATEPPipeline.m');

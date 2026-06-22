@@ -96,6 +96,30 @@ classdef test_qualityGate < matlab.unittest.TestCase
             tc.verifyEqual(gate.verdict, 'Pass');
         end
 
+        function maxTriggers_fails_on_over_detection(tc)
+            % Too MANY triggers (pulse over-detection) must Fail the gate.
+            EEG = test_qualityGate.makeEEG(8, 10, 500, 1000);
+            EEG = test_qualityGate.withEvents(EEG, 500);   % > 300 ceiling
+            gate = qualityGate(EEG, struct('maxTriggers', 300));
+            tc.verifyEqual(gate.verdict, 'Fail');
+            tc.verifyTrue(any(contains(gate.reasons, 'triggers')));
+        end
+
+        function maxTriggers_pass_within_bound(tc)
+            EEG = test_qualityGate.makeEEG(8, 10, 500, 1000);
+            EEG = test_qualityGate.withEvents(EEG, 120);   % normal protocol
+            gate = qualityGate(EEG, struct('maxTriggers', 300));
+            tc.verifyEqual(gate.verdict, 'Pass');
+        end
+
+        function maxTrials_fails_on_over_segmentation(tc)
+            % An inflated epoch count must Fail the maxTrials check.
+            EEG = test_qualityGate.makeEEG(8, 400, 500, 1000);   % 400 trials
+            gate = qualityGate(EEG, struct('maxTrials', 300));
+            tc.verifyEqual(gate.verdict, 'Fail');
+            tc.verifyTrue(any(contains(gate.reasons, 'trials')));
+        end
+
         function maxFlatChans_counts_zero_var_channels(tc)
             EEG = test_qualityGate.makeEEG(8, 30, 500, 1000);
             EEG.data(3, :, :) = 0;

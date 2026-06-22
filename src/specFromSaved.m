@@ -19,6 +19,9 @@ end
 
 spec = data.spec;
 for k = 1:numel(spec)
+    % Migrate legacy step names (e.g. renamed steps) so old saved pipelines
+    % keep resolving against the current registry.
+    spec(k).name = canonicalStepName(spec(k).name);
     if ~any(strcmp({registry.name}, spec(k).name))
         warnings{end+1} = sprintf('Unknown step "%s" (not in registry)', spec(k).name); %#ok<AGROW>
     end

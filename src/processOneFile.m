@@ -104,7 +104,7 @@ fileReport.pipelineName = opts.pipelineName;  % provenance (citations come from 
 
 for si = 1:nSteps
     step     = spec(si);
-    stepName = step.name;
+    stepName = canonicalStepName(step.name);   % migrate legacy step names before dispatch
     varin    = paramsToVarin(step.params);
 
     % Progress notification - may throw nestapp:cancelled if user cancelled.
@@ -732,7 +732,7 @@ for si = 1:nSteps
                 EEG = pop_tesa_sspsir(EEG, vars{:});
                 EEG = eeg_checkset( EEG );
 
-            case 'Remove Recording Noise (SOUND)'
+            case 'Source-Informed Sensor Cleaning (SOUND)'
                 vars = convertContainedStringsToChars(varin);
                 EEG = pop_tesa_sound(EEG, vars{:} );
                 EEG = eeg_checkset( EEG );

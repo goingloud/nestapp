@@ -215,6 +215,10 @@ ovs = setOv(ovs, steps, 'Save New Set', 'savenew', 'tesa_qc');
 ovs = setOv(ovs, steps, 'Quality Gate', 'gateLabel',           'post-triggers', 1);
 ovs = setOv(ovs, steps, 'Quality Gate', 'minTriggers',         50,              1);
 ovs = setOv(ovs, steps, 'Quality Gate', 'minTriggersWarnAt',   70,              1);
+% Upper bound catches pulse OVER-detection: a 100-150 pulse protocol that
+% reports >300 triggers means the finder fired on artifact (warn at 200).
+ovs = setOv(ovs, steps, 'Quality Gate', 'maxTriggers',         300,             1);
+ovs = setOv(ovs, steps, 'Quality Gate', 'maxTriggersWarnAt',   200,             1);
 ovs = setOv(ovs, steps, 'Quality Gate', 'maxRejectedChanPct',  10,              1);
 
 % --- QG2: post-epoch-rejection ----------------------------------------
@@ -227,6 +231,10 @@ ovs = setOv(ovs, steps, 'Quality Gate', 'maxRejectedChanPct',  10,              
 ovs = setOv(ovs, steps, 'Quality Gate', 'gateLabel',           'post-bad-epoch', 2);
 ovs = setOv(ovs, steps, 'Quality Gate', 'minTrials',           50,               2);
 ovs = setOv(ovs, steps, 'Quality Gate', 'minTrialsWarnAt',     80,               2);
+% Upper bound on surviving trials - over-detection inflates the epoch count
+% too; >300 trials for a 100-150 pulse protocol is a red flag (warn at 200).
+ovs = setOv(ovs, steps, 'Quality Gate', 'maxTrials',           300,              2);
+ovs = setOv(ovs, steps, 'Quality Gate', 'maxTrialsWarnAt',     200,              2);
 ovs = setOv(ovs, steps, 'Quality Gate', 'maxRejectedTrialPct', 15,               2);
 ovs = setOv(ovs, steps, 'Quality Gate', 'minRankRatio',        0.9,              2);
 ovs = setOv(ovs, steps, 'Quality Gate', 'maxFlatChans',        5,                2);
@@ -363,7 +371,7 @@ steps = { ...
     'Label ICA Components', ...
     'Flag ICA Components for Rejection', ...
     'Remove Flagged ICA Components', ...
-    'Remove Recording Noise (SOUND)', ...
+    'Source-Informed Sensor Cleaning (SOUND)', ...
     'Remove Decay Artifact', ...
     'Interpolate Missing Data (AR-Blend)', ...
     'Frequency Filter (TESA)', ...
@@ -413,7 +421,7 @@ ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'LineNoise',    [Na
 ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'ChannelNoise', [NaN, NaN], 1);
 ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'Other',        [NaN, NaN], 1);
 % SOUND: lambda = 10^-1.5 ~ 0.0316; iter stays at default 10.
-ovs = setOv(ovs, steps, 'Remove Recording Noise (SOUND)', 'lambdaValue', 10^-1.5);
+ovs = setOv(ovs, steps, 'Source-Informed Sensor Cleaning (SOUND)', 'lambdaValue', 10^-1.5);
 % Decay removal: artifactTimespan = [-2, 12] ms, doDecayRemovalPerTrial = true.
 ovs = setOv(ovs, steps, 'Remove Decay Artifact', 'artifactStartMs', -2);
 ovs = setOv(ovs, steps, 'Remove Decay Artifact', 'artifactEndMs',   12);

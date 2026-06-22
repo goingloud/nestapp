@@ -21,7 +21,7 @@ function clause = methodsClause(stepName, params)
     p = params;
     if ~isstruct(p); p = struct(); end
 
-    switch stepName
+    switch canonicalStepName(stepName)   % resolve legacy names from old reports
         case 'Remove un-needed Channels'
             if (isfield(p,'nochannel') && ~isempty(p.nochannel)) || ...
                (isfield(p,'channel')   && ~isempty(p.channel))
@@ -130,7 +130,7 @@ function clause = methodsClause(stepName, params)
         case 'Flag ICA Components (AARATEP Muscle)'
             clause = 'residual muscle components identified by the AARATEP classifier were also removed';
 
-        case 'Remove Recording Noise (SOUND)'
+        case 'Source-Informed Sensor Cleaning (SOUND)'
             clause = 'sensor noise was suppressed using the SOUND algorithm';
 
         case 'Remove Decay Artifact'

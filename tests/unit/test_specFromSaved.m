@@ -61,6 +61,17 @@ classdef test_specFromSaved < matlab.unittest.TestCase
             [spec, ~] = specFromSaved(data, tc.registry);
             tc.verifyEqual(spec(1).params.freq, 512);
         end
+
+        function legacy_step_name_is_migrated(tc)
+            % A pipeline saved under the old SOUND step name must load against
+            % the renamed step (via canonicalStepName) with no warning.
+            data.spec = struct('name', 'Remove Recording Noise (SOUND)', ...
+                'params', struct('lambdaValue', 0.2));
+            [spec, warns] = specFromSaved(data, tc.registry);
+            tc.verifyEqual(spec(1).name, 'Source-Informed Sensor Cleaning (SOUND)');
+            tc.verifyEqual(spec(1).params.lambdaValue, 0.2);   % params untouched
+            tc.verifyEmpty(warns);                              % resolves cleanly
+        end
     end
 
     %% Missing spec field
