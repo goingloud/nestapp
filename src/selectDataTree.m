@@ -77,6 +77,14 @@ function selected = selectDataTree(startFolder, exts)
     tree = uitree(fig, 'checkbox', 'Position', [15 60 730 450], ...
         'NodeExpandedFcn', @(~,e) onExpand(e), ...
         'CheckedNodesChangedFcn', @(~,e) onCheckChanged(e));
+    % Make the check handler NON-REENTRANT. onCheckChanged briefly yields the
+    % UI thread (a uifigure property round-trip), and while it is yielded the
+    % next checkbox event would interrupt and re-enter it - each re-entry
+    % nesting another O(nChecked) pass, so per-click cost doubled per event
+    % (0.07s -> 0.14 -> ... -> 22s) and the browser appeared to freeze under
+    % steady clicking. 'off' makes events queue and run one-at-a-time instead.
+    tree.Interruptible = 'off';
+    tree.BusyAction    = 'queue';
 
     countLabel = uilabel(fig, 'Text', '0 files checked', ...
         'Position', [15 18 430 22], 'FontColor', [0.2 0.2 0.2]);
