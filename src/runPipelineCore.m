@@ -354,10 +354,43 @@ closeDlg(dlg);
 
 nestLog('CFG', 'Batch artifacts saved to: %s', batchCtx.batchRoot);
 
-% Batch-mode Quality Gate verdicts: resolved across all completed
-% reports using median + N * MAD cutoffs. Pending verdicts inside
-% successful reports become Pass / Marginal / Fail; reports with no
-% batch-mode gates are unaffected.
+% Post-run failure recovery: if some (but not all) files failed, let the
+% user Continue with the successes, Re-attempt the failures (artifacts
+% cleared + re-run once, in this session), or Abandon the whole run. This
+% runs BEFORE batch-gate finalization so any re-attempted file is included
+% in the cross-file verdict statistics. The loop re-prompts with the smaller
+% set when a re-attempt still leaves failures.
+if ~cancelled && ~isempty(failed)
+    nSuccess = sum(~cellfun(@isempty, reports));
+    if nSuccess > 0
+        runCtx = struct( ...
+            'nSteps',            nSteps, ...
+            'batchCtx',          batchCtx, ...
+            'autoQualityReport', autoQualityReport, ...
+            'qcAttribute',       qcAttribute, ...
+            'qcTmsWindow',       qcTmsWindow, ...
+            'skipOnQualityFail', skipOnQualityFail, ...
+            'qcTmsAutoDetect',   qcTmsAutoDetect, ...
+            'autoExportPDF',     autoExportPDF);
+        while ~isempty(failed)
+            decision = promptFailureRecovery(opts.uiFigure, failed, nFiles);
+            if strcmp(decision, 'Abandon Run')
+                cancelled = true;
+                break
+            elseif strcmp(decision, 'Re-attempt failed')
+                [reports, failed] = retryFailedFiles(reports, failed, ...
+                    spec, filePaths, opts, runCtx);
+            else   % 'Continue' (or no-UI fallback)
+                break
+            end
+        end
+    end
+end
+
+% Batch-mode Quality Gate verdicts: resolved across all completed reports
+% (including any just re-attempted) using median + N * MAD cutoffs. Pending
+% verdicts inside successful reports become Pass / Marginal / Fail; reports
+% with no batch-mode gates are unaffected.
 if ~cancelled
     successReports = reports(~cellfun(@isempty, reports));
     if hasPendingBatchGates(successReports)
@@ -374,18 +407,6 @@ if ~cancelled
                 slot = slot + 1;
                 reports{fi} = successReports{slot};
             end
-        end
-    end
-end
-
-% Post-run failure recovery: if some (but not all) files failed, give the
-% user a chance to abandon the whole run before reports are generated.
-if ~cancelled && ~isempty(failed)
-    nSuccess = sum(~cellfun(@isempty, reports));
-    if nSuccess > 0
-        decision = promptFailureRecovery(opts.uiFigure, failed, nFiles);
-        if strcmp(decision, 'Abandon Run')
-            cancelled = true;
         end
     end
 end
@@ -818,7 +839,8 @@ end
 listText = strjoin(sections, [newline newline]);
 
 msg = sprintf(['%d of %d files failed:\n\n%s\n\n' ...
-    'Continue with %d successful files, or abandon the whole run?'], ...
+    'Continue with %d successful files, re-attempt the failed files ' ...
+    '(cleared and re-run), or abandon the whole run?'], ...
     nFailed, nFiles, listText, nOk);
 
 if isempty(uiFig) || ~isvalid(uiFig)
@@ -827,9 +849,108 @@ if isempty(uiFig) || ~isvalid(uiFig)
     return
 end
 decision = uiconfirm(uiFig, msg, 'Some Files Failed', ...
-    'Options', {'Continue', 'Abandon Run'}, ...
-    'DefaultOption', 1, 'CancelOption', 2, ...
+    'Options', {'Continue', 'Re-attempt failed', 'Abandon Run'}, ...
+    'DefaultOption', 1, 'CancelOption', 3, ...
     'Icon', 'warning');
+end
+
+function [reports, failed] = retryFailedFiles(reports, failed, spec, filePaths, opts, runCtx)
+% Re-attempt the currently-failed files once. Each file's partial artifacts
+% are wiped first so the retry is clean, then the files are re-run serially
+% with a fresh progress dialog. Files that now succeed fill their original
+% report slots; files that fail again are returned in the (smaller) failed
+% struct. Mirrors the serial per-file execution in the main run.
+retryIdx = [failed.fi];
+for fi = retryIdx
+    clearFileArtifacts(runCtx.batchCtx, filePaths{fi});
+end
+
+nRetry = numel(retryIdx);
+dlg = createProgressDlg(opts.uiFigure, 1, nRetry);
+dlgCleanup = onCleanup(@() closeDlg(dlg));
+
+newFailed = struct('fi', {}, 'name', {}, 'step', {}, 'stepName', {}, ...
+                   'message', {}, 'kind', {});
+for j = 1:nRetry
+    if ~isvalid(dlg.fig) || dlg.fig.UserData.cancelRequested
+        % Cancelled mid-retry: the not-yet-retried files stay failed.
+        for jj = j:nRetry
+            newFailed(end+1) = failed(jj); %#ok<AGROW>
+        end
+        break
+    end
+    fi = retryIdx(j);
+
+    fOpts = opts;
+    fOpts.progressFcn = @(si, sn) updateProgressDlg(dlg, ...
+        struct('fi', j, 'si', si, 'nSteps', runCtx.nSteps, 'stepName', sn), ...
+        nRetry, true, opts.statusBar);
+    fOpts.onStepError = @(si, sn, err) uiconfirm(opts.uiFigure, ...
+        sprintf('Error at step %d (%s):\n%s\n\nContinue to next step?', si, sn, err.message), ...
+        'Step Failed', 'Options', {'Continue','Abort'}, ...
+        'DefaultOption', 'Continue', 'CancelOption', 'Abort');
+    fOpts.onPickChanFile = @() pickChanFile(opts.uiFigure);
+    fOpts.progressQueue  = [];
+    fOpts.fileIndex      = j;
+    fOpts = applyQCOpts(fOpts, runCtx.batchCtx, runCtx.autoQualityReport, ...
+        runCtx.qcAttribute, runCtx.qcTmsWindow, runCtx.skipOnQualityFail, ...
+        runCtx.qcTmsAutoDetect, runCtx.autoExportPDF);
+
+    try
+        [reports{fi}, ~] = processOneFile(spec, filePaths{fi}, fOpts);
+        updateProgressDlg(dlg, struct('fi', j, 'si', 0, ...
+            'nSteps', runCtx.nSteps, 'stepName', 'Done'), nRetry, false, []);
+    catch err
+        [~, fname, fext] = fileparts(filePaths{fi});
+        rec = parseFailure(fi, [fname fext], err.message);
+        newFailed(end+1) = rec; %#ok<AGROW>
+        logFileFailure('RETRY', rec);
+    end
+end
+failed = newFailed;
+end
+
+function clearFileArtifacts(batchCtx, filePath)
+% Remove ONE file's partial run artifacts so a re-attempt starts clean: its
+% QC PNG folder, its per-file report(s), and any output .set/.fdt named after
+% it. Touches only this stem - the reports/ and data/ folders are shared
+% across files in the typeBased layout, so deletes are stem-scoped.
+[~, rawStem] = fileparts(filePath);                       % QC + report use raw base
+sanStem = replace(replace(rawStem, ' ', '_'), '-', '_');  % data save sanitises it
+
+% QC PNGs live in a per-stem subfolder - safe to remove wholesale.
+qcDir = outputPaths(batchCtx, 'qc', rawStem);
+if exist(qcDir, 'dir')
+    try
+        rmdir(qcDir, 's');
+    catch
+    end
+end
+
+% Per-file report artifacts: "<stem>_report*.{mat,pdf}".
+deleteByPattern(outputPaths(batchCtx, 'reports', rawStem), [rawStem '_report*']);
+
+% Output data named after the file. A shared "<savenew>.set"
+% (includeFileName='no') is left alone - it is not stem-identifiable and is
+% overwritten on the next save anyway.
+dataDir = outputPaths(batchCtx, 'data', sanStem);
+deleteByPattern(dataDir, [sanStem '.set']);
+deleteByPattern(dataDir, [sanStem '.fdt']);
+deleteByPattern(dataDir, [sanStem '_*.set']);
+deleteByPattern(dataDir, [sanStem '_*.fdt']);
+end
+
+function deleteByPattern(d, pat)
+if isempty(d) || ~exist(d, 'dir'), return; end
+entries = dir(fullfile(d, pat));
+for i = 1:numel(entries)
+    if ~entries(i).isdir
+        try
+            delete(fullfile(d, entries(i).name));
+        catch
+        end
+    end
+end
 end
 
 function k = failureKind(f)
