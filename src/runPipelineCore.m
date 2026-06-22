@@ -1110,6 +1110,18 @@ catch err
     nestLog('CFG', 'Could not write session_summary.csv: %s', err.message);
 end
 
+% 2b) Session summary TEXT report (methods, citations, tallies) - the same
+%     aggregate the GUI shows. Saved WITH the per-file reports so users find
+%     it where they look for individual reports, not buried in batch/.
+try
+    if numel(reports) > 1
+        txtPath = fullfile(sessionSummaryDir(batchCtx), 'session_summary.txt');
+        writeTextReport(txtPath, summarizeReports(reports));
+    end
+catch err
+    nestLog('CFG', 'Could not write session_summary.txt: %s', err.message);
+end
+
 % 3) Dashboard PNG - only when at least one report carries a Quality
 %    Gate (otherwise the dashboard is empty and we save nothing).
 try
@@ -1120,6 +1132,29 @@ try
 catch err
     nestLog('CFG', 'Could not render dashboard PNG: %s', err.message);
 end
+end
+
+function d = sessionSummaryDir(batchCtx)
+% Where the session summary text report belongs. Prefer the shared reports
+% folder so it sits beside the per-file reports (typeBased layout); the
+% perInput layout has no shared reports folder, so fall back to the batch
+% artifacts folder.
+if strcmp(batchCtx.layout, 'typeBased')
+    d = outputPaths(batchCtx, 'reports', 'session');   % stem ignored -> <root>/reports
+else
+    d = outputPaths(batchCtx, 'batch');
+end
+end
+
+function writeTextReport(txtPath, text)
+% Write a multi-line text report. 'wt' gives native (CRLF on Windows) line
+% endings; '%s' avoids interpreting any '%' in the text as a format spec.
+fid = fopen(txtPath, 'wt');
+if fid < 0
+    error('nestapp:writeTextReport', 'Could not open %s for writing.', txtPath);
+end
+closeFid = onCleanup(@() fclose(fid));
+fprintf(fid, '%s', text);
 end
 
 function writeSessionSummaryCsv(csvPath, reports, failed)
