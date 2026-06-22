@@ -96,6 +96,11 @@ if any(hasICA)
     lines{end+1} = '';
 end
 
+%% Pipeline steps - the plain numbered skeleton (the verbal methods follow).
+%% Kept alongside the prose so the summary has both the quick step list (as in
+%% the per-file reports) and the publication paragraph.
+lines = [lines, pipelineStepLines(reports)];
+
 %% Methods - publication-ready prose aggregated across the session
 lines{end+1} = 'METHODS';
 lines{end+1} = ['  ', methodsParagraphAggregate(reports)];
@@ -117,6 +122,22 @@ summaryText = strjoin(lines, newline);
 end
 
 %% ---- helpers ---------------------------------------------------------------
+
+function out = pipelineStepLines(reports)
+% Numbered list of the pipeline steps in run order, taken from the report that
+% ran the most steps (the same representative the methods prose uses). Names
+% only - the deliberately "straightforward" companion to the prose paragraph.
+out = {};
+nSteps = cellfun(@(r) numel(reportStepNames(r)), reports);
+[mx, idx] = max(nSteps);
+if mx == 0, return; end
+names = reportStepNames(reports{idx});
+out{end+1} = 'PIPELINE STEPS';
+for i = 1:numel(names)
+    out{end+1} = sprintf('  %2d. %s', i, names{i}); %#ok<AGROW>
+end
+out{end+1} = '';
+end
 
 function out = badChannelTallyLines(reports, N)
 % Cross-file tally of removed electrodes, kept distinct by reason so intentional
