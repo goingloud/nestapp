@@ -36,6 +36,7 @@ if ~isfield(opts, 'stepLabel'),  opts.stepLabel  = '';                   end
 if ~isfield(opts, 'attribute'),  opts.attribute  = 'minmax_no_tms';      end
 if ~isfield(opts, 'maxICs'),     opts.maxICs     = 25;                   end
 if ~isfield(opts, 'icaSnapshot'),opts.icaSnapshot = struct([]);          end
+if ~isfield(opts, 'exportLockDir'), opts.exportLockDir = '';             end
 
 parentDir = fileparts(outPath);
 if ~isempty(parentDir) && ~exist(parentDir, 'dir')
@@ -84,6 +85,15 @@ end
 title(t, buildSuperTitle(EEG, opts, icaView.metrics), 'Interpreter', 'none', ...
     'FontWeight', 'bold');
 
+% Serialize the rasterization across parallel workers: concurrent
+% exportgraphics on headless workers can deadlock on shared OS graphics
+% resources, which is what wedges one random file in a big batch (see
+% acquireQCExportLock). The figure build above stays fully parallel; only
+% this export is mutually exclusive. No lock dir (tests / interactive /
+% single process) -> no locking. The lock releases as this function returns.
+if ~isempty(opts.exportLockDir)
+    exportLock = acquireQCExportLock(opts.exportLockDir); %#ok<NASGU>
+end
 exportgraphics(fig, outPath, 'Resolution', 150);
 figPath = outPath;
 end

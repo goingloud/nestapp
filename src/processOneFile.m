@@ -1056,6 +1056,10 @@ for si = 1:nSteps
                     'size',      [1600 1200]);
                 qcOpts.panels = struct('attribMatrix',true,'icaGrid',true, ...
                                        'butterfly',true,'psd',true);
+                % Serialize the PNG export across parallel workers via a lock
+                % under the (shared) batch root - concurrent exportgraphics on
+                % headless workers can deadlock and wedge the whole batch.
+                qcOpts.exportLockDir = opts.batchCtx.batchRoot;
                 % Most recent pre-rejection ICA state - lets the ICA panel
                 % show all components (rejected ones marked) instead of the
                 % post-pop_subcomp survivors sitting in the live EEG.
