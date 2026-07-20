@@ -35,6 +35,29 @@ function p = nestappFile()
 p = fullfile(repoRoot(), 'src', '@nestapp', 'nestapp.m');
 end
 
+function body = functionBody(src, name)
+% Return a method's full body text, from its declaration to the start of the
+% next method at class-method indent (8 spaces). '' when not found.
+%
+% Prefer this over src(idx:idx+N): a fixed character budget silently
+% truncates as a method grows, so an assertion can start passing or failing
+% for reasons unrelated to the behaviour it is checking.
+body = '';
+decl = ['function ' name '('];
+idx  = strfind(src, decl);
+if isempty(idx); return; end
+rest = src(idx(1):end);
+% Skip the declaration line so its own "function" keyword isn't the match.
+nl   = find(rest == newline, 1);
+if isempty(nl); body = rest; return; end
+stop = regexp(rest(nl:end), '\n {8}function ', 'once');
+if isempty(stop)
+    body = rest;
+else
+    body = rest(1 : nl + stop - 1);
+end
+end
+
 % ── 3.2 SavePipeline uses uiputfile ──────────────────────────────────────
 
 function test_savePipelineUsesUiputfile(testCase)
@@ -74,28 +97,50 @@ end
 
 % ── 3.3 Visualizing EEG cache invalidation ───────────────────────────────
 
-function test_selectData2ResetsEEGLoadedFlag(testCase)
+% These two assert an invariant - picking a new file set must invalidate
+% everything derived from the previous one, or the Visualize tab silently
+% plots the old files' EEG. They used to scan a fixed 2000-character window
+% after the handler and require the assignments to appear inline. That broke
+% when the invalidation was (correctly) moved into applyTEPSelection, a
+% helper shared by the listbox, Select-all and new-file-set paths so they
+% cannot diverge: the code was right, the window just could not reach it.
+% Follow the delegation chain instead, and read whole function bodies rather
+% than a character budget that silently truncates as methods grow.
+
+function test_selectData2InvalidatesViaSharedHelper(testCase)
 src = fileread(nestappFile());
-idx = strfind(src, 'SelectDataButton_2Pushed');
-testCase.verifyFalse(isempty(idx), 'SelectDataButton_2Pushed must exist');
-window = src(idx(1) : min(idx(1)+2000, numel(src)));
-% Must reset the loaded flag
+handler = functionBody(src, 'SelectDataButton_2Pushed');
+testCase.verifyNotEmpty(handler, 'SelectDataButton_2Pushed must exist');
+testCase.verifyTrue(contains(handler, 'setTEPFileList'), ...
+    ['SelectDataButton_2Pushed must route a new file set through ' ...
+     'setTEPFileList, which is what invalidates the derived EEG state.']);
+
+setList = functionBody(src, 'setTEPFileList');
+testCase.verifyNotEmpty(setList, 'setTEPFileList must exist');
+testCase.verifyTrue(contains(setList, 'applyTEPSelection'), ...
+    ['setTEPFileList must call applyTEPSelection for a new file set. ' ...
+     'Without it, new selections silently reuse stale EEG data.']);
+end
+
+function test_applyTEPSelectionResetsEEGLoadedFlag(testCase)
+src = fileread(nestappFile());
+body = functionBody(src, 'applyTEPSelection');
+testCase.verifyNotEmpty(body, 'applyTEPSelection must exist');
 testCase.verifyTrue( ...
-    contains(window, 'EEG_SelectedTEPFiles_Loaded') && ...
-    (contains(window, '= false') || contains(window, '= 0')), ...
-    ['Phase 3: SelectDataButton_2Pushed must reset EEG_SelectedTEPFiles_Loaded. ' ...
+    contains(body, 'EEG_SelectedTEPFiles_Loaded') && ...
+    (contains(body, '= false') || contains(body, '= 0')), ...
+    ['applyTEPSelection must reset EEG_SelectedTEPFiles_Loaded. ' ...
      'Without this, new file selections silently reuse stale EEG data.']);
 end
 
-function test_selectData2ClearsEEGCache(testCase)
+function test_applyTEPSelectionClearsEEGCache(testCase)
 src = fileread(nestappFile());
-idx = strfind(src, 'SelectDataButton_2Pushed');
-testCase.verifyFalse(isempty(idx), 'SelectDataButton_2Pushed must exist');
-window = src(idx(1) : min(idx(1)+2000, numel(src)));
+body = functionBody(src, 'applyTEPSelection');
+testCase.verifyNotEmpty(body, 'applyTEPSelection must exist');
 testCase.verifyTrue( ...
-    contains(window, 'EEGofAllSelectedFiles') && ...
-    (contains(window, '= {}') || contains(window, '= []')), ...
-    ['Phase 3: SelectDataButton_2Pushed must clear EEGofAllSelectedFiles. ' ...
+    contains(body, 'EEGofAllSelectedFiles') && ...
+    (contains(body, '= {}') || contains(body, '= []')), ...
+    ['applyTEPSelection must clear EEGofAllSelectedFiles. ' ...
      'Stale entries remain after selecting fewer files.']);
 end
 
