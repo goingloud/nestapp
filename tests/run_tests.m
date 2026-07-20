@@ -2,7 +2,8 @@
 %
 %   USAGE
 %     run_tests            % unit + regression (no EEGLAB required)
-%     run_tests('all')     % unit + regression + integration (EEGLAB required)
+%     run_tests('all')     % everything, incl. characterization (EEGLAB required)
+%     run_tests('characterization') % golden-value step tests (EEGLAB required)
 %     run_tests('unit')    % unit tests only
 %     run_tests('regression') % regression tests only
 %     run_tests('integration') % integration tests only (EEGLAB required)
@@ -41,12 +42,16 @@ switch lower(suite)
         suites = {fullfile(testRoot, 'regression')};
     case 'integration'
         suites = {fullfile(testRoot, 'integration')};
+    case 'characterization'
+        suites = {fullfile(testRoot, 'characterization')};
     case 'all'
         suites = {fullfile(testRoot, 'unit'), ...
                   fullfile(testRoot, 'regression'), ...
-                  fullfile(testRoot, 'integration')};
+                  fullfile(testRoot, 'integration'), ...
+                  fullfile(testRoot, 'characterization')};
     otherwise
-        error('run_tests: unknown suite "%s". Valid: fast, unit, regression, integration, all', suite);
+        error(['run_tests: unknown suite "%s". Valid: fast, unit, regression, ' ...
+            'integration, characterization, all'], suite);
 end
 
 % Per-test progress: log every test's start/end to the console and a file, so

@@ -46,6 +46,11 @@
 !tests/regression/*.m
 !tests/helpers/
 !tests/helpers/*.m
+!tests/characterization/
+!tests/characterization/*.m
+# Recorded step behaviour. JSON so a changed golden is readable in a diff.
+!tests/characterization/golden/
+!tests/characterization/golden/*.json
 !tests/*.m
 
 # CI & community health (CONTRIBUTING / CODE_OF_CONDUCT / SECURITY +
