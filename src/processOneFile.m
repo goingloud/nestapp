@@ -412,6 +412,18 @@ for si = 1:nSteps
                          'step likely dropped EEG.chanlocs.'], ref);
                 end
                 if hasLocs && ~ismember(ref,{EEG.chanlocs.labels}) && ~strcmp(ref,'[]')
+                    % Only prompt when there is a UI to prompt on. On a
+                    % parallel worker uiFigure is [] and there is no display,
+                    % so an inputdlg here would block a batch that is already
+                    % running. Fail with the information the user would have
+                    % needed to answer it instead.
+                    if isempty(opts.uiFigure)
+                        error('nestapp:refChannelMissing', ...
+                            ['Re-Reference: reference channel ''%s'' is not in ' ...
+                             'the data. Available channels: %s. Set a valid ' ...
+                             'reference on the Re-Reference step and re-run.'], ...
+                            ref, strjoin({EEG.chanlocs.labels}, ', '));
+                    end
                     answer = inputdlg('The reference channel is not in the data. Enter a new reference channel label:','Re-Reference',[1 50],{''});
                     if isempty(answer) || isempty(answer{1})
                         error('Re-Reference cancelled: no reference channel provided.');
@@ -978,7 +990,11 @@ for si = 1:nSteps
                     vars([ind3, ind3+1]) = [];
                 end
                 vars = stripEmptyVarin(vars);
-                EEG = pop_tesa_tepextract( EEG, type, vars );
+                % vars{:} - pop_tesa_tepextract takes varargin and forwards it
+                % as name/value pairs. Passing the cell itself makes
+                % varargin{1} a cell, so the pair count is odd and TESA throws
+                % "EXAMPLE needs key/value pairs" (tesa_tepextract.m:103).
+                EEG = pop_tesa_tepextract( EEG, type, vars{:} );
 
             case 'Find TEP Peaks (TESA)'
                 vars = convertContainedStringsToChars(varin);
@@ -995,7 +1011,10 @@ for si = 1:nSteps
                 peakWin = vars{ind4+1};
                 vars([ind4, ind4+1]) = [];
                 vars = stripEmptyVarin(vars);
-                EEG = pop_tesa_peakanalysis( EEG, input, direction, peak, peakWin, vars(:) );
+                % vars{:} for the same reason as Extract TEP above: this takes
+                % varargin, so vars(:) would arrive as a single cell argument
+                % rather than as name/value pairs.
+                EEG = pop_tesa_peakanalysis( EEG, input, direction, peak, peakWin, vars{:} );
 
             case 'TEP Peak Output'
                 vars = convertContainedStringsToChars(varin);
