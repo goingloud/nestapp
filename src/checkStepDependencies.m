@@ -24,15 +24,26 @@ if nargin < 2
     filePaths = {};
 end
 
-% Vendored AARATEP helpers ship with nestapp under third_party/ but are
-% only added to the path lazily during step dispatch. Add them now - only
-% when an AARATEP step is actually selected - so the which() probes below
-% see the bundled functions instead of reporting them as missing plugins.
-% Gating avoids a ~280-file genpath walk on every non-AARATEP pre-flight.
-aaratepSteps = {'Interpolate Missing Data (AR-Blend)', ...
-                'Remove Decay Artifact', ...
-                'Flag ICA Components (AARATEP Muscle)'};
-if any(ismember(stepNames, aaratepSteps))
+% Build extension set from file paths for format-specific dep filtering.
+[~,~,extList] = cellfun(@fileparts, filePaths, 'UniformOutput', false);
+exts = unique(lower(extList));
+
+steps    = stepRegistry();
+nameList = {steps.name};
+
+% Vendored AARATEP helpers ship with nestapp under third_party/ but are only
+% added to the path lazily during step dispatch. Add them now - only when a
+% selected step actually needs them - so the which() probes below see the
+% bundled functions instead of reporting them as missing plugins. Gating
+% avoids a ~280-file genpath walk on every non-AARATEP pre-flight.
+%
+% Which steps need them is DERIVED from the registry (a requirement whose
+% function is a vendored c_* helper), not from a hand-kept list beside it.
+% The previous list named three steps while five needed the path, so
+% "Modified Bandpass Filter (AARATEP)" and both "Detect Bad Channels" steps
+% were reported as missing a plugin that ships in the box - blocking runs
+% that would have worked.
+if anyStepNeedsVendoredHelper(stepNames, steps, nameList)
     try
         ensureAaratepOnPath();
     catch
@@ -40,13 +51,6 @@ if any(ismember(stepNames, aaratepSteps))
         % below report the AARATEP steps as missing with the bundled note.
     end
 end
-
-% Build extension set from file paths for format-specific dep filtering.
-[~,~,extList] = cellfun(@fileparts, filePaths, 'UniformOutput', false);
-exts = unique(lower(extList));
-
-steps    = stepRegistry();
-nameList = {steps.name};
 
 % missing: containers.Map keyed by plugin name
 missing = containers.Map('KeyType','char','ValueType','any');
@@ -105,6 +109,24 @@ msg = strjoin(lines, newline);
 end
 
 % ── helpers ───────────────────────────────────────────────────────────────────
+function tf = anyStepNeedsVendoredHelper(stepNames, steps, nameList)
+% True when any selected step declares a requirement on a vendored AARATEP
+% helper. Those are the c_* functions under third_party/aaratep; every other
+% requirement resolves from the normal MATLAB path.
+tf = false;
+for i = 1:numel(stepNames)
+    k = find(strcmp(nameList, stepNames{i}), 1);
+    if isempty(k); continue; end
+    rq = steps(k).requires;
+    for j = 1:numel(rq)
+        if isfield(rq(j), 'fn') && ~isempty(rq(j).fn) && ...
+                startsWith(rq(j).fn, 'c_')
+            tf = true; return
+        end
+    end
+end
+end
+
 function tf = isFieldSet(r, name)
 % True when struct field `name` exists and is non-empty (older req() structs
 % built before the field was added simply do not carry it).
