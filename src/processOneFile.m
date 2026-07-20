@@ -384,7 +384,12 @@ for si = 1:nSteps
                 Tdetrend = vars{ind1+1};
                 ind2 = find(strcmpi(vars,'timeWin'));
                 TtimeWin = vars{ind2+1};
-                pop_tesa_detrend(EEG, Tdetrend, TtimeWin)
+                % The return value MUST be assigned. pop_tesa_detrend returns a
+                % new struct; calling it bare detrended a copy and discarded it,
+                % so this step was a complete no-op that still logged "Linear
+                % detrend complete." See test_stepCharacterization.
+                EEG = pop_tesa_detrend(EEG, Tdetrend, TtimeWin);
+                EEG = eeg_checkset( EEG );
 
             case 'Re-Sample'
                 vars = convertContainedStringsToChars(varin);
@@ -940,6 +945,7 @@ for si = 1:nSteps
                 EEG.etc.aaratepBadChannels  = union(priorBad, newLabels);
                 EEG = eeg_checkset( EEG );
 
+            case 'Median Filter 1D'
                 vars = convertContainedStringsToChars(varin);
                 ind1 = find(strcmp(vars,'timeWin'));
                 timeWin = vars{1,ind1+1};
