@@ -74,18 +74,10 @@ function clause = methodsClause(stepName, params)
         case 'Remove Bad Epoch'
             clause = 'improbable epochs were rejected automatically';
 
-        case 'Reject Bad Trials (ARTIST)'
-            clause = sprintf('artifactual trials were rejected by a z-score criterion (%g SD)', ...
-                getf(p,'zThreshold',3));
-
         case 'Remove Bad Channels'
             meas = measureName(getf(p,'measure','kurt'));
             clause = sprintf('bad channels were identified by %s (>%g SD) and removed', ...
                 meas, getf(p,'threshold',5));
-
-        case 'Remove Bad Channels (ARTIST)'
-            clause = sprintf('bad channels were identified by RANSAC (correlation < %g) and removed', ...
-                getf(p,'corrThreshold',0.8));
 
         case 'Frequency Filter'
             lo = getf(p,'locutoff',0); hi = getf(p,'hicutoff',0);
@@ -107,9 +99,25 @@ function clause = methodsClause(stepName, params)
         case 'Automatic Cleaning Data'
             clause = asrClause(p);
 
-        case {'Run ICA', 'Run TESA ICA'}
-            clause = sprintf('the data were decomposed into independent components by %s', ...
-                icaName(stepName, p));
+        case 'Run TESA ICA'
+            clause = 'the data were decomposed into independent components by FastICA';
+
+        case 'Run ICA (FastICA)'
+            clause = 'the data were decomposed into independent components by FastICA';
+
+        case 'Run ICA (Infomax)'
+            if strcmpi(getf(p,'extended','on'),'on')
+                clause = 'the data were decomposed into independent components by extended infomax';
+            else
+                clause = 'the data were decomposed into independent components by infomax';
+            end
+
+        case 'Run ICA (Picard)'
+            if strcmpi(getf(p,'mode','standard'),'ortho')
+                clause = 'the data were decomposed into independent components by Picard (Picard-O)';
+            else
+                clause = 'the data were decomposed into independent components by Picard';
+            end
 
         case 'Flag ICA Components for Rejection'
             cats = iclabelCategories(p);
@@ -124,14 +132,39 @@ function clause = methodsClause(stepName, params)
                 clause = sprintf('%s components were removed', listJoin(cats));
             end
 
-        case 'Flag ICA Components (ARTIST Decay)'
-            clause = 'components reflecting early TMS-decay artifact were removed';
-
         case 'Flag ICA Components (AARATEP Muscle)'
             clause = 'residual muscle components identified by the AARATEP classifier were also removed';
 
+        case 'Flag ICA Components (AARATEP Peak)'
+            clause = sprintf('components with trial-averaged peak amplitude above %g uV were removed', ...
+                getf(p,'peakThresholdUv',15));
+
+        case 'Modified Bandpass Filter (AARATEP)'
+            lo = getf(p,'lowCutoff',0); hi = getf(p,'highCutoff',0);
+            if lo > 0 && hi > 0
+                edges = sprintf('%g-%g Hz band-pass', lo, hi);
+            elseif lo > 0
+                edges = sprintf('%g Hz high-pass', lo);
+            else
+                edges = sprintf('%g Hz low-pass', hi);
+            end
+            clause = sprintf(['data were filtered with the AARATEP modified ' ...
+                'Butterworth filter (%s with autoregressive extrapolation to ' ...
+                'limit artifact spread)'], edges);
+
+        case 'Detect Bad Channels (PREP deviation)'
+            clause = 'bad channels were detected by robust deviation and interpolated';
+
+        case 'Detect Bad Channels (DDWiener)'
+            clause = 'further bad channels were detected by a data-driven Wiener estimate and interpolated';
+
         case 'Source-Informed Sensor Cleaning (SOUND)'
-            clause = 'sensor noise was suppressed using the SOUND algorithm';
+            if strcmpi(getf(p,'reconstructBadChannels','off'),'on')
+                clause = ['sensor noise was suppressed and removed channels ' ...
+                    'reconstructed using the SOUND algorithm'];
+            else
+                clause = 'sensor noise was suppressed using the SOUND algorithm';
+            end
 
         case 'Remove Decay Artifact'
             per = ''; if strcmpi(getf(p,'perTrial','off'),'on'); per = ' on a per-trial basis'; end
@@ -183,17 +216,6 @@ function s = asrClause(p)
     if isnumeric(bu) && ~isempty(bu); parts{end+1} = sprintf('burst threshold %g SD', bu); end
     s = 'bad channels and noisy data segments were removed using clean_rawdata/ASR';
     if ~isempty(parts); s = sprintf('%s (%s)', s, strjoin(parts, ', ')); end
-end
-
-function name = icaName(stepName, p)
-    if strcmp(stepName, 'Run TESA ICA'); name = 'FastICA'; return; end
-    switch lower(getf(p,'icatype','fastica'))
-        case 'fastica'; name = 'FastICA';
-        case 'runica';  name = 'infomax';
-        case 'picard';  name = 'Picard';
-        case 'binica';  name = 'infomax (binica)';
-        otherwise;      name = getf(p,'icatype','independent component analysis');
-    end
 end
 
 function cats = iclabelCategories(p)

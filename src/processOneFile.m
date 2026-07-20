@@ -141,6 +141,9 @@ for si = 1:nSteps
                 eachFilediffPath = vars{ind1+1};
                 ind2 = find(strcmpi(vars,'needchanloc'));
                 needchanloc = vars{ind2+1};
+                coordCheck = 'off';
+                ci = find(strcmpi(vars,'coordCheck'),1);
+                if ~isempty(ci), coordCheck = vars{ci+1}; end
 
                 if strcmp(eachFilediffPath,'yes')
                     needchanloc = 'yes';
@@ -172,6 +175,10 @@ for si = 1:nSteps
                         'load', {[chPath, chBase, chExt], 'filetype', 'autodetect'});
                     [ALLEEG, EEG, CURRENTSET] = eeg_store(ALLEEG, EEG, CURRENTSET);
                 end
+                % Validate coordinates (after any lookup): invalid coords
+                % (missing/NaN/0,0,0) silently break the downstream spatial
+                % RANSAC bad-channel and interpolation steps.
+                EEG = validateChannelCoords(EEG, coordCheck);
 
             case 'Load Data'
                 if   strcmpi(fileName(end-2:end),'set')
@@ -281,12 +288,16 @@ for si = 1:nSteps
                     vars([ind3, ind3+1]) = [];
                 end
 
+                badBefore = {EEG.chanlocs.labels};
                 if sum(importantElects)
                     vars{1,ind2+1} = find(~importantElects);
                     EEG = pop_rejchan(EEG, vars{:});
                 else
                     EEG = pop_rejchan(EEG, vars{:});
                 end
+                % Record what was rejected so "Interpolate Channels" restores
+                % only bad channels, not intentionally-removed ones.
+                EEG = recordBadChannels(EEG, badBefore);
 
             case 'Automatic Continuous Rejection'
                 vars = convertContainedStringsToChars(varin);
@@ -318,8 +329,10 @@ for si = 1:nSteps
                     end
                     vars([ind2 ind2+1]) = [];
                 end
+                badBefore = {EEG.chanlocs.labels};
                 EEG = clean_artifacts(EEG,vars{:});
                 EEG = eeg_checkset( EEG );
+                EEG = recordBadChannels(EEG, badBefore);
 
             case 'Automatic Cleaning Data'
                 vars = convertContainedStringsToChars(varin);
@@ -335,8 +348,10 @@ for si = 1:nSteps
                     vars{ind+1} = highpass;
                 end
                 vars = stripEmptyVarin(vars);
+                badBefore = {EEG.chanlocs.labels};
                 EEG = pop_clean_rawdata(EEG, vars{:});
                 EEG = eeg_checkset( EEG );
+                EEG = recordBadChannels(EEG, badBefore);
 
             case 'Remove Baseline'
                 vars = convertContainedStringsToChars(varin);
@@ -455,19 +470,24 @@ for si = 1:nSteps
                 fileReport = recordRejectedTrials(fileReport, rejepochs);
                 EEG = eeg_checkset( EEG );
 
-            case 'Run ICA'
-                EEG.data = double(EEG.data);
+            case 'Run ICA (FastICA)'
                 vars = convertContainedStringsToChars(varin);
-                % FastICA-specific params crash runica's internal parser
-                % ("Output argument 'sphere' not assigned"). Strip them
-                % when the user picked icatype = runica (extended Infomax).
-                idx = find(strcmpi(vars, 'icatype'), 1);
-                if ~isempty(idx) && strcmpi(vars{idx+1}, 'runica')
-                    vars = stripVarinKeys(vars, ...
-                        {'approach', 'g', 'stabilization'});
+                EEG = runIcaEngine(EEG, 'fastica', vars);
+
+            case 'Run ICA (Infomax)'
+                vars = convertContainedStringsToChars(varin);
+                % runica takes a numeric 'extended' flag (1 = extended infomax).
+                eidx = find(strcmpi(vars, 'extended'), 1);
+                if ~isempty(eidx)
+                    vars{eidx+1} = double(strcmpi(vars{eidx+1}, 'on'));
                 end
-                EEG = pop_runica(EEG, vars{:});
-                EEG = eeg_checkset( EEG );
+                EEG = runIcaEngine(EEG, 'runica', vars);
+
+            case 'Run ICA (Picard)'
+                % Picard's params (mode, maxiter) are forwarded by pop_runica to
+                % picard(); mode 'standard' = unconstrained (Infomax-like).
+                vars = convertContainedStringsToChars(varin);
+                EEG = runIcaEngine(EEG, 'picard', vars);
 
             case 'Label ICA Components'
                 vars = convertContainedStringsToChars(varin);
@@ -510,16 +530,25 @@ for si = 1:nSteps
                 end
                 pendingICAStats = struct('rejMask', rejMask);
                 if ~isempty(EEG.icaweights) && size(EEG.icaweights,1) == numel(rejMask)
+                    nCompDec = size(EEG.icaweights, 1);
                     act2D = computeICAActivation(EEG);
+                    act3D = reshape(act2D, nCompDec, size(EEG.data,2), size(EEG.data,3));
                     % Cache activations so pop_subcomp's eeg_getica doesn't recompute them.
                     if isempty(EEG.icaact)
-                        EEG.icaact = reshape(act2D, size(EEG.icaweights,1), ...
-                            size(EEG.data,2), size(EEG.data,3));
+                        EEG.icaact = act3D;
                     end
-                    data2D = reshape(EEG.data(EEG.icachansind,:,:), numel(EEG.icachansind), []);
-                    totalVar = sum(var(data2D, 0, 2));
-                    if totalVar > 0
-                        pendingICAStats.compVarPct = double((var(act2D, 0, 2) / totalVar * 100)');
+                    % Per-component variance share using TESA's definition: the
+                    % variance of the TRIAL-AVERAGED activation, normalised to
+                    % sum to 100% across components (tesa_compselect.m:420-422).
+                    % Matching the Remove ICA Components (TESA) path makes
+                    % varRemoved comparable across every removal step. The prior
+                    % var(act)/var(data) form ignored the spatial weighting of
+                    % each component and badly under-counted (e.g. AARATEP round
+                    % 2 reported 38 removed comps as only 0.55% variance).
+                    compVarsAbs = var(mean(act3D, 3, 'omitnan'), 0, 2)';
+                    sv = sum(compVarsAbs);
+                    if sv > 0
+                        pendingICAStats.compVarPct = double(compVarsAbs / sv * 100);
                     end
                 end
                 if isfield(EEG,'etc') && isfield(EEG.etc,'ic_classification') && ...
@@ -556,6 +585,27 @@ for si = 1:nSteps
                 if ~(isnumeric(EEG.reject.gcompreject) || islogical(EEG.reject.gcompreject))
                     EEG.reject.gcompreject = zeros(1, size(EEG.icaweights, 1));
                 end
+
+                % Structural guard: when the flag step marks EVERY component for
+                % removal, pop_subcomp is asked to project the data onto an empty
+                % surviving set and dies with an opaque matrix-dimension error.
+                % Fail here instead, with an interpretable, trackable reason. The
+                % trigger is purely structural (all components flagged -> no signal
+                % left); the reference/ground note is a diagnostic hint, not a
+                % threshold - removing 100% of the decomposition is unrecoverable
+                % whatever the cause.
+                nCompDecomp = size(EEG.icaweights, 1);
+                nFlagged    = sum(logical(EEG.reject.gcompreject));
+                if isempty(var_comp) && ~keepcomp && nCompDecomp > 0 && nFlagged >= nCompDecomp
+                    error('nestapp:allComponentsFlagged', ...
+                        ['All %d independent components were flagged for removal - no ' ...
+                         'component would survive, so nothing can be reconstructed. This ' ...
+                         'typically means no brain signal was recoverable (e.g. a bad ' ...
+                         'reference or ground corrupting the whole montage, which is ' ...
+                         'common-mode and so leaves no single channel as an outlier).'], ...
+                        nCompDecomp);
+                end
+
                 EEG = pop_subcomp( EEG, var_comp, plotag, keepcomp);
                 EEG.ICA_Rejected_Comp = ICA_Rejected_Comp;
                 EEG = eeg_checkset( EEG );
@@ -563,24 +613,40 @@ for si = 1:nSteps
             case 'Interpolate Channels'
                 method = step.params.method;
                 trange = step.params.trange;
-                % Only interpolate genuine removed channels: those that are
-                % (a) absent from the current montage and (b) carry valid
-                % coordinates. Stale or placeholder removedchans entries
-                % (empty X, numeric-string labels) otherwise get appended to
-                % chanlocs by pop_interp with no matching data row, after
-                % which eeg_checkset discards the entire chanlocs struct on
-                % the size mismatch. The next step that dereferences
-                % EEG.chanlocs then crashes with a cryptic dot-indexing
-                % error. See test_interpolateChannelsBadRemovedchans.
+                % Interpolate ONLY channels that were removed *as bad* by a
+                % bad-channel step (recorded in EEG.etc.nestapp.badChannels by
+                % recordBadChannels). Channels dropped on purpose - e.g. by
+                % "Remove un-needed Channels" or a keep-list - also land in
+                % EEG.chaninfo.removedchans, because pop_select records
+                % everything it removes; restoring all of removedchans would
+                % resurrect those intentionally-dropped channels. We take the
+                % channel-location structs (with coordinates) from
+                % removedchans but keep only entries whose label is on the
+                % bad-channel list.
+                %
+                % We additionally skip stale / placeholder removedchans
+                % entries - those with empty coordinates or a label that is
+                % already live. pop_interp would otherwise append them to
+                % chanlocs with no matching data row, after which eeg_checkset
+                % discards the entire chanlocs struct on the size mismatch and
+                % the next step crashes with a cryptic dot-indexing error.
+                % See test_interpolateChannelsBadRemovedchans.
                 rc = EEG.chaninfo.removedchans;
                 if ~isempty(rc)
                     liveLabels = {EEG.chanlocs.labels};
+                    if isfield(EEG, 'etc') && isfield(EEG.etc, 'nestapp') && ...
+                            isfield(EEG.etc.nestapp, 'badChannels')
+                        badLabels = EEG.etc.nestapp.badChannels;
+                    else
+                        badLabels = {};
+                    end
+                    isBad   = arrayfun(@(c) ismember(c.labels, badLabels), rc);
                     isValid = arrayfun(@(c) ~isempty(c.X) && ...
                         ~ismember(c.labels, liveLabels), rc);
-                    rc = rc(isValid);
+                    rc = rc(isBad & isValid);
                 end
                 if isempty(rc)
-                    fprintf(['Interpolate Channels: no valid removed ' ...
+                    fprintf(['Interpolate Channels: no bad removed ' ...
                         'channels to restore; skipping interpolation.\n']);
                 else
                     EEG = pop_interp(EEG, rc, method, trange);
@@ -729,11 +795,11 @@ for si = 1:nSteps
 
             case 'SSP SIR'
                 vars = convertContainedStringsToChars(varin);
-                % The PC param is declared type 'string' in the registry, so
-                % {'data', 90} comes back from the UITable or a saved pipeline
-                % as the CHAR "{'data', 90}". tesa_sspsir then does "1:PC" on a
-                % char and throws ("For colon operator with char operands...").
-                % Normalise it back to a cell / number.
+                % The PC / "Variance kept" param is stored as a string, so
+                % after a UITable edit or a saved pipeline it arrives as the
+                % char "{'data', 90}" instead of the cell tesa_sspsir needs
+                % (it runs 1:PC internally -> "colon operator with char
+                % operands" error). Normalise it back to a cell / number.
                 pcIdx = find(strcmpi(vars, 'PC'), 1);
                 if ~isempty(pcIdx)
                     vars{pcIdx+1} = parseSspsirPC(vars{pcIdx+1});
@@ -742,8 +808,34 @@ for si = 1:nSteps
                 EEG = eeg_checkset( EEG );
 
             case 'Source-Informed Sensor Cleaning (SOUND)'
-                vars = convertContainedStringsToChars(varin);
-                EEG = pop_tesa_sound(EEG, vars{:} );
+                o = varinToStruct(varin);
+                if isfield(o, 'reconstructBadChannels') && strcmpi(o.reconstructBadChannels, 'on')
+                    % AARATEP backend: reconstruct the channels flagged by
+                    % "Detect Bad Channels (AARATEP)" from the lead field.
+                    ensureAaratepOnPath();
+                    replaceIdx = [];
+                    if isfield(EEG, 'etc') && isfield(EEG.etc, 'aaratepBadChannels') ...
+                            && ~isempty(EEG.etc.aaratepBadChannels)
+                        replaceIdx = find(ismember({EEG.chanlocs.labels}, EEG.etc.aaratepBadChannels));
+                    end
+                    lf = '';
+                    if isfield(o, 'leadFieldPath') && ~isempty(o.leadFieldPath) ...
+                            && ~strcmp(o.leadFieldPath, '[]')
+                        lf = o.leadFieldPath;
+                    end
+                    % doRereferenceBeforeSOUND is just pop_reref([]) inside the
+                    % helper; in nestapp that is the composable "Re-Reference"
+                    % step, so we keep it false here (matches AARATEP upstream).
+                    EEG = c_TMSEEG_runSOUND(EEG, ...
+                        'replaceChannels',          replaceIdx, ...
+                        'lambda',                   o.lambdaValue, ...
+                        'numIterations',            o.iter, ...
+                        'leadFieldPath',            lf, ...
+                        'doRereferenceBeforeSOUND', false);
+                else
+                    % Standard TESA SOUND (pass only its own parameters).
+                    EEG = pop_tesa_sound(EEG, 'lambdaValue', o.lambdaValue, 'iter', o.iter);
+                end
                 EEG = eeg_checkset( EEG );
 
             case 'Interpolate Missing Data (AR-Blend)'
@@ -759,6 +851,17 @@ for si = 1:nSteps
 
             case 'Remove Decay Artifact'
                 ensureAaratepOnPath();
+                % c_TMSEEG_fitAndRemoveDecayArtifact calls fit() on doubles.
+                % Make sure it dispatches to the Curve Fitting Toolbox (repairs a
+                % mis-set path if it can); otherwise fail with a clear message
+                % instead of the cryptic "Undefined function 'fit' for input
+                % arguments of type 'double'".
+                [fitAvailable, fitReason] = ensureCurveFittingFit();
+                if ~fitAvailable
+                    error('nestapp:CurveFittingUnavailable', ...
+                        ['Remove Decay Artifact requires the Curve Fitting Toolbox ' ...
+                         'fit() function. %s'], fitReason);
+                end
                 opts2 = varinToStruct(varin);
                 artifactTimespan = [opts2.artifactStartMs, opts2.artifactEndMs] * 1e-3;
                 % Upstream c_TMSEEG_Preprocess_AARATEPPipeline.m line 336:
@@ -780,22 +883,63 @@ for si = 1:nSteps
                 EEG = aaratepMuscleClassifier(EEG, vars{:});
                 EEG = eeg_checkset( EEG );
 
-            case 'Reject Bad Trials (ARTIST)'
+            case 'Flag ICA Components (AARATEP Peak)'
                 vars = convertContainedStringsToChars(varin);
-                EEG = artistRejectBadTrials(EEG, vars{:});
+                EEG = aaratepPeakAmplitudeClassifier(EEG, vars{:});
                 EEG = eeg_checkset( EEG );
 
-            case 'Remove Bad Channels (ARTIST)'
-                vars = convertContainedStringsToChars(varin);
-                EEG = artistBadChannelsRansac(EEG, vars{:});
+            case 'Modified Bandpass Filter (AARATEP)'
+                ensureAaratepOnPath();
+                o = varinToStruct(varin);
+                artSpan = [o.artifactStartMs, o.artifactEndMs] * 1e-3 * o.artifactMultiplier;
+                lo = o.lowCutoff;  if lo == 0, lo = []; end
+                hi = o.highCutoff; if hi == 0, hi = []; end
+                % Clamp extrapolation length to available epoch room
+                % (upstream c_TMSEEG_Preprocess_AARATEPPipeline.m lines 192-193).
+                tExt = min(o.piecewiseTimeToExtend, min(abs([EEG.xmin, EEG.xmax] - artSpan)));
+                preDur = o.prePostExtrapMs * 1e-3;
+                EEG = c_TMSEEG_applyModifiedBandpassFilter(EEG, ...
+                    'lowCutoff',                     lo, ...
+                    'highCutoff',                    hi, ...
+                    'artifactTimespan',              artSpan, ...
+                    'doPiecewise',                   true, ...
+                    'piecewiseTimeToExtend',         tExt, ...
+                    'prePostExtrapolationDurations', [preDur, preDur]);
                 EEG = eeg_checkset( EEG );
 
-            case 'Flag ICA Components (ARTIST Decay)'
-                vars = convertContainedStringsToChars(varin);
-                EEG = artistFlagDecayICs(EEG, vars{:});
+            case {'Detect Bad Channels (PREP deviation)', 'Detect Bad Channels (DDWiener)'}
+                ensureAaratepOnPath();
+                o = varinToStruct(varin);
+                if contains(stepName, 'PREP')
+                    method = 'PREP_deviation';
+                else
+                    method = 'TESA_DDWiener_PerTrial';
+                end
+                priorBad = {};
+                if isfield(EEG, 'etc') && isfield(EEG.etc, 'aaratepBadChannels')
+                    priorBad = EEG.etc.aaratepBadChannels;
+                end
+                artSpan = [o.artifactStartMs, o.artifactEndMs] * 1e-3 * o.artifactMultiplier;
+                % replaceMethod='interpolate' interpolates flagged channels in
+                % place (montage preserved), so a following detector sees the
+                % cleaned data - reproducing the AARATEP ensemble loop. Labels
+                % accumulate in EEG.etc.aaratepBadChannels for SOUND.
+                [EEG, mscBad] = c_TMSEEG_detectBadChannels(EEG, ...
+                    'detectionMethod',  method, ...
+                    'threshold',        o.threshold, ...
+                    'artifactTimespan', artSpan, ...
+                    'replaceMethod',    'interpolate', ...
+                    'doPlot',           false);
+                badIdx = mscBad.badChannelIndices;
+                if islogical(badIdx), badIdx = find(badIdx); end
+                newLabels = {EEG.chanlocs(badIdx).labels};
+                % Channels newly flagged by THIS step (not already interpolated by
+                % a prior detector). Recorded so the report tallies can count them
+                % even though in-place interpolation leaves nbchan unchanged.
+                EEG.etc.aaratepLastDetected = setdiff(newLabels, priorBad, 'stable');
+                EEG.etc.aaratepBadChannels  = union(priorBad, newLabels);
                 EEG = eeg_checkset( EEG );
 
-            case 'Median Filter 1D'
                 vars = convertContainedStringsToChars(varin);
                 ind1 = find(strcmp(vars,'timeWin'));
                 timeWin = vars{1,ind1+1};
@@ -946,6 +1090,23 @@ for si = 1:nSteps
                 fileReport.channels.interpolatedNames = ...
                     [fileReport.channels.interpolatedNames, addedNames(:)'];
             end
+            % The AARATEP detectors interpolate bad channels IN PLACE, so nbchan
+            % is unchanged and the diff-based tallies above miss them. Count the
+            % channels each flagged this step as both bad/rejected (so the QC
+            % gate's rejectedChanPct sees them) and interpolated (their data was
+            % restored) - matching the standard remove-then-interpolate flow.
+            if any(strcmp(stepName, {'Detect Bad Channels (PREP deviation)', ...
+                    'Detect Bad Channels (DDWiener)'})) ...
+                    && isfield(EEG, 'etc') && isfield(EEG.etc, 'aaratepLastDetected') ...
+                    && ~isempty(EEG.etc.aaratepLastDetected)
+                added = EEG.etc.aaratepLastDetected(:)';
+                nAdded = numel(added);
+                fileReport.channels.nRejected     = fileReport.channels.nRejected + nAdded;
+                fileReport.channels.rejectedNames  = [fileReport.channels.rejectedNames, added];
+                fileReport.channels.badChannelNames = [fileReport.channels.badChannelNames, added];
+                fileReport.channels.nInterpolated  = fileReport.channels.nInterpolated + nAdded;
+                fileReport.channels.interpolatedNames = [fileReport.channels.interpolatedNames, added];
+            end
             if strcmp(stepName, 'Epoching') && fileReport.trials.original == 0
                 fileReport.trials.original    = size(EEG.data, 3);
                 fileReport.trials.survivingIdx = 1:fileReport.trials.original;
@@ -958,9 +1119,14 @@ for si = 1:nSteps
                         (nEpochBefore - nEpochAfter);
                 end
             end
-            if any(strcmp(stepName, {'Run ICA','Run TESA ICA'})) && ~isempty(EEG.icaweights)
+            if any(strcmp(stepName, icaDecompositionSteps())) && ~isempty(EEG.icaweights)
                 % Open a round per decomposition so the round count is correct
                 % even for a round that removes nothing (e.g. AARATEP's 2nd ICA).
+                % Every ICA engine must be listed in icaDecompositionSteps -
+                % when the per-engine names (Picard/FastICA/Infomax) were
+                % missing here, a second decomposition never opened its own
+                % round and its removal was folded into the prior round, hiding
+                % the whole pass in the report.
                 fileReport = openICARound(fileReport, size(EEG.icaweights, 1));
             end
             if strcmp(stepName, 'Remove Flagged ICA Components') && ...

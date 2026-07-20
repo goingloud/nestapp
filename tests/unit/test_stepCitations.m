@@ -57,8 +57,8 @@ function test_soundStepCitesMutanen(testCase)
 testCase.verifyTrue(anyContains(refsFor({'Remove Recording Noise (SOUND)'}), 'Mutanen'));
 end
 
-function test_artistStepCitesWu(testCase)
-testCase.verifyTrue(anyContains(refsFor({'Reject Bad Trials (ARTIST)'}), 'Wu W.'));
+function test_picardStepCitesAblin(testCase)
+testCase.verifyTrue(anyContains(refsFor({'Run ICA (Picard)'}), 'Ablin'));
 end
 
 function test_aaratepStepCitesCline(testCase)
@@ -72,10 +72,10 @@ end
 % -- the point: union by constellation, no spurious entries ---------------
 
 function test_combinedStepsCiteBothMethods(testCase)
-% The user's example: TESA compselect + ARTIST trial rejection -> both refs.
-refs = refsFor({'Remove ICA Components (TESA)', 'Reject Bad Trials (ARTIST)'});
+% Two methods in one pipeline -> both references, no more, no less.
+refs = refsFor({'Remove ICA Components (TESA)', 'Run ICA (Picard)'});
 testCase.verifyTrue(anyContains(refs, 'Rogasch'), 'TESA must be cited');
-testCase.verifyTrue(anyContains(refs, 'Wu W.'),   'ARTIST must be cited');
+testCase.verifyTrue(anyContains(refs, 'Ablin'),   'Picard must be cited');
 end
 
 function test_noSpuriousSoundWhenSoundNotUsed(testCase)

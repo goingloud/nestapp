@@ -3,7 +3,7 @@
 % Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
 % Part of nestapp; see the LICENSE file for full terms.
 function tests = test_newStepDispatch
-% TEST_NEWSTEPDISPATCH  Regression tests for the ARTIST + AARATEP step
+% TEST_NEWSTEPDISPATCH  Regression tests for the AARATEP step
 %   dispatch wiring. These would have caught:
 %     - Calling helpers with a struct positional arg when the helper
 %       declares opts.foo (e.g. "Invalid argument at position 2.
@@ -29,54 +29,12 @@ end
 % ── helper invocation: each new helper must accept the name-value pairs
 %    that paramsToVarin produces from its registry defaults ──────────────────
 
-function test_artistRejectBadTrials_acceptsDispatchedArgs(testCase)
-EEG = makeFakeEpochedEEG();
-vars = defaultsFor('Reject Bad Trials (ARTIST)');
-fn = @() artistRejectBadTrials(EEG, vars{:});
-testCase.verifyWarningFree(fn, ...
-    'Helper must accept the name-value pairs produced by paramsToVarin.');
-end
-
-function test_artistFlagDecayICs_acceptsDispatchedArgs(testCase)
-EEG = makeFakeEpochedEEGWithICA();
-vars = defaultsFor('Flag ICA Components (ARTIST Decay)');
-fn = @() artistFlagDecayICs(EEG, vars{:});
-testCase.verifyWarningFree(fn, ...
-    'Helper must accept the name-value pairs produced by paramsToVarin.');
-end
-
 function test_aaratepMuscleClassifier_acceptsDispatchedArgs(testCase)
 EEG = makeFakeEpochedEEGWithICA();
 vars = defaultsFor('Flag ICA Components (AARATEP Muscle)');
 fn = @() aaratepMuscleClassifier(EEG, vars{:});
 testCase.verifyWarningFree(fn, ...
     'Helper must accept the name-value pairs produced by paramsToVarin.');
-end
-
-function test_artistBadChannelsRansac_acceptsDispatchedArgs(testCase)
-EEG = makeFakeEpochedEEG();
-% pop_select needs to exist to run the helper to completion, but the
-% arg-shape check happens before that. We assert the helper at least
-% accepts the args without an arg-shape error.
-vars = defaultsFor('Remove Bad Channels (ARTIST)');
-fn = @() artistBadChannelsRansac(EEG, vars{:});
-err = tryAndCatch(fn);
-testCase.verifyFalse(isInvalidArgError(err), ...
-    sprintf(['Helper rejected dispatched args with a signature error:' ...
-             newline '%s'], err));
-end
-
-% ── dispatch case wiring: simulate what processOneFile actually does for
-%    each new step name ──────────────────────────────────────────────────────
-
-function test_dispatchPattern_artistRejectBadTrials(testCase)
-verifyDispatchPattern(testCase, 'Reject Bad Trials (ARTIST)', ...
-    'artistRejectBadTrials', makeFakeEpochedEEG());
-end
-
-function test_dispatchPattern_artistFlagDecayICs(testCase)
-verifyDispatchPattern(testCase, 'Flag ICA Components (ARTIST Decay)', ...
-    'artistFlagDecayICs', makeFakeEpochedEEGWithICA());
 end
 
 function test_dispatchPattern_aaratepMuscleClassifier(testCase)

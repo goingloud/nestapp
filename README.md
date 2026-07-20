@@ -77,11 +77,9 @@ nestapp adds this tree to the MATLAB path automatically when an AARATEP step run
 | Template | Description |
 |---|---|
 | TMS-EEG / TEP (TESA) | Full TESA two-round-ICA artifact removal for single-pulse TMS (Rogasch 2017) |
-| TMS-EEG / TEP (TESA + Quality Gates) | TESA workflow with four Quality Gate checkpoints |
-| TMS-EEG / ARTIST | Paper-faithful Wu 2018 pipeline; TESA compselect substitutes for the unreleased FLDA classifier |
 | TMS-EEG / AARATEP | Cline 2021 pipeline (SOUND + decay-fit removal + AR-blend interp + TMS-aware muscle classifier); helpers vendored under `third_party/aaratep/` |
 | Resting-State EEG | PREP + Delorme 2023 cleaning with ICLabel |
-| Minimal (Delorme 2023) | HPF + bad channels + ICA, minimum-handling philosophy |
+| Minimal ERP | HPF + bad channels + ICA, minimum-handling philosophy |
 
 ### Citing nestapp
 
@@ -90,8 +88,6 @@ When you publish results produced with a built-in template, cite the correspondi
 | Template | Primary citation | Additional |
 |---|---|---|
 | TMS-EEG / TEP (TESA) | Rogasch et al. (2017). NeuroImage 147:934-951. doi:10.1016/j.neuroimage.2017.06.014 | — |
-| TMS-EEG / TEP (TESA + Quality Gates) | Rogasch et al. (2017). doi:10.1016/j.neuroimage.2017.06.014 | — |
-| TMS-EEG / ARTIST | Wu et al. (2018). Hum Brain Mapp 39(4):1607-1625. doi:10.1002/hbm.23938 | Rogasch et al. (2017) — TESA compselect substitutes for ARTIST's unpublished FLDA classifier |
 | TMS-EEG / AARATEP | Cline et al. (2021). IEEE NER. doi:10.1109/NER49283.2021.9441147 | Mutanen et al. (2018) NeuroImage 166:135-151 doi:10.1016/j.neuroimage.2017.10.021 — SOUND algorithm. Rogasch et al. (2017) — TESA helpers vendored from AARATEPPipeline depend on TESA. |
 | Resting-State / Minimal | Delorme (2023). Sci Rep 13:2372. doi:10.1038/s41598-023-27528-0 | — |
 

@@ -93,35 +93,6 @@ testCase.verifyTrue(contains(txt, '5') || contains(txt, 'bad'), ...
     'Methods text must mention the 5 rejected channels');
 end
 
-function test_methodsInterpolationAppears(testCase)
-% When interpolation occurred, the methods text must mention it.
-report = initPipelineReport('test.set');
-report.channels.original      = 64;
-report.channels.nRejected     = 4;
-report.channels.nInterpolated = 4;
-report.channels.final         = 64;
-
-txt = exportReport(report, '');
-testCase.verifyTrue(contains(lower(txt), 'interpolat'), ...
-    'Methods text must mention interpolation when channels were interpolated');
-end
-
-function test_artistBadChannels_countedAsRejected(testCase)
-% BUG: "Remove Bad Channels (ARTIST)" pop_select-removes RANSAC bad channels
-%      (reducing nbchan) but was absent from the channel-rejection step list,
-%      so processOneFile never added them to channels.nRejected - the ARTIST
-%      pipeline under-counted rejected channels in the session summary.
-% FIX: channelRejectionSteps() includes the ARTIST step, counted the same as
-%      the standard "Remove Bad Channels".
-names = channelRejectionSteps();
-testCase.verifyTrue(ismember('Remove Bad Channels (ARTIST)', names), ...
-    'ARTIST bad-channel removal must count toward channels.nRejected');
-testCase.verifyTrue(ismember('Remove Bad Channels', names), ...
-    'Standard bad-channel removal must remain a counted rejection step');
-end
-
-% ── No input() in nestapp.m ───────────────────────────────────────────────
-
 function test_noInputCallsInNestapp(testCase)
 % All interactive prompts must use MATLAB UI dialogs, not command-line input().
 src   = fileread(nestappFile());

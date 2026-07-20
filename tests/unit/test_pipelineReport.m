@@ -342,14 +342,14 @@ rec = struct('name', name, 'chansBefore', 0, 'chansAfter', 0, ...
 end
 
 function test_citationDerivedFromSteps(testCase)
-% Citations come from the steps that ran: an ARTIST step surfaces the ARTIST
+% Citations come from the steps that ran: a Picard step surfaces the Picard
 % reference and DOI.
 report = initPipelineReport('test.set');
-report.steps = {stepRecord('Reject Bad Trials (ARTIST)')};
+report.steps = {stepRecord('Run ICA (Picard)')};
 txt = exportReport(report, '');
 testCase.verifyTrue(contains(txt, 'CITATION'), 'Report must include a CITATION section');
-testCase.verifyTrue(contains(txt, 'Wu W. et al. (2018)'), 'Citation must name the ARTIST reference');
-testCase.verifyTrue(contains(txt, '10.1002/hbm.23938'), 'Citation must include the DOI');
+testCase.verifyTrue(contains(txt, 'Ablin'), 'Citation must name the Picard reference');
+testCase.verifyTrue(contains(txt, '10.1109/TSP.2018.2844203'), 'Citation must include the DOI');
 end
 
 function test_noCitationForUncitedSteps(testCase)
@@ -366,10 +366,10 @@ function test_noSpuriousSoundCitation(testCase)
 % Mutanen/SOUND. Previously the template citation note always mentioned SOUND.
 report = initPipelineReport('test.set');
 report.steps = {stepRecord('Remove ICA Components (TESA)'), ...
-                stepRecord('Reject Bad Trials (ARTIST)')};
+                stepRecord('Run ICA (Picard)')};
 txt = exportReport(report, '');
 testCase.verifyTrue(contains(txt, 'Rogasch'), 'TESA step must cite Rogasch');
-testCase.verifyTrue(contains(txt, 'Wu W. et al. (2018)'), 'ARTIST step must cite Wu');
+testCase.verifyTrue(contains(txt, 'Ablin'), 'Picard step must cite Ablin');
 testCase.verifyFalse(contains(txt, 'SOUND') || contains(txt, 'Mutanen'), ...
     'No SOUND/Mutanen citation when no SOUND step was used');
 end

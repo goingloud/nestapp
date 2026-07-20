@@ -63,14 +63,6 @@ testCase.verifyTrue(contains(c, 'kurtosis'));
 testCase.verifyTrue(contains(c, '5 SD'));
 end
 
-function test_badChannels_ransac(testCase)
-c = methodsClause('Remove Bad Channels (ARTIST)', struct('corrThreshold', 0.8));
-testCase.verifyTrue(contains(c, 'RANSAC'));
-testCase.verifyTrue(contains(c, '0.8'));
-end
-
-% ── filters ───────────────────────────────────────────────────────────────────
-
 function test_tesaFilter_bandpass(testCase)
 c = methodsClause('Frequency Filter (TESA)', ...
     struct('type', 'bandpass', 'high', 1, 'low', 80, 'ord', 4));
@@ -97,8 +89,10 @@ end
 % ── ICA family ────────────────────────────────────────────────────────────────
 
 function test_runIca_algorithmName(testCase)
-testCase.verifyTrue(contains(methodsClause('Run ICA', struct('icatype','fastica')), 'FastICA'));
-testCase.verifyTrue(contains(methodsClause('Run ICA', struct('icatype','runica')),  'infomax'));
+% The engine is carried by the step name now, not an icatype parameter.
+testCase.verifyTrue(contains(methodsClause('Run ICA (FastICA)', struct()), 'FastICA'));
+testCase.verifyTrue(contains(methodsClause('Run ICA (Infomax)', struct()),  'infomax'));
+testCase.verifyTrue(contains(methodsClause('Run ICA (Picard)',  struct()),  'Picard'));
 testCase.verifyTrue(contains(methodsClause('Run TESA ICA', struct()), 'FastICA'));
 end
 

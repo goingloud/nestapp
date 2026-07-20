@@ -58,15 +58,14 @@ for i = 1:numel(templates)
 end
 end
 
-function test_atLeastSixTemplatesShipped(testCase)
-% Floor, not an exact count - adding templates must not break this; the
-% per-template existence tests below assert the specific built-ins are present.
+function test_fourTemplatesShipped(testCase)
+% TESA, resting-state, minimal ERP, AARATEP. ARTIST was removed (entirely
+% hand-rolled from the paper, no public reference implementation) and the
+% Quality-Gates variant was redundant with the Quality Gate step itself.
 templates = loadTemplates(testCase);
-testCase.verifyGreaterThanOrEqual(numel(templates), 6, ...
-    'Expected at least the 6 built-in templates');
+testCase.verifyEqual(numel(templates), 4, ...
+    'Expected exactly four shipped templates');
 end
-
-% ── template names ────────────────────────────────────────────────────────
 
 function test_tmsEEGTemplateExists(testCase)
 templates = loadTemplates(testCase);
@@ -143,60 +142,6 @@ testCase.verifyFalse(isempty(filterIdx), 'Minimal must have Frequency Filter ste
 locVal = t.spec(filterIdx).params.locutoff;
 testCase.verifyGreaterThan(locVal, 0, 'Minimal HPF locutoff must be > 0 Hz');
 end
-
-% ── ARTIST template ───────────────────────────────────────────────────────
-
-function test_artistTemplateExists(testCase)
-templates = loadTemplates(testCase);
-testCase.verifyTrue(any(contains({templates.name}, 'ARTIST')), ...
-    'Must have an ARTIST template');
-end
-
-function test_artistLoadDataIsFirst(testCase)
-templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'ARTIST'));
-testCase.verifyEqual(t.steps{1}, 'Load Data', ...
-    'ARTIST template must start with Load Data');
-end
-
-function test_artistSaveNewSetIsLast(testCase)
-templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'ARTIST'));
-testCase.verifyEqual(t.steps{end}, 'Save New Set', ...
-    'ARTIST template must end with Save New Set');
-end
-
-function test_artistEpochWindowMatchesPaper(testCase)
-% Wu 2018 §2.2.2: "-500 to +1500 ms by default" -> [-0.5, 1.5] s.
-templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'ARTIST'));
-epochIdx = find(strcmp(t.steps, 'Epoching'), 1);
-testCase.verifyEqual(t.spec(epochIdx).params.timelim, [-0.5, 1.5], ...
-    'ARTIST epoch window must be [-0.5, 1.5] s per Wu 2018.');
-end
-
-function test_artistDownsampleMatchesPaper(testCase)
-% Wu 2018 §2.2.1: "downsampled to 1 kHz".
-templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'ARTIST'));
-rsIdx = find(strcmp(t.steps, 'Re-Sample'), 1);
-testCase.verifyEqual(t.spec(rsIdx).params.freq, 1000, ...
-    'ARTIST must downsample to 1000 Hz per Wu 2018.');
-end
-
-function test_artistBaselineMatchesPaper(testCase)
-% Wu 2018 §2.2.3: "-300 to -100 ms baseline by default". This is the
-% final pre-save TEP baseline. The first (early) baseline is a
-% full-epoch demean for ICA stability and is verified separately by
-% test_artistFirstBaselineIsFullEpoch.
-templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'ARTIST'));
-blIdx = find(strcmp(t.steps, 'Remove Baseline'), 1, 'last');
-testCase.verifyEqual(t.spec(blIdx).params.timerange, [-300, -100], ...
-    'ARTIST final baseline window must be [-300, -100] ms per Wu 2018 §2.2.3.');
-end
-
-% ── AARATEP template ──────────────────────────────────────────────────────
 
 function test_aaratepTemplateExists(testCase)
 templates = loadTemplates(testCase);
@@ -275,52 +220,6 @@ end
 % ARTIST/AARATEP CleanLine checks were removed as redundant.
 
 % ── Paper-fidelity audit guards ──────────────────────────────────────────
-
-function test_artistFiltersBeforeStage2(testCase)
-% Wu 2018 §2.2.2 lists filtering as part of "Preprocessing" alongside
-% epoch/baseline; §2.2.1 places stage 2 (reject) AFTER preprocessing.
-% Filtering must therefore come before bad-trial / bad-channel rejection.
-templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'ARTIST'));
-filtIdx   = find(strcmp(t.steps, 'Frequency Filter'),                1);
-notchIdx  = find(strcmp(t.steps, 'Frequency Filter (TESA)'),         1);
-rejTrIdx  = find(strcmp(t.steps, 'Reject Bad Trials (ARTIST)'),      1);
-rejChIdx  = find(strcmp(t.steps, 'Remove Bad Channels (ARTIST)'),    1);
-testCase.verifyLessThan(filtIdx,  rejTrIdx, ...
-    'ARTIST: bandpass must run before stage-2 trial rejection.');
-testCase.verifyLessThan(notchIdx, rejTrIdx, ...
-    'ARTIST: 60 Hz notch must run before stage-2 trial rejection.');
-testCase.verifyLessThan(filtIdx,  rejChIdx, ...
-    'ARTIST: bandpass must run before stage-2 channel rejection.');
-testCase.verifyLessThan(notchIdx, rejChIdx, ...
-    'ARTIST: 60 Hz notch must run before stage-2 channel rejection.');
-end
-
-function test_artistICAUsesRunica(testCase)
-% Wu 2018 §2.2.1: "Infomax algorithm" -> runica in EEGLAB. Both rounds.
-% The engine used to be an `icatype` parameter on a single 'Run ICA' step;
-% it is now carried by the step name itself.
-templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'ARTIST'));
-icaIdx = find(strcmp(t.steps, 'Run ICA (Infomax)'));
-testCase.verifyNumElements(icaIdx, 2, ...
-    'ARTIST must have two Run ICA (Infomax) steps (round 1 decay, round 2 classify).');
-end
-
-function test_artistFirstBaselineIsFullEpoch(testCase)
-% Pre-ICA baseline should be a full-epoch demean for ICA stability
-% (matches template 1's first baseline). The final pre-save baseline
-% [-300, -100] ms is the TEP analysis window from Wu 2018 §2.2.3.
-templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'ARTIST'));
-blIdx = find(strcmp(t.steps, 'Remove Baseline'));
-testCase.verifyEqual(numel(blIdx), 2, ...
-    'ARTIST must have two Remove Baseline occurrences (early + final).');
-testCase.verifyEqual(t.spec(blIdx(1)).params.timerange, [-500, 1500], ...
-    'First baseline must be full-epoch demean.');
-testCase.verifyEqual(t.spec(blIdx(2)).params.timerange, [-300, -100], ...
-    'Final baseline must be [-300, -100] ms (Wu 2018 §2.2.3).');
-end
 
 function test_aaratepRerefBeforeEarlyEyeICA(testCase)
 % Upstream c_TMSEEG_Preprocess_AARATEPPipeline.m line 244:
