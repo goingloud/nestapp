@@ -1001,17 +1001,12 @@ for si = 1:nSteps
                     'command', 'global NESTAPP_TMPREJ; NESTAPP_TMPREJ = TMPREJ;');
                 uiwait(gcf);
 
-                manualRej = false(1, EEG.trials);
-                if ~isempty(NESTAPP_TMPREJ)
-                    manualRej = logical(eegplot2trial(NESTAPP_TMPREJ, ...
-                        EEG.pnts, EEG.trials));
-                end
-                NESTAPP_TMPREJ = [];
-
                 % The user's marks are authoritative: confirming replaces the
                 % automatic set rather than adding to it, so a trial they
                 % un-marked is genuinely kept.
-                EEG.BadTr = find(manualRej);
+                EEG.BadTr = harvestMarkedTrials(NESTAPP_TMPREJ, ...
+                                                EEG.pnts, EEG.trials);
+                NESTAPP_TMPREJ = [];
                 EEG = pop_rejepoch( EEG, EEG.BadTr ,0);
                 fileReport = recordRejectedTrials(fileReport, EEG.BadTr);
                 EEG = eeg_checkset( EEG );
@@ -1106,6 +1101,18 @@ for si = 1:nSteps
                         'Step %d (Quality Gate "%s") failed: %s', ...
                         si, gate.label, strjoin(gate.reasons, '; '));
                 end
+
+            otherwise
+                % A name with no case fell straight through this switch and
+                % was logged as a completed step having done nothing at all -
+                % the quietest possible failure. It is reachable: specFromSaved
+                % keeps steps it cannot resolve (with a warning), and a
+                % mis-edited case label silently orphans its own step.
+                error('nestapp:unknownStep', ...
+                    ['Step %d ("%s") has no implementation. It is in the ' ...
+                     'pipeline but nothing would run for it. If this pipeline ' ...
+                     'was saved by a newer nestapp, the step may not exist ' ...
+                     'in this version.'], si, stepName);
 
         end % switch
 

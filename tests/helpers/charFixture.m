@@ -6,6 +6,8 @@ function EEG = charFixture(kind)
 % CHARFIXTURE  Deterministic EEG fixtures for the characterization tests.
 %   EEG = CHARFIXTURE(kind) builds a small synthetic dataset. kind is one of:
 %
+%     'tiny'          8 ch x 100 samples x 4 trials, pulse at t=0 - the
+%                     cheapest fixture every step will accept
 %     'continuous'    32 ch x 20 s @ 1 kHz, TMS pulse events every 2 s
 %     'epoched'       32 ch x 600 samples x 24 trials @ 1 kHz, [-200, 400) ms
 %     'epochedPulses' as 'epoched', plus a TMS event at t=0 in every epoch
@@ -51,6 +53,32 @@ switch lower(kind)
         EEG.xmax  = 0.399;
         EEG.times = linspace(-200, 399, nPnts);
 
+    case 'tiny'
+        % Smallest thing every step will still accept: 8 channels, 100
+        % samples, 4 trials, with a pulse event at t=0. For tests that ask
+        % "does this run at all" across every step - ICA on 8x400 is a
+        % moment's work, on 32x14400 it is not, and a suite slow enough to
+        % skip protects nothing.
+        srate = 1000; nPnts = 100; nTrial = 4; nCh = 8;
+        t = (0:nPnts-1) / srate;
+        EEG = baseStruct(nCh, nPnts, nTrial, srate);
+        d = zeros(nCh, nPnts, nTrial);
+        for k = 1:nTrial
+            d(:, :, k) = synthSignal(nCh, t, srate);
+        end
+        EEG.data  = d;
+        EEG.xmin  = -0.02;
+        EEG.xmax  = 0.079;
+        EEG.times = linspace(-20, 79, nPnts);
+        onset = find(EEG.times >= 0, 1);
+        for k = 1:nTrial
+            EEG.event(k).type     = 'TMS';
+            EEG.event(k).latency  = (k-1)*nPnts + onset;
+            EEG.event(k).duration = 0;
+            EEG.event(k).epoch    = k;
+        end
+        EEG = eeg_checkset(EEG, 'eventconsistency');
+
     case 'epochedpulses'
         % Epoched, with a TMS event at t=0 in every epoch. Steps that cut or
         % interpolate the pulse window locate it by event, not by time, so
@@ -80,7 +108,8 @@ switch lower(kind)
 
     otherwise
         error('charFixture:UnknownKind', ...
-            'Unknown fixture kind "%s". Use continuous | epoched | epochedICA.', kind);
+            ['Unknown fixture kind "%s". Use tiny | continuous | epoched | ' ...
+             'epochedPulses | epochedICA.'], kind);
 end
 
 EEG = eeg_checkset(EEG);

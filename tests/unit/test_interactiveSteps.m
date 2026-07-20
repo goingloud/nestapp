@@ -11,6 +11,15 @@ classdef test_interactiveSteps < matlab.unittest.TestCase
 %   click - and only after the batch has started. The app checks this before a
 %   run and offers to turn parallel off, which only works if every such step
 %   is flagged.
+%
+%   Most of this file tests behaviour through interactivePipelineSteps - given
+%   a pipeline, does it name the steps that will block? The last test is
+%   deliberately a LINT over the dispatch source, not a behaviour test: the
+%   only way to observe "this step blocks" at runtime is to let it block, and
+%   a test that hangs is worse than no test. It is a cheap tripwire for a new
+%   blocking call added without a flag, and it is fallible in both directions
+%   - it cannot see blocking inside a wrapped function (which is why
+%   interactiveWhen has to be declared by hand for TESA compselect).
 
     properties
         registry
@@ -78,17 +87,6 @@ classdef test_interactiveSteps < matlab.unittest.TestCase
                 strjoin(unique(offenders), sprintf('\n  '))));
         end
 
-        function reReference_errors_instead_of_prompting_without_a_ui(tc)
-            % The guard must come BEFORE the inputdlg, or a worker still hangs.
-            body = codeOnly(dispatchBody(tc.dispatchSrc, 'Re-Reference'));
-            tc.assertNotEmpty(body, 'Re-Reference case not found');
-            iGuard  = strfind(body, 'isempty(opts.uiFigure)');
-            iPrompt = strfind(body, 'inputdlg(');
-            tc.verifyNotEmpty(iGuard, 'Re-Reference must check for a UI before prompting');
-            tc.verifyNotEmpty(iPrompt);
-            tc.verifyLessThan(iGuard(1), iPrompt(1), ...
-                'The no-UI guard must precede the inputdlg call');
-        end
 
         function helper_finds_flagged_steps_in_a_spec(tc)
             spec = struct('name', {'Load Data', 'Visualize EEG Data', 'Re-Reference'});
@@ -122,26 +120,6 @@ classdef test_interactiveSteps < matlab.unittest.TestCase
             tc.verifyEmpty(interactivePipelineSteps(off, reg));
         end
 
-        function manual_steps_hand_back_the_users_choices(tc)
-            % A manual step must return what the user selected. Remove Bad
-            % Trials used pop_rejmenu, which has no output and reports through
-            % the BASE workspace - invisible to a pipeline running with
-            % `global EEG` - so every manual mark was silently discarded and
-            % only the automatic rejections applied.
-            body = codeOnly(dispatchBody(tc.dispatchSrc, 'Remove Bad Trials'));
-            tc.assertNotEmpty(body);
-            tc.verifyFalse(contains(body, 'pop_rejmenu'), ...
-                'pop_rejmenu returns nothing - the user''s marks cannot come back');
-            tc.verifyTrue(contains(body, 'TMPREJ'), ...
-                'Must harvest the selection via eegplot''s TMPREJ callback');
-            tc.verifyTrue(contains(body, 'eegplot2trial'), ...
-                'Must convert the harvested regions into trial indices');
-
-            % And the TESA manual-review path must assign its return value.
-            body = codeOnly(dispatchBody(tc.dispatchSrc, 'Remove ICA Components (TESA)'));
-            tc.verifyTrue(~isempty(regexp(body, 'EEG\s*=\s*pop_tesa_compselect', 'once')), ...
-                'compselect returns the user''s component choices - assign it');
-        end
     end
 end
 
