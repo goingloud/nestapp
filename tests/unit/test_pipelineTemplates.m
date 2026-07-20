@@ -298,15 +298,13 @@ end
 
 function test_artistICAUsesRunica(testCase)
 % Wu 2018 §2.2.1: "Infomax algorithm" -> runica in EEGLAB. Both rounds.
+% The engine used to be an `icatype` parameter on a single 'Run ICA' step;
+% it is now carried by the step name itself.
 templates = loadTemplates(testCase);
 t = templates(contains({templates.name}, 'ARTIST'));
-icaIdx = find(strcmp(t.steps, 'Run ICA'));
+icaIdx = find(strcmp(t.steps, 'Run ICA (Infomax)'));
 testCase.verifyNumElements(icaIdx, 2, ...
-    'ARTIST must have two Run ICA steps (round 1 decay, round 2 classify).');
-for k = 1:numel(icaIdx)
-    testCase.verifyEqual(t.spec(icaIdx(k)).params.icatype, 'runica', ...
-        sprintf('ARTIST Run ICA #%d must use runica (Infomax) per Wu 2018.', k));
-end
+    'ARTIST must have two Run ICA (Infomax) steps (round 1 decay, round 2 classify).');
 end
 
 function test_artistFirstBaselineIsFullEpoch(testCase)
@@ -331,9 +329,9 @@ function test_aaratepRerefBeforeEarlyEyeICA(testCase)
 templates = loadTemplates(testCase);
 t = templates(contains({templates.name}, 'AARATEP'));
 rerefIdx = find(strcmp(t.steps, 'Re-Reference'));
-icaIdx   = find(strcmp(t.steps, 'Run ICA'));
+icaIdx   = find(strcmp(t.steps, 'Run ICA (FastICA)'));
 testCase.verifyNotEmpty(rerefIdx, 'AARATEP must include Re-Reference.');
-testCase.verifyNotEmpty(icaIdx,   'AARATEP must include Run ICA.');
+testCase.verifyNotEmpty(icaIdx,   'AARATEP must include Run ICA (FastICA).');
 testCase.verifyLessThan(rerefIdx(1), icaIdx(1), ...
     'AARATEP early Re-Reference must precede the first ICA round.');
 end

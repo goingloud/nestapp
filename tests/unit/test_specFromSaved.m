@@ -36,14 +36,26 @@ classdef test_specFromSaved < matlab.unittest.TestCase
         end
 
         function new_format_multi_step_passthrough(tc)
-            s1 = makePipelineStep('Load Data',  tc.registry);
-            s2 = makePipelineStep('Re-Sample',  tc.registry);
-            s3 = makePipelineStep('Run ICA',    tc.registry);
+            s1 = makePipelineStep('Load Data',         tc.registry);
+            s2 = makePipelineStep('Re-Sample',         tc.registry);
+            s3 = makePipelineStep('Run ICA (FastICA)', tc.registry);
             data.spec = [s1, s2, s3];
             [spec, warns] = specFromSaved(data, tc.registry);
             tc.verifyEqual(numel(spec), 3);
-            tc.verifyEqual({spec.name}, {'Load Data','Re-Sample','Run ICA'});
+            tc.verifyEqual({spec.name}, ...
+                {'Load Data','Re-Sample','Run ICA (FastICA)'});
             tc.verifyEmpty(warns);
+        end
+
+        function legacy_run_ica_is_migrated_with_its_engine(tc)
+            % A pipeline saved before 'Run ICA' was split per engine must
+            % land on the step matching its icatype, not on the default.
+            % Getting this wrong runs a different algorithm silently.
+            data.spec = struct('name', 'Run ICA', ...
+                'params', struct('icatype', 'runica'));
+            [spec, warns] = specFromSaved(data, tc.registry);
+            tc.verifyEqual(spec(1).name, 'Run ICA (Infomax)');
+            tc.verifyNotEmpty(warns);   % the migration reports what it did
         end
 
         function new_format_unknown_step_produces_warning(tc)

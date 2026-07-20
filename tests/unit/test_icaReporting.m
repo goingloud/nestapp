@@ -101,15 +101,42 @@ testCase.verifyEqual(catCount(report, 'Decay'), 1);
 testCase.verifyEqual(catCount(report, 'Brain'), 0);
 end
 
-function test_topVarianceFromFirstRoundOnly(testCase)
-% Variance is not additive across ICA bases: only the first round sets the
-% top-level variance.
+function test_topVarianceCompoundsAcrossRounds(testCase)
+% Variance is not ADDITIVE across ICA bases, but it does COMPOUND. Each
+% round removes a fraction of the variance entering it (the residual left by
+% earlier rounds), so the total removed is 1 - prod(1 - vr_i/100).
+%
+% This previously reported the first round only, which under-counted every
+% multi-pass pipeline: a second pass cleaning 30% of what survived the first
+% was simply not counted at all.
 report = initPipelineReport('x.set');
 report = openICARound(report, 20);
 report = addICARemoval(report, removal(20, {'Muscle'}, 2, [12.5 1 6]));
 report = openICARound(report, 18);
 report = addICARemoval(report, removal(18, {'Eye'}, 1, [99.9 1 99]));
-testCase.verifyEqual(report.ica.varRemoved, 12.5);
+% residual = (1 - 0.125) * (1 - 0.999) = 8.75e-4  ->  99.9125% removed
+testCase.verifyEqual(report.ica.varRemoved, 99.9125, 'AbsTol', 1e-9);
+end
+
+function test_topVarianceCompoundsWithModerateRounds(testCase)
+% The same rule on less extreme numbers, where the difference between
+% compounding and either alternative is easy to read: 40% then 30% of the
+% remainder leaves 0.6 * 0.7 = 42% of the original, i.e. 58% removed -
+% not 40% (first round only) and not 70% (naive addition).
+report = initPipelineReport('x.set');
+report = openICARound(report, 20);
+report = addICARemoval(report, removal(20, {'Muscle'}, 2, [40 1 25]));
+report = openICARound(report, 18);
+report = addICARemoval(report, removal(18, {'Eye'}, 1, [30 1 20]));
+testCase.verifyEqual(report.ica.varRemoved, 58, 'AbsTol', 1e-9);
+end
+
+function test_singleRoundVarianceIsUnchanged(testCase)
+% Compounding must be a no-op for the single-round case.
+report = initPipelineReport('x.set');
+report = openICARound(report, 20);
+report = addICARemoval(report, removal(20, {'Muscle'}, 2, [12.5 1 6]));
+testCase.verifyEqual(report.ica.varRemoved, 12.5, 'AbsTol', 1e-9);
 end
 
 function test_removalWithoutPriorRoundOpensOne(testCase)

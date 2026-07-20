@@ -77,30 +77,32 @@ testCase.verifyFalse(isRunica);
 testCase.verifyEqual(vars, vars);
 end
 
-function test_runICA_artistTemplateProducesRunicaArgs(testCase)
-% End-to-end check from the ARTIST template's stored params through
-% paramsToVarin and the dispatch-side filter. Must produce a varin
-% that only contains keys runica understands.
+function test_runICA_infomaxProducesRunicaSafeArgs(testCase)
+% End-to-end check from the Infomax step's stored params through
+% paramsToVarin. Must produce a varin containing only keys runica
+% understands.
+%
+% This used to require a dispatch-side filter: a single 'Run ICA' step
+% carried the FastICA-only parameters (approach/g/stabilization) alongside
+% an `icatype` selector, and they had to be stripped before calling
+% pop_runica or its parser died ("Output argument 'sphere' not assigned").
+% Splitting the step per engine removes the failure mode at the source -
+% the Infomax step simply has no such parameters to strip.
 reg = stepRegistry();
-artistStep = makePipelineStep('Run ICA', reg);
-artistStep.params.icatype = 'runica';   % match the ARTIST template override
+step = makePipelineStep('Run ICA (Infomax)', reg);
 
-vars = paramsToVarin(artistStep.params);
+vars = paramsToVarin(step.params);
 vars = convertContainedStringsToChars(vars);
-idx = find(strcmpi(vars, 'icatype'), 1);
-if ~isempty(idx) && strcmpi(vars{idx+1}, 'runica')
-    vars = stripVarinKeys(vars, {'approach','g','stabilization'});
-end
 
-remainingKeys = vars(1:2:end);
-testCase.verifyFalse(any(strcmpi(remainingKeys, 'approach')), ...
-    'ARTIST Run ICA dispatch must not pass "approach" to runica.');
-testCase.verifyFalse(any(strcmpi(remainingKeys, 'g')), ...
-    'ARTIST Run ICA dispatch must not pass "g" to runica.');
-testCase.verifyFalse(any(strcmpi(remainingKeys, 'stabilization')), ...
-    'ARTIST Run ICA dispatch must not pass "stabilization" to runica.');
-testCase.verifyTrue(any(strcmpi(remainingKeys, 'icatype')), ...
-    'icatype must survive the filter.');
+keys = vars(1:2:end);
+testCase.verifyFalse(any(strcmpi(keys, 'approach')), ...
+    'Run ICA (Infomax) must not pass "approach" to runica.');
+testCase.verifyFalse(any(strcmpi(keys, 'g')), ...
+    'Run ICA (Infomax) must not pass "g" to runica.');
+testCase.verifyFalse(any(strcmpi(keys, 'stabilization')), ...
+    'Run ICA (Infomax) must not pass "stabilization" to runica.');
+testCase.verifyFalse(any(strcmpi(keys, 'icatype')), ...
+    'The engine is carried by the step name now, not an icatype parameter.');
 end
 
 % ── Label ICA Components dispatch shape ───────────────────────────────────
