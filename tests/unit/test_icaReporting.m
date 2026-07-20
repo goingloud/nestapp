@@ -139,6 +139,47 @@ report = addICARemoval(report, removal(20, {'Muscle'}, 2, [12.5 1 6]));
 testCase.verifyEqual(report.ica.varRemoved, 12.5, 'AbsTol', 1e-9);
 end
 
+function test_multiRoundReportDoesNotPrintBrokenArithmetic(testCase)
+% Regression: the report printed a single Identified/Removed/Kept triple
+% across rounds, which does not add up and made later rounds look inert:
+%
+%     Identified: 32 components
+%     Removed:    11 total (2 rounds, ...)
+%     Kept:       32            <- 32 - 11 ~= 32
+%
+% Component counts are only comparable WITHIN a round. Round 2 re-decomposes
+% the data round 1 cleaned, and that decomposition is sized by the data's
+% rank, not by how many components round 1 removed - so 32 channels still
+% yield ~32 components after 11 were projected out. Multi-round reports must
+% therefore be per-round, not a cross-round triple.
+report = initPipelineReport('x.set');
+report = openICARound(report, 32);
+report = addICARemoval(report, removal(32, {'Eye'}, 11, [18.5 0.3 6.3]));
+report = openICARound(report, 32);            % re-decomposition, back to 32
+
+txt = buildReportText(report);
+testCase.verifyTrue(contains(txt, 'Rounds:'), ...
+    'Multi-round report should state the round count.');
+testCase.verifyFalse(contains(txt, 'Kept:'), ...
+    'A cross-round "Kept" count is not on a common basis - must not be printed.');
+testCase.verifyFalse(contains(txt, 'Identified:'), ...
+    'A cross-round "Identified" count is misleading - must not be printed.');
+testCase.verifyTrue(contains(txt, 'Round 1:') && contains(txt, 'Round 2:'), ...
+    'Each round must be reported separately.');
+end
+
+function test_singleRoundReportKeepsConsistentTriple(testCase)
+% The triple IS meaningful on one basis, so it must survive there and the
+% arithmetic must hold: 20 identified - 2 removed = 18 kept.
+report = initPipelineReport('x.set');
+report = openICARound(report, 20);
+report = addICARemoval(report, removal(20, {'Muscle'}, 2, [12.5 1 6]));
+
+txt = buildReportText(report);
+testCase.verifyTrue(contains(txt, 'Identified: 20 components'));
+testCase.verifyTrue(contains(txt, 'Kept:       18'));
+end
+
 function test_removalWithoutPriorRoundOpensOne(testCase)
 % Defensive: a removal with no preceding Run ICA opens a round so totals stay
 % sane rather than erroring.

@@ -133,11 +133,27 @@ if report.ica.nComponents > 0
     else
         nKept = nComp - nRej;
     end
-    lines{end+1} = sprintf('  Identified: %d components', nComp);
+    multiRound = isfield(report.ica, 'rounds') && numel(report.ica.rounds) > 1;
+
+    % Component counts are only comparable WITHIN a round. Each round
+    % re-decomposes the data left by the previous one, and that decomposition
+    % is sized by the data's rank, not by how many components the last round
+    % removed - remove 11 of 32 components from 32 channels and the next
+    % runica still returns ~32. Printing a single Identified/Removed/Kept
+    % triple across rounds therefore renders as broken arithmetic
+    % ("Identified 32, Removed 11, Kept 32") and makes the later rounds look
+    % like they did nothing. For multi-round, report per round instead.
+    if multiRound
+        lines{end+1} = sprintf(['  Rounds:     %d decompositions ' ...
+            '(counts are per-round - each re-decomposes the cleaned data)'], ...
+            numel(report.ica.rounds));
+    else
+        lines{end+1} = sprintf('  Identified: %d components', nComp);
+    end
+
     if nRej > 0
         hasVar   = ~isnan(report.ica.varRemoved);
         hasRange = ~isnan(report.ica.varMin);
-        multiRound = isfield(report.ica, 'rounds') && numel(report.ica.rounds) > 1;
 
         if multiRound
             if hasVar
@@ -161,7 +177,11 @@ if report.ica.nComponents > 0
         else
             lines{end+1} = sprintf('  Removed:    %d', nRej);
         end
-        lines{end+1} = sprintf('  Kept:       %d', nKept);
+        if ~multiRound
+            % Only meaningful on one basis; the per-round lines carry it for
+            % multi-round pipelines.
+            lines{end+1} = sprintf('  Kept:       %d', nKept);
+        end
 
         % Per-category summary (totals across all rounds). For multi-round the
         % shares are compounded onto the original-variance basis (so they sum to

@@ -10,9 +10,15 @@ function ica = recomputeICATotals(ica)
 %   addICARemoval), the top-level summary fields are derived from the rounds:
 %     nComponents - the first (original) decomposition's component count
 %     nRejected   - total components removed across all rounds
-%     nKept       - components surviving the final round (nComp - nRej of the
-%                   last round); equals nComponents - nRejected because each
-%                   round re-decomposes the previous round's residual
+%     nKept       - components surviving the FINAL round (that round's
+%                   nComponents - nRejected). This does NOT generally equal
+%                   nComponents - nRejected: each round re-decomposes the data
+%                   the previous round left, and the new decomposition is sized
+%                   by that data's rank, not by how many components were
+%                   removed. Remove 11 of 32 components from 32 channels and
+%                   the next runica still returns ~32. Only compare component
+%                   counts within a round - see buildReportText, which reports
+%                   per-round rather than printing a cross-round triple.
 %     categories  - union of every round's per-category tally, each round's
 %                   share rescaled to the common "% of original variance" basis
 %     varRemoved / varMin / varMax - COMPOUNDED across rounds. Variance is not
