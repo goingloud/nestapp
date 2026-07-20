@@ -14,8 +14,10 @@ function report = initPipelineReport(inputFile)
 %     processedAt           - datetime when processing started
 %     steps                 - cell array of step records (one per completed step)
 %     channels.original     - EEG.nbchan at Load Data
-%     channels.nRejected    - cumulative channels removed (bad channel steps)
-%     channels.nInterpolated- cumulative channels interpolated
+%     channels.nRejected    - cumulative bad channels (removed by bad-channel
+%                             steps, or interpolated in place by the AARATEP
+%                             detectors)
+%     channels.nInterpolated- cumulative channels interpolated (incl. in place)
 %     channels.final        - EEG.nbchan after last step
 %     trials.original       - epoch count at first Epoching step
 %     trials.rejected       - cumulative rejected epochs

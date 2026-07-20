@@ -2,9 +2,15 @@
 % SPDX-License-Identifier: GPL-3.0-or-later
 % Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
 % Part of nestapp; see the LICENSE file for full terms.
-function [allReports, allSummaries] = runPipelineCore(spec, filePaths, opts)
+function [allReports, allSummaries, failed] = runPipelineCore(spec, filePaths, opts)
 % RUNPIPELINECORE Execute a typed pipeline spec against a list of files.
-%   [allReports, allSummaries] = RUNPIPELINECORE(spec, filePaths, opts)
+%   [allReports, allSummaries, failed] = RUNPIPELINECORE(spec, filePaths, opts)
+%
+%   The third output, failed, is a struct array (possibly empty) describing
+%   every file that errored or was skipped at a hard Quality Gate - fields
+%   fi, name, path, step, stepName, message, kind. Callers use it to surface
+%   the failures in the dashboard and reports; it is also written to disk as
+%   failed_files.txt (re-run list) and rolled into session_summary.csv.
 %
 %   spec      - struct array of PipelineStep (name + params struct)
 %   filePaths - cell array of full absolute file paths
@@ -420,6 +426,27 @@ for fi = 1:nFiles
 end
 allReports   = reports(~cellfun(@isempty, reports));
 allSummaries = summaries(~cellfun(@isempty, summaries));
+
+% Resolve the absolute input path onto each failure record (fi indexes
+% filePaths). The returned struct and the re-run list both need paths -
+% failed only carries the basename up to this point.
+for k = 1:numel(failed)
+    failed(k).path = filePaths{failed(k).fi};
+end
+
+% Re-run list: written whenever files failed and the run wasn't cancelled,
+% INCLUDING the all-failed case - that is exactly when the user most needs
+% a copy-paste list of what to re-run. Independent of writeBatchArtifacts
+% (which is gated on there being at least one successful report).
+if ~cancelled && ~isempty(failed)
+    try
+        listPath = fullfile(outputPaths(batchCtx, 'batch'), 'failed_files.txt');
+        writeFailedFilesList(listPath, failed);
+        nestLog('CFG', '%d file(s) failed - re-run list: %s', numel(failed), listPath);
+    catch err
+        nestLog('CFG', 'Could not write failed_files.txt: %s', err.message);
+    end
+end
 
 % Batch-level artifacts: spec snapshot, dashboard PNG, summary CSV.
 % Each wrapped in its own try so one failure can't take down the run.
@@ -1116,7 +1143,7 @@ end
 try
     if numel(reports) > 1
         txtPath = fullfile(sessionSummaryDir(batchCtx), 'session_summary.txt');
-        writeTextReport(txtPath, summarizeReports(reports));
+        writeTextReport(txtPath, summarizeReports(reports, failed));
     end
 catch err
     nestLog('CFG', 'Could not write session_summary.txt: %s', err.message);
@@ -1125,9 +1152,9 @@ end
 % 3) Dashboard PNG - only when at least one report carries a Quality
 %    Gate (otherwise the dashboard is empty and we save nothing).
 try
-    if anyReportHasGates(reports)
+    if anyReportHasGates(reports) || ~isempty(failed)
         pngPath = fullfile(batchDir, 'dashboard.png');
-        renderDashboardToFile(reports, pngPath);
+        renderDashboardToFile(reports, failed, pngPath);
     end
 catch err
     nestLog('CFG', 'Could not render dashboard PNG: %s', err.message);
@@ -1158,9 +1185,10 @@ fprintf(fid, '%s', text);
 end
 
 function writeSessionSummaryCsv(csvPath, reports, failed)
-% One row per processed file. Failed files are pulled from the
-% structured failure log.
-rows = cell(0, 6);
+% One row per processed file. Failed files are pulled from the structured
+% failure log and carry the step + reason they died at, so the CSV is
+% self-diagnostic (you can decide what to re-run without opening the log).
+rows = cell(0, 8);
 for k = 1:numel(reports)
     r = reports{k};
     [~, stem] = fileparts(r.inputFile);
@@ -1175,26 +1203,35 @@ for k = 1:numel(reports)
     if isfield(r, 'quality') && isfield(r.quality, 'worstVerdict')
         verdict = r.quality.worstVerdict;
     end
-    rows(end+1, :) = {stem, 'ok', nSteps, nErr, durS, verdict}; %#ok<AGROW>
+    rows(end+1, :) = {stem, 'ok', nSteps, nErr, durS, verdict, '', ''}; %#ok<AGROW>
 end
 for k = 1:numel(failed)
     f = failed(k);
     [~, stem] = fileparts(f.name);
     kind = 'errored';
     if isfield(f, 'kind') && ~isempty(f.kind), kind = f.kind; end
-    rows(end+1, :) = {stem, kind, NaN, 1, NaN, ''}; %#ok<AGROW>
+    failStep = '';
+    if isfield(f, 'stepName') && ~isempty(f.stepName), failStep = f.stepName; end
+    failReason = '';
+    if isfield(f, 'message') && ~isempty(f.message)
+        failReason = regexprep(f.message, '\s*[\r\n]+\s*', ' ');
+    end
+    rows(end+1, :) = {stem, kind, NaN, 1, NaN, '', failStep, failReason}; %#ok<AGROW>
 end
 T = cell2table(rows, 'VariableNames', ...
-    {'stem','status','n_steps','n_errors','duration_s','quality_verdict'});
+    {'stem','status','n_steps','n_errors','duration_s','quality_verdict', ...
+     'fail_step','fail_reason'});
 writetable(T, csvPath);
 end
 
-function renderDashboardToFile(reports, pngPath)
+function renderDashboardToFile(reports, failed, pngPath)
 % Render the Session Quality Dashboard to an offscreen uifigure and
-% export it as a PNG using exportapp (uifigure-safe).
+% export it as a PNG using exportapp (uifigure-safe). Passing failed lets
+% the exported dashboard show errored/skipped files alongside the gated
+% reports, so the PNG on disk is a complete picture of the run.
 fig = uifigure('Visible', 'off', 'Position', [100 100 1400 900]);
 cleanup = onCleanup(@() delete(fig));
-renderDashboardPanel(fig, reports);
+renderDashboardPanel(fig, reports, struct('failed', failed));
 drawnow;
 exportapp(fig, pngPath);
 end

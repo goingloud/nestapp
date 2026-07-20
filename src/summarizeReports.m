@@ -2,23 +2,34 @@
 % SPDX-License-Identifier: GPL-3.0-or-later
 % Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
 % Part of nestapp; see the LICENSE file for full terms.
-function summaryText = summarizeReports(reports)
+function summaryText = summarizeReports(reports, failed)
 % SUMMARIZEREPORTS  Build a cross-file summary from a cell array of PipelineReport structs.
 %
 %   summaryText = SUMMARIZEREPORTS(reports)
+%   summaryText = SUMMARIZEREPORTS(reports, failed)
 %
 %   reports - 1xN cell array of structs returned by initPipelineReport and
 %             populated by runPipelineCore. N must be >= 2.
+%   failed  - optional struct array of files that did not complete (from
+%             runPipelineCore). When non-empty, a "FILES THAT DID NOT
+%             COMPLETE" section is listed up front so the failures are not
+%             silently dropped from the session view.
 %
 %   Returns a formatted char suitable for display in the pipeline report dialog
 %   above the individual per-file reports.
 %
 %   See also: initPipelineReport, exportReport, runPipelineCore
 
+if nargin < 2, failed = struct([]); end
+
 N = numel(reports);
 lines = {};
 lines{end+1} = sprintf('=== PIPELINE SUMMARY  (%d files) ===', N);
 lines{end+1} = '';
+
+% Failures first: the operational "what do I re-run" question comes before
+% the aggregate stats and publication prose below.
+lines = [lines, didNotCompleteLines(failed)];
 
 %% Channels
 origCh  = cellfun(@(r) r.channels.original,      reports);
@@ -72,9 +83,11 @@ if any(hasICA)
     lines{end+1} = sprintf('  Identified: %s components', fmtStat(nComp(icaIdx)));
     lines{end+1} = sprintf('  Removed:    %s', fmtStat(nRej(icaIdx)));
 
+    % r.ica.varRemoved is compounded across rounds (recomputeICATotals), so this
+    % per-file value is a valid subject total before we average it across files.
     hasVar = ~isnan(varRem) & hasICA;
     if any(hasVar)
-        lines{end+1} = sprintf('  ICA var removed: %s%%', fmtStat(varRem(hasVar)));
+        lines{end+1} = sprintf('  ICA var removed (compounded): %s%%', fmtStat(varRem(hasVar)));
     end
 
     % Per-category totals (only if all ICA files share the same category scheme)
@@ -122,6 +135,50 @@ summaryText = strjoin(lines, newline);
 end
 
 %% ---- helpers ---------------------------------------------------------------
+
+function out = didNotCompleteLines(failed)
+% List files that errored or were skipped at a hard Quality Gate, grouped by
+% kind. Empty (no section) when nothing failed.
+out = {};
+if isempty(failed), return; end
+
+kinds = arrayfun(@failKind, failed, 'UniformOutput', false);
+isSkipped = strcmp(kinds, 'skipped');
+errored = failed(~isSkipped);
+skipped = failed(isSkipped);
+
+out{end+1} = sprintf('FILES THAT DID NOT COMPLETE (%d)', numel(failed));
+out = [out, failGroupLines('Errored:', errored)];
+out = [out, failGroupLines('Skipped at Quality Gate:', skipped)];
+out{end+1} = '';
+end
+
+function out = failGroupLines(header, group)
+out = {};
+if isempty(group), return; end
+out{end+1} = ['  ' header];
+for k = 1:numel(group)
+    f = group(k);
+    [~, stem] = fileparts(f.name);
+    stepStr = '';
+    if isfield(f, 'stepName') && ~isempty(f.stepName)
+        stepStr = sprintf(' at %s', f.stepName);
+    end
+    reason = '';
+    if isfield(f, 'message') && ~isempty(f.message)
+        reason = regexprep(f.message, '\s*[\r\n]+\s*', ' | ');
+    end
+    out{end+1} = sprintf('    %s%s: %s', stem, stepStr, reason); %#ok<AGROW>
+end
+end
+
+function k = failKind(f)
+if isfield(f, 'kind') && ~isempty(f.kind)
+    k = f.kind;
+else
+    k = 'errored';
+end
+end
 
 function out = pipelineStepLines(reports)
 % Numbered list of the pipeline steps in run order, taken from the report that

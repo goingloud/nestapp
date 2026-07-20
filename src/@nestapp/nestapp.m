@@ -127,7 +127,6 @@ classdef nestapp < matlab.apps.AppBase
         TOPOPLOTButton                  matlab.ui.control.Button
         WindowsizefortimeaveragedTopoplotEditField  matlab.ui.control.NumericEditField
         WindowsizeforTopoplotLabel      matlab.ui.control.Label
-        Slider                          matlab.ui.control.Slider
         Image2                          matlab.ui.control.Image
         FilesListBox                    matlab.ui.control.ListBox
         FilesListBoxLabel               matlab.ui.control.Label
@@ -216,6 +215,7 @@ classdef nestapp < matlab.apps.AppBase
         tepComponentDefs = struct([]) % component window definitions used by tepPeakFinder
         allPipelineReports = {}    % cell array of report entry structs from current session
         loadedReports      = {}    % cell array of report entry structs loaded from disk
+        lastFailed         = struct([]) % failure records from the most recent run (for the dashboard + summary)
         reportsLoadFolder  = ''    % folder the loaded reports were read from (for Refresh)
         preSelectedChanFile = ''   % channel location file selected once before a run
         ParallelCheckBox           % uicheckbox - enable parallel participant processing
@@ -854,7 +854,7 @@ classdef nestapp < matlab.apps.AppBase
 
             % Append the Dashboard synthetic entry when any report has
             % gates - keeps the listbox tidy when nothing was screened.
-            if anyReportHasGates(allEntries)
+            if app.dashboardHasContent(allEntries)
                 dashEntry = struct('isDashboard', true, ...
                     'text', '', 'report', struct());
                 allEntries{end+1} = dashEntry;
@@ -920,7 +920,7 @@ classdef nestapp < matlab.apps.AppBase
         function ReportsListBoxValueChanged(app, ~)
         % Callback - swap the right-side pane based on the selected entry.
             allEntries = [app.allPipelineReports, app.loadedReports];
-            if anyReportHasGates(allEntries)
+            if app.dashboardHasContent(allEntries)
                 allEntries{end+1} = struct('isDashboard', true, ...
                     'text', '', 'report', struct());
             end
@@ -945,7 +945,8 @@ classdef nestapp < matlab.apps.AppBase
                     struct( ...
                         'onRefresh',        @() updateReportsTabImpl(app), ...
                         'onExport',         @() exportDashboardPNG(app, allEntries), ...
-                        'onFailedRowClick', @(name) jumpToFileEntry(app, allEntries, name)));
+                        'onFailedRowClick', @(name) jumpToFileEntry(app, allEntries, name), ...
+                        'failed',           app.lastFailed));
             else
                 app.ReportsDashboardPanel.Visible = 'off';
                 app.ReportsTextArea.Visible       = 'on';
@@ -965,7 +966,7 @@ classdef nestapp < matlab.apps.AppBase
             end
             if ~strcmp(app.ReportsDashboardPanel.Visible, 'on'); return; end
             allEntries = [app.allPipelineReports, app.loadedReports];
-            if anyReportHasGates(allEntries)
+            if app.dashboardHasContent(allEntries)
                 allEntries{end+1} = struct('isDashboard', true, ...
                     'text', '', 'report', struct());
             end
@@ -980,7 +981,8 @@ classdef nestapp < matlab.apps.AppBase
             outPath = fullfile(fpath, fname);
             fig = uifigure('Visible', 'off', 'Position', [100 100 1200 800]);
             cleanup = onCleanup(@() close(fig, 'force'));
-            renderDashboardPanel(fig, collectReportStructs(allEntries));
+            renderDashboardPanel(fig, collectReportStructs(allEntries), ...
+                struct('failed', app.lastFailed));
             try
                 exportgraphics(fig, outPath, 'Resolution', 150);
                 app.ReportsStatusLabel.Text = sprintf('Dashboard saved: %s', fname);
@@ -1005,6 +1007,15 @@ classdef nestapp < matlab.apps.AppBase
                     return
                 end
             end
+        end
+
+        function tf = dashboardHasContent(app, allEntries)
+        % Whether to append the synthetic "Session Quality Dashboard" entry.
+        % Worth showing when any report carries Quality Gate data OR when the
+        % last run left files that did not complete - so failures are visible
+        % even for a gate-less pipeline. Must be consulted at every site that
+        % builds allEntries, or the dashboard row's index desyncs.
+            tf = anyReportHasGates(allEntries) || ~isempty(app.lastFailed);
         end
 
         function LoadReportsButtonPushed(app, ~)
@@ -1158,7 +1169,7 @@ classdef nestapp < matlab.apps.AppBase
                 return
             end
             allEntries = [app.allPipelineReports, app.loadedReports];
-            if anyReportHasGates(allEntries)
+            if app.dashboardHasContent(allEntries)
                 allEntries{end+1} = struct('isDashboard', true, ...
                     'text', '', 'report', struct());
             end
@@ -2036,7 +2047,7 @@ classdef nestapp < matlab.apps.AppBase
             opts.chanLocFile  = app.preSelectedChanFile;
 
             try
-                [allReports, allSummaries] = runPipelineCore(app.spec, filePaths, opts);
+                [allReports, allSummaries, failed] = runPipelineCore(app.spec, filePaths, opts);
             catch err
                 if strcmp(err.identifier, 'nestapp:cancelled')
                     return
@@ -2045,8 +2056,12 @@ classdef nestapp < matlab.apps.AppBase
                 return
             end
 
+            % Keep this run's failures so the dashboard + summary can show
+            % them (they have no report of their own).
+            app.lastFailed = failed;
+
             if numel(allReports) > 1
-                summEntry.text      = summarizeReports(allReports);
+                summEntry.text      = summarizeReports(allReports, failed);
                 summEntry.report    = [];
                 summEntry.isSummary = true;
                 app.allPipelineReports{end+1} = summEntry;
@@ -2106,7 +2121,23 @@ classdef nestapp < matlab.apps.AppBase
             if isnumeric(val)
                 app.TextArea.Value = num2str(val);
             elseif iscell(val)
-                app.TextArea.Value = strjoin(val, ', ');
+                % Cell params may mix char and numeric entries (e.g. SSP-SIR
+                % PC = {'data', 90}); strjoin needs char/string, so stringify
+                % each element first instead of erroring on the numeric one.
+                parts = cell(1, numel(val));
+                for ii = 1:numel(val)
+                    v = val{ii};
+                    if ischar(v)
+                        parts{ii} = v;
+                    elseif isstring(v)
+                        parts{ii} = char(v);
+                    elseif isnumeric(v) || islogical(v)
+                        parts{ii} = num2str(v);
+                    else
+                        parts{ii} = char(string(v));
+                    end
+                end
+                app.TextArea.Value = strjoin(parts, ', ');
             elseif ischar(val) && ~isrow(val) && ~isempty(val)
                 app.TextArea.Value = cellstr(val);   % char matrix -> cell for TextArea
             else
@@ -2410,9 +2441,12 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Value changed function: TopoplottimeSpinner
-        function TopoplottimeSpinnerValueChanged(app, event)
-            value = event.Value;
-            app.Slider.Value = value;
+        function TopoplottimeSpinnerValueChanged(app, ~)
+            % The topoplot reads the spinner's value directly (see
+            % EEG_topoplot), so changing the time just needs a re-render.
+            if isFileSelected(app)
+                EEG_topoplot(app)
+            end
         end
 
         % Value changed function: EEGDatasetDropDown

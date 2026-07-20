@@ -23,12 +23,17 @@ function renderDashboardPanel(parent, reports, opts)
 %                        the failed-files table is selected; used to
 %                        jump to that file's text report. Empty = no
 %                        callback wired.
+%     .failed          struct array of files that did not complete
+%                        (errored or skipped at a hard gate), from
+%                        runPipelineCore. These have no report, so they are
+%                        surfaced here rather than derived from reports.
 
 if nargin < 3 || ~isstruct(opts), opts = struct(); end
 if ~isfield(opts, 'title'),           opts.title = 'Session Quality Overview'; end
 if ~isfield(opts, 'onRefresh'),       opts.onRefresh = []; end
 if ~isfield(opts, 'onExport'),        opts.onExport = []; end
 if ~isfield(opts, 'onFailedRowClick'),opts.onFailedRowClick = []; end
+if ~isfield(opts, 'failed'),          opts.failed = struct([]); end
 
 % Clear any existing children so this works as both first-paint and refresh.
 delete(allchild(parent));
@@ -36,23 +41,27 @@ delete(allchild(parent));
 verdicts = aggregateGateVerdicts(reports);
 metrics  = aggregateMetricDistributions(reports);
 
-drawHeader(parent, opts.title, verdicts);
+drawHeader(parent, opts.title, verdicts, opts.failed);
 drawHeatmap(parent, verdicts);
-drawFailedTable(parent, reports, opts.onFailedRowClick);
+drawFailedTable(parent, reports, opts.failed, opts.onFailedRowClick);
 drawHistograms(parent, metrics);
 drawButtons(parent, opts.onRefresh, opts.onExport);
 end
 
 % -- header ----------------------------------------------------------------
 
-function drawHeader(parent, titleText, verdicts)
-nFiles = numel(verdicts.files);
-if nFiles == 0
+function drawHeader(parent, titleText, verdicts, failed)
+nFiles    = numel(verdicts.files);
+nErrored  = numel(failed);
+if nFiles == 0 && nErrored == 0
     sub = 'No reports yet - run a pipeline with a Quality Gate.';
 else
     sub = sprintf('%d files: %d Pass / %d Marginal / %d Fail / %d Pending', ...
         nFiles, verdicts.counts.Pass, verdicts.counts.Marginal, ...
         verdicts.counts.Fail, verdicts.counts.Pending);
+    if nErrored > 0
+        sub = sprintf('%s / %d did not complete', sub, nErrored);
+    end
 end
 uilabel(parent, 'Text', titleText, 'FontWeight', 'bold', 'FontSize', 14, ...
     'Position', [10, parentTop(parent) - 25, parentWidth(parent) - 20, 22]);
@@ -107,12 +116,18 @@ end
 
 % -- failed-files table ----------------------------------------------------
 
-function drawFailedTable(parent, reports, onRowClick)
+function drawFailedTable(parent, reports, failed, onRowClick)
 W = parentWidth(parent);
 H = parentTop(parent);
 pos = [round(W * 0.50), round(H * 0.42), round(W * 0.48), round(H * 0.42)];
 
-rows = collectFailures(reports);
+% Two sources, one table: files that completed but tripped a gate
+% (collectFailures, derived from reports) and files that never produced a
+% report at all (failedFileRows, from the failure log). Errored files are
+% listed first so the re-run candidates are at the top.
+errRows = failedFileRows(failed);
+gateRows = collectFailures(reports);
+rows = [errRows; gateRows];
 uilabel(parent, 'Text', 'Failed / Marginal files', ...
     'FontWeight', 'bold', ...
     'Position', [pos(1), pos(2) + pos(4) + 2, pos(3), 18]);
@@ -131,7 +146,8 @@ function rows = collectFailures(reports)
 % One row per file. Roll up every Marginal/Fail gate's label and
 % reasons so a file is never split across multiple rows: the user gets
 % the full picture of why a file was flagged in one place.
-rows = {};
+% cell(0,4) (not {}) so it vertcats cleanly with the errored-file rows.
+rows = cell(0, 4);
 for ri = 1:numel(reports)
     r = reports{ri};
     if ~isstruct(r) || ~isfield(r, 'quality') ...
