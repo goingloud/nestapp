@@ -35,11 +35,6 @@ function cases = characterizationCases()
 %     SSP SIR              needs a TMS-artifact-bearing montage with real
 %                          spatial structure; the synthetic ring montage does
 %                          not produce a meaningful projection.
-%     Find TEP Peaks,      depend on Extract TEP (TESA) output, which does not
-%     TEP Peak Output        yet run headless on the fixture (see below).
-%     Extract TEP (TESA)   errors with "EXAMPLE needs key/value pairs" on the
-%                          fixture - a parameter-marshalling problem in the
-%                          dispatch worth its own investigation.
 %     Detect Bad Channels  vendored AARATEP detectors; need a lead field and a
 %     (PREP/DDWiener)        realistic montage to behave.
 %     Modified Bandpass    superseded by the TESA 1.2 step; will be pinned
@@ -53,5 +48,9 @@ cases = {
   'Remove TMS Artifacts (TESA)',       'epochedPulses', struct(),                              {}
   'Interpolate Missing Data (TESA)',   'epochedPulses', struct(),     {'Remove TMS Artifacts (TESA)'}
   'Flag ICA Components (AARATEP Peak)','epochedICA',    struct(),                              {}
+  'Extract TEP (TESA)',                'epochedPulses', struct(),                              {}
+  'Find TEP Peaks (TESA)',             'epochedPulses', struct(),        {'Extract TEP (TESA)'}
+  'TEP Peak Output',                   'epochedPulses', struct('tablePlot','off'), ...
+                                        {'Extract TEP (TESA)','Find TEP Peaks (TESA)'}
 };
 end

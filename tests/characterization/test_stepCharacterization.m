@@ -108,7 +108,7 @@ function test_fixturesAreDeterministic(testCase)
 for kind = {'continuous', 'epoched', 'epochedPulses', 'epochedICA'}
     a = eegDigest(charFixture(kind{1}));
     b = eegDigest(charFixture(kind{1}));
-    testCase.verifyTrue(isequal(a, b), ...
+    testCase.verifyTrue(isequaln(a, b), ...
         sprintf('charFixture(''%s'') is not reproducible', kind{1}));
 end
 end

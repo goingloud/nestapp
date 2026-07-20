@@ -32,6 +32,16 @@
     9.19194794,
     0.826726437
   ],
+  "nROI": 0,
+  "roiTseriesSum": 0,
+  "nROIPeaks": 0,
+  "roiPeakLatSum": 0,
+  "roiPeakAmpSum": 0,
+  "nGMFA": 0,
+  "gmfaTseriesSum": 0,
+  "nGMFAPeaks": 0,
+  "gmfaPeakLatSum": 0,
+  "gmfaPeakAmpSum": 0,
   "nICAComps": 0,
   "nFlaggedComps": 0
 }
