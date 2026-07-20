@@ -74,6 +74,9 @@ function clause = methodsClause(stepName, params)
         case 'Remove Bad Epoch'
             clause = 'improbable epochs were rejected automatically';
 
+        case 'Remove Bad Channels (manual)'
+            clause = 'bad channels were identified by visual inspection and removed';
+
         case 'Remove Bad Channels'
             meas = measureName(getf(p,'measure','kurt'));
             clause = sprintf('bad channels were identified by %s (>%g SD) and removed', ...

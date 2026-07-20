@@ -69,6 +69,35 @@ classdef test_headlessSafety < matlab.unittest.TestCase
                 'The failure should list the channels that ARE present, so it is actionable');
         end
 
+        function manual_channel_picker_fails_without_locations(tc)
+            % The topographic picker draws electrodes on the scalp, so with no
+            % coordinates there is nothing to click. It must say that up front
+            % rather than open an unusable window - and the message has to name
+            % the step that supplies them, or the user is left guessing.
+            reg = stepRegistry();
+            d = tempname; mkdir(d);
+            tc.addTeardown(@() rmdir(d, 's'));
+            fx = charFixture('tiny');
+            [fx.chanlocs.X] = deal([]);      % labels only, no coordinates
+            [fx.chanlocs.Y] = deal([]);
+            [fx.chanlocs.Z] = deal([]);
+            evalc('pop_saveset(fx, ''filename'', ''noloc.set'', ''filepath'', d);');
+
+            spec = [makePipelineStep('Load Data', reg), ...
+                    makePipelineStep('Remove Bad Channels (manual)', reg)];
+            err = [];
+            try
+                evalc(['processOneFile(spec, fullfile(d, ''noloc.set''), ' ...
+                       'struct(''pipelineName'',''headless'',''fileIndex'',1,''uiFigure'',[]));']);
+            catch e
+                err = e;
+            end
+            tc.assertNotEmpty(err, ...
+                'The manual picker must fail without channel locations, not open a window');
+            tc.verifyTrue(contains(err.message, 'Load Channel Location'), ...
+                'The failure must name the step that provides the locations');
+        end
+
         function reReference_to_a_present_channel_still_works(tc)
             % The guard must not have broken the ordinary path.
             reg  = stepRegistry();

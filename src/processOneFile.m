@@ -270,6 +270,46 @@ for si = 1:nSteps
                 EEG = pop_select( EEG,vars{:});
                 EEG = eeg_checkset( EEG );
 
+            case 'Remove Bad Channels (manual)'
+                if ~isfield(EEG, 'chanlocs') || isempty(EEG.chanlocs) || ...
+                        ~isfield(EEG.chanlocs, 'X') || all(cellfun(@isempty, {EEG.chanlocs.X}))
+                    error('nestapp:noChanlocsForPicker', ...
+                        ['Remove Bad Channels (manual) draws the electrodes on ' ...
+                         'the scalp, so it needs channel locations. Run "Load ' ...
+                         'Channel Location" before it.']);
+                end
+                % pop_topochansel RETURNS the selection - no base-workspace
+                % side effects to plumb - so the user's choice reaches the
+                % pipeline by construction. Pass chanlocs explicitly: called
+                % bare it scrapes the caller's workspace for them.
+                o = varinToStruct(varin);
+                badIdx = pop_topochansel(EEG.chanlocs);
+                badIdx = reshape(badIdx, 1, []);
+
+                protect = {};
+                if isfield(o, 'protect') && ~isempty(o.protect); protect = o.protect; end
+                protect = protect(~cellfun(@isempty, protect));
+                if ~isempty(protect) && ~isempty(badIdx)
+                    labels  = {EEG.chanlocs.labels};
+                    keepIdx = badIdx(ismember(lower(labels(badIdx)), lower(protect)));
+                    if ~isempty(keepIdx)
+                        nestLog('CHAN', 'Manual: keeping %d protected channel(s): %s', ...
+                            numel(keepIdx), strjoin(labels(keepIdx), ', '));
+                        badIdx = setdiff(badIdx, keepIdx);
+                    end
+                end
+
+                if isempty(badIdx)
+                    nestLog('CHAN', 'Manual: no channels selected; none removed.');
+                else
+                    badBefore = {EEG.chanlocs.labels};
+                    nestLog('CHAN', 'Manual: removing %d channel(s): %s', ...
+                        numel(badIdx), strjoin(badBefore(badIdx), ', '));
+                    EEG = pop_select(EEG, 'nochannel', badIdx);
+                    EEG = eeg_checkset( EEG );
+                    EEG = recordBadChannels(EEG, badBefore);
+                end
+
             case 'Remove Bad Channels'
                 vars = convertContainedStringsToChars(varin);
                 EEGelecNames = {EEG.chanlocs(1:end).labels};
