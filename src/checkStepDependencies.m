@@ -63,17 +63,22 @@ for i = 1:numel(stepNames)
         if ~isempty(r.fileExt) && (isempty(filePaths) || ~any(strcmpi(exts, r.fileExt)))
             continue
         end
-        if isempty(which(r.fn))
-            if ~isKey(missing, r.plugin)
-                missing(r.plugin) = struct( ...
-                    'installNote', r.installNote, ...
-                    'steps',       {{}}, ...
-                    'fns',         {{}});
+
+        % A license-gated toolbox function needs a stronger check than which():
+        % which('fit') stays non-empty even when the real toolbox fit() is gone
+        % (it falls through to the @gmdistribution method). The probe below also
+        % repairs a mis-set path when it can, so the run is not blocked on a
+        % problem we can fix here.
+        if isFieldSet(r, 'feature')
+            [isAvail, reason] = toolboxFnAvailable(r);
+            if ~isAvail
+                missing = addMissing(missing, r.plugin, reason, stepNames{i}, r.fn);
             end
-            entry = missing(r.plugin);
-            entry.steps{end+1} = stepNames{i};
-            entry.fns{end+1}   = r.fn;
-            missing(r.plugin)  = entry;
+            continue
+        end
+
+        if isempty(which(r.fn))
+            missing = addMissing(missing, r.plugin, r.installNote, stepNames{i}, r.fn);
         end
     end
 end
@@ -97,4 +102,34 @@ for i = 1:numel(pluginNames)
     lines{end+1} = '';                                                %#ok<AGROW>
 end
 msg = strjoin(lines, newline);
+end
+
+% ── helpers ───────────────────────────────────────────────────────────────────
+function tf = isFieldSet(r, name)
+% True when struct field `name` exists and is non-empty (older req() structs
+% built before the field was added simply do not carry it).
+tf = isfield(r, name) && ~isempty(r.(name));
+end
+
+function [isAvail, note] = toolboxFnAvailable(r)
+% Availability check for a license-gated toolbox function. Curve Fitting's
+% fit() has a dedicated probe (ensureCurveFittingFit) that also repairs a
+% mis-set path; any other feature falls back to which() + a license test.
+if strcmpi(r.feature, 'Curve_Fitting_Toolbox')
+    [isAvail, note] = ensureCurveFittingFit();
+else
+    isAvail = ~isempty(which(r.fn)) && license('test', r.feature) == 1;
+    note    = r.installNote;
+end
+end
+
+function missing = addMissing(missing, plugin, note, stepName, fn)
+% Record one unsatisfied requirement under its plugin display name.
+if ~isKey(missing, plugin)
+    missing(plugin) = struct('installNote', note, 'steps', {{}}, 'fns', {{}});
+end
+entry = missing(plugin);
+entry.steps{end+1} = stepName;
+entry.fns{end+1}   = fn;
+missing(plugin)    = entry;
 end
