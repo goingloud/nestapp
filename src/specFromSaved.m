@@ -18,10 +18,24 @@ if ~isfield(data, 'spec')
 end
 
 spec = data.spec;
+
+% Migration reads each step's parameters; a spec saved before params existed
+% (or hand-built) may not carry the field at all, and indexing it would turn a
+% loadable-with-warnings pipeline into a hard error.
+if ~isempty(spec) && ~isfield(spec, 'params')
+    [spec.params] = deal(struct());
+end
+
 for k = 1:numel(spec)
-    % Migrate legacy step names (e.g. renamed steps) so old saved pipelines
-    % keep resolving against the current registry.
-    spec(k).name = canonicalStepName(spec(k).name);
+    % Migrate legacy step names AND parameters (some renames also changed the
+    % parameter set) so old saved pipelines keep resolving against the current
+    % registry. Migrations that made a judgement call report it, so the user
+    % sees what changed rather than silently running something else.
+    [spec(k).name, spec(k).params, note] = ...
+        canonicalStepName(spec(k).name, spec(k).params);
+    if ~isempty(note)
+        warnings{end+1} = sprintf('Step %d migrated: %s', k, note); %#ok<AGROW>
+    end
     if ~any(strcmp({registry.name}, spec(k).name))
         warnings{end+1} = sprintf('Unknown step "%s" (not in registry)', spec(k).name); %#ok<AGROW>
     end
