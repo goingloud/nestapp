@@ -50,6 +50,10 @@ if ~isfield(opts, 'saveErrorBundle'),   opts.saveErrorBundle   = false;         
 % worker then just reset globals for subsequent files on the same worker.
 persistent eeglabWorkerReady lastThreadCount
 global EEG ALLEEG CURRENTSET ALLCOM %#ok<GVMIS>
+% Channel for harvesting a manual selection out of an eegplot callback.
+% eegplot evaluates its 'command' string in the base workspace, so a global
+% is the only way the marks reach this scope - see Remove Bad Trials.
+global NESTAPP_TMPREJ %#ok<GVMIS>
 
 [pathDir, fileBase, fileExt] = fileparts(fullPath);
 pathName = [pathDir, filesep];
@@ -972,9 +976,42 @@ for si = 1:nSteps
                 localThresh  = step.params.localThresh;
                 globalThresh = step.params.globalThresh;
                 EEG = pop_jointprob(EEG, 1, 1:size(EEG.data,1), localThresh, globalThresh, 0, 0);
-                pop_rejmenu(EEG, 1);
-                uiconfirm(opts.uiFigure,'Highlight bad trials in the rejection menu, then press OK to continue.','Remove Bad Trials','Options',{'OK'},'DefaultOption',1);
-                EEG.BadTr = unique([find(EEG.reject.rejjp==1) find(EEG.reject.rejmanual==1)]);
+
+                % A manual step must hand back what the user actually chose.
+                %
+                % This used to call pop_rejmenu(EEG, 1), which is declared with
+                % NO output and reports the user's marks by mutating EEG in the
+                % BASE workspace through its callback strings. A pipeline runs
+                % with `global EEG`, which is a different variable, so nothing
+                % the user marked ever came back: only pop_jointprob's automatic
+                % rejections were applied and every manual selection was
+                % silently discarded.
+                %
+                % eegplot's 'command' callback is the documented way to harvest
+                % a selection: it is evaluated with TMPREJ holding the marked
+                % regions. Routing that through a global gets it into this
+                % scope, and eegplot2trial converts regions to trial indices.
+                autoRej = logical(EEG.reject.rejjp(:)');
+                NESTAPP_TMPREJ = [];
+                winrej = trial2eegplot(autoRej, zeros(EEG.nbchan, EEG.trials), ...
+                                       EEG.pnts, [0.9 0.5 0.5]);
+                eegplot(EEG.data, 'srate', EEG.srate, 'winlength', 5, ...
+                    'limits', [EEG.xmin EEG.xmax] * 1000, 'winrej', winrej, ...
+                    'butlabel', 'Confirm rejections', ...
+                    'command', 'global NESTAPP_TMPREJ; NESTAPP_TMPREJ = TMPREJ;');
+                uiwait(gcf);
+
+                manualRej = false(1, EEG.trials);
+                if ~isempty(NESTAPP_TMPREJ)
+                    manualRej = logical(eegplot2trial(NESTAPP_TMPREJ, ...
+                        EEG.pnts, EEG.trials));
+                end
+                NESTAPP_TMPREJ = [];
+
+                % The user's marks are authoritative: confirming replaces the
+                % automatic set rather than adding to it, so a trial they
+                % un-marked is genuinely kept.
+                EEG.BadTr = find(manualRej);
                 EEG = pop_rejepoch( EEG, EEG.BadTr ,0);
                 fileReport = recordRejectedTrials(fileReport, EEG.BadTr);
                 EEG = eeg_checkset( EEG );

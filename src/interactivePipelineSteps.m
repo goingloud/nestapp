@@ -34,10 +34,44 @@ end
 for i = 1:numel(spec)
     k = find(strcmp({registry.name}, spec(i).name), 1);
     if isempty(k); continue; end
-    if isfield(registry(k), 'interactive') && ...
-            ~isempty(registry(k).interactive) && registry(k).interactive
+
+    blocks = isfield(registry(k), 'interactive') && ...
+             ~isempty(registry(k).interactive) && registry(k).interactive;
+
+    % Some steps block only in certain modes - TESA compselect opens its
+    % manual component review and waits only when compCheck is on. Check the
+    % parameters this step is actually configured with, so a pipeline that
+    % leaves review off is not warned about a dialog it will never see.
+    if ~blocks && isfield(registry(k), 'interactiveWhen')
+        blocks = matchesAnyRule(registry(k).interactiveWhen, params(spec(i)));
+    end
+
+    if blocks
         names{end+1} = registry(k).name; %#ok<AGROW>
     end
 end
 names = unique(names, 'stable');
+end
+
+% ── helpers ─────────────────────────────────────────────────────────────────
+function p = params(step)
+if isfield(step, 'params') && isstruct(step.params)
+    p = step.params;
+else
+    p = struct();
+end
+end
+
+function tf = matchesAnyRule(rules, p)
+tf = false;
+for r = 1:numel(rules)
+    key = rules(r).param;
+    if ~isfield(p, key); continue; end
+    v = p.(key);
+    if isstring(v); v = char(v); end
+    if ~ischar(v); continue; end
+    if any(strcmpi(v, rules(r).values))
+        tf = true; return
+    end
+end
 end

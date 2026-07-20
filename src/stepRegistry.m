@@ -33,7 +33,8 @@ if ~isempty(cachedSteps)
 end
 
 steps = struct('name',{},'defaults',{},'info',{},'params',{},'requires',{}, ...
-    'exclusiveParamGroups',{},'paramEnableWhen',{},'interactive',{});
+    'exclusiveParamGroups',{},'paramEnableWhen',{},'interactive',{}, ...
+    'interactiveWhen',{});
 
 %% ---- Load Data -------------------------------------------------------
 s = blankStep();
@@ -772,6 +773,10 @@ s.params = [ ...
        'Frequency axis range for component spectral plots.', 'type', 'vector')];
 s.requires = req('pop_tesa_compselect', 'TESA', ...
     'EEGLAB Plugin Manager -> search "TESA" (v1.1.1 or later)');
+% With compCheck = on, TESA hands each component to the user in
+% tesa_compplot and blocks on waitfor until they finish - so the step
+% cannot run on a parallel worker in that mode. It is fine with review off.
+s.interactiveWhen = struct('param', 'compCheck', 'values', {{'on'}});
 steps(end+1) = s;
 
 %% ---- Epoching --------------------------------------------------------
@@ -842,7 +847,7 @@ s.params = [ ...
        'Per-channel joint probability threshold. Epochs exceeding this SD are flagged.'), ...
     makeParam('globalThresh', 'Global threshold', 'SD', '[0 Inf]', ...
        'Across-channel joint probability threshold.')];
-% Opens pop_rejmenu and waits for the user to mark trials - cannot run parallel.
+% Opens an eegplot for the user to mark trials - cannot run parallel.
 s.interactive = true;
 steps(end+1) = s;
 
@@ -1676,6 +1681,15 @@ s.paramEnableWhen      = struct('param', {}, 'controller', {}, 'values', {});
 % every file or blocks with nothing to click. The app checks this before a run
 % and offers to turn parallel off - see interactivePipelineSteps.
 s.interactive = false;
+% interactiveWhen - the step blocks only for certain parameter values, e.g.
+% TESA compselect's manual review. Same shape as paramEnableWhen. A step is
+% treated as interactive if `interactive` is true OR any of these rules match
+% the parameters it is configured with.
+%
+% This cannot be detected by scanning the dispatch: the blocking call lives
+% inside the wrapped third-party function, not in nestapp's case body. It has
+% to be declared.
+s.interactiveWhen = struct('param', {}, 'values', {});
 end
 
 function r = req(fn, plugin, installNote, fileExt, feature)

@@ -58,7 +58,7 @@ classdef test_interactiveSteps < matlab.unittest.TestCase
             offenders = {};
             cases = splitDispatchCases(tc.dispatchSrc);
             for i = 1:numel(cases)
-                body = cases(i).body;
+                body = codeOnly(cases(i).body);
                 names = cases(i).names;
                 if any(cellfun(@(c) contains(body, [c '(']), blockingCalls))
                     for j = 1:numel(names)
@@ -80,7 +80,7 @@ classdef test_interactiveSteps < matlab.unittest.TestCase
 
         function reReference_errors_instead_of_prompting_without_a_ui(tc)
             % The guard must come BEFORE the inputdlg, or a worker still hangs.
-            body = dispatchBody(tc.dispatchSrc, 'Re-Reference');
+            body = codeOnly(dispatchBody(tc.dispatchSrc, 'Re-Reference'));
             tc.assertNotEmpty(body, 'Re-Reference case not found');
             iGuard  = strfind(body, 'isempty(opts.uiFigure)');
             iPrompt = strfind(body, 'inputdlg(');
@@ -99,6 +99,48 @@ classdef test_interactiveSteps < matlab.unittest.TestCase
         function helper_returns_empty_for_a_clean_spec(tc)
             spec = struct('name', {'Load Data', 'Re-Reference'});
             tc.verifyEmpty(interactivePipelineSteps(spec, tc.registry));
+        end
+
+        function compselect_blocks_only_with_manual_review_on(tc)
+            % TESA compselect opens tesa_compplot and blocks on waitfor only
+            % when compCheck is on. Warning about it with review off would be
+            % noise; missing it with review on would hang a parallel batch.
+            reg = tc.registry;
+            k = find(strcmp({reg.name}, 'Remove ICA Components (TESA)'), 1);
+            tc.assertNotEmpty(k);
+            tc.verifyFalse(reg(k).interactive, ...
+                'Not unconditionally interactive - only in manual-review mode');
+            tc.verifyNotEmpty(reg(k).interactiveWhen, ...
+                'Must declare the mode in which it blocks');
+
+            on  = struct('name', 'Remove ICA Components (TESA)', ...
+                         'params', struct('compCheck', 'on'));
+            off = struct('name', 'Remove ICA Components (TESA)', ...
+                         'params', struct('compCheck', 'off'));
+            tc.verifyEqual(interactivePipelineSteps(on, reg), ...
+                {'Remove ICA Components (TESA)'});
+            tc.verifyEmpty(interactivePipelineSteps(off, reg));
+        end
+
+        function manual_steps_hand_back_the_users_choices(tc)
+            % A manual step must return what the user selected. Remove Bad
+            % Trials used pop_rejmenu, which has no output and reports through
+            % the BASE workspace - invisible to a pipeline running with
+            % `global EEG` - so every manual mark was silently discarded and
+            % only the automatic rejections applied.
+            body = codeOnly(dispatchBody(tc.dispatchSrc, 'Remove Bad Trials'));
+            tc.assertNotEmpty(body);
+            tc.verifyFalse(contains(body, 'pop_rejmenu'), ...
+                'pop_rejmenu returns nothing - the user''s marks cannot come back');
+            tc.verifyTrue(contains(body, 'TMPREJ'), ...
+                'Must harvest the selection via eegplot''s TMPREJ callback');
+            tc.verifyTrue(contains(body, 'eegplot2trial'), ...
+                'Must convert the harvested regions into trial indices');
+
+            % And the TESA manual-review path must assign its return value.
+            body = codeOnly(dispatchBody(tc.dispatchSrc, 'Remove ICA Components (TESA)'));
+            tc.verifyTrue(~isempty(regexp(body, 'EEG\s*=\s*pop_tesa_compselect', 'once')), ...
+                'compselect returns the user''s component choices - assign it');
         end
     end
 end
@@ -123,4 +165,14 @@ body = '';
 for i = 1:numel(cases)
     if ismember(name, cases(i).names); body = cases(i).body; return; end
 end
+end
+
+function out = codeOnly(body)
+% Strip whole-line comments. These scans look for calls, and a comment that
+% explains why a call was REMOVED must not read as the call still being
+% present - which is exactly how this test first failed: the note recording
+% that pop_rejmenu had been replaced matched a search for pop_rejmenu.
+lines = strsplit(body, newline);
+keep  = ~startsWith(strtrim(lines), '%');
+out   = strjoin(lines(keep), newline);
 end
