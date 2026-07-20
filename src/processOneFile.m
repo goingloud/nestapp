@@ -729,6 +729,15 @@ for si = 1:nSteps
 
             case 'SSP SIR'
                 vars = convertContainedStringsToChars(varin);
+                % The PC param is declared type 'string' in the registry, so
+                % {'data', 90} comes back from the UITable or a saved pipeline
+                % as the CHAR "{'data', 90}". tesa_sspsir then does "1:PC" on a
+                % char and throws ("For colon operator with char operands...").
+                % Normalise it back to a cell / number.
+                pcIdx = find(strcmpi(vars, 'PC'), 1);
+                if ~isempty(pcIdx)
+                    vars{pcIdx+1} = parseSspsirPC(vars{pcIdx+1});
+                end
                 EEG = pop_tesa_sspsir(EEG, vars{:});
                 EEG = eeg_checkset( EEG );
 
