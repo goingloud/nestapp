@@ -140,8 +140,17 @@ if report.ica.nComponents > 0
         multiRound = isfield(report.ica, 'rounds') && numel(report.ica.rounds) > 1;
 
         if multiRound
-            lines{end+1} = sprintf('  Removed:    %d total (%d rounds)', ...
-                nRej, numel(report.ica.rounds));
+            if hasVar
+                % Top-level variance is compounded across rounds (see
+                % recomputeICATotals); label it so it is not confused with the
+                % per-round, per-basis figures listed below.
+                lines{end+1} = sprintf( ...
+                    '  Removed:    %d total (%d rounds, %.1f%% ICA variance compounded)', ...
+                    nRej, numel(report.ica.rounds), report.ica.varRemoved);
+            else
+                lines{end+1} = sprintf('  Removed:    %d total (%d rounds)', ...
+                    nRej, numel(report.ica.rounds));
+            end
         elseif hasVar && hasRange
             lines{end+1} = sprintf( ...
                 '  Removed:    %d  (%.1f%% ICA variance, %.1f-%.1f%% per component)', ...
@@ -154,10 +163,17 @@ if report.ica.nComponents > 0
         end
         lines{end+1} = sprintf('  Kept:       %d', nKept);
 
-        % Per-category summary (totals across all rounds)
+        % Per-category summary (totals across all rounds). For multi-round the
+        % shares are compounded onto the original-variance basis (so they sum to
+        % the compounded total above); for single-round they are that round's
+        % shares. Either way they are now meaningful to display.
         if isfield(report.ica, 'categories') && any(report.ica.categories.nRemoved > 0)
-            lines{end+1} = '  By category (all rounds):';
-            lines = appendCategoryLines(lines, report.ica.categories, hasVar && ~multiRound);
+            if multiRound
+                lines{end+1} = '  By category (all rounds, % of original variance):';
+            else
+                lines{end+1} = '  By category:';
+            end
+            lines = appendCategoryLines(lines, report.ica.categories, hasVar);
         end
 
         % Per-round detail for multi-round TESA

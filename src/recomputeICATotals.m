@@ -13,9 +13,16 @@ function ica = recomputeICATotals(ica)
 %     nKept       - components surviving the final round (nComp - nRej of the
 %                   last round); equals nComponents - nRejected because each
 %                   round re-decomposes the previous round's residual
-%     categories  - union of every round's per-category tally
-%     varRemoved / varMin / varMax - from the first round only (variance is not
-%                   additive across different ICA bases)
+%     categories  - union of every round's per-category tally, each round's
+%                   share rescaled to the common "% of original variance" basis
+%     varRemoved / varMin / varMax - COMPOUNDED across rounds. Variance is not
+%                   additive across different ICA bases, so we compound: each
+%                   round removes a fraction of the variance ENTERING it (the
+%                   residual after earlier rounds), and the total removed is
+%                   1 - prod(1 - vr_i/100). Per-category shares and the
+%                   per-component range are scaled by the residual entering
+%                   their round so everything is on the original-variance basis
+%                   and the category shares sum to varRemoved.
 %
 %   See also: openICARound, addICARemoval, mergeCategories, buildReportText
 
@@ -25,19 +32,53 @@ end
 
 ica.nComponents = ica.rounds{1}.nComponents;
 
-total = 0;
-cats  = struct('names', {{}}, 'nRemoved', [], 'varShare', []);
+residual = 1;     % fraction of original evoked variance still present
+haveVar  = false;
+total    = 0;
+cats     = struct('names', {{}}, 'nRemoved', [], 'varShare', []);
+vMin     = inf;
+vMax     = -inf;
+
 for i = 1:numel(ica.rounds)
-    total = total + ica.rounds{i}.nRejected;
-    cats  = mergeCategories(cats, ica.rounds{i}.categories);
+    rnd   = ica.rounds{i};
+    total = total + rnd.nRejected;
+
+    % This round's per-category shares are relative to the round's own basis;
+    % scale them by the residual variance entering the round so the merged
+    % shares are all on the original-variance basis (and sum to varRemoved).
+    scaled = rnd.categories;
+    if isfield(scaled, 'varShare') && ~isempty(scaled.varShare)
+        vs = scaled.varShare;
+        vs(~isfinite(vs)) = 0;
+        scaled.varShare = vs * residual;
+    end
+    cats = mergeCategories(cats, scaled);
+
+    % Per-component range, likewise rescaled to the original-variance basis.
+    if ~isnan(rnd.varMin), vMin = min(vMin, rnd.varMin * residual); haveVar = true; end
+    if ~isnan(rnd.varMax), vMax = max(vMax, rnd.varMax * residual); end
+
+    % Compound the residual using the round's total variance removed.
+    if ~isnan(rnd.varRemoved)
+        residual = residual * (1 - rnd.varRemoved / 100);
+        haveVar  = true;
+    end
 end
+
 ica.nRejected = total;
 
 last      = ica.rounds{end};
 ica.nKept = last.nComponents - last.nRejected;
 
 ica.categories = cats;
-ica.varRemoved = ica.rounds{1}.varRemoved;
-ica.varMin     = ica.rounds{1}.varMin;
-ica.varMax     = ica.rounds{1}.varMax;
+
+if haveVar
+    ica.varRemoved = 100 * (1 - residual);
+    if isfinite(vMin), ica.varMin = vMin; else, ica.varMin = NaN; end
+    if isfinite(vMax), ica.varMax = vMax; else, ica.varMax = NaN; end
+else
+    ica.varRemoved = NaN;
+    ica.varMin     = NaN;
+    ica.varMax     = NaN;
+end
 end
