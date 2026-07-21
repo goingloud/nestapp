@@ -45,6 +45,36 @@ classdef test_pathParams < matlab.unittest.TestCase
                 'Optional - empty means the template lead field');
         end
 
+        function an_unset_path_cell_names_the_control_that_fills_it(tc)
+            % '(not set)' says something is missing but not what to do. The
+            % required one has to point at Browse, because a user who does not
+            % find that button types the path by hand or gives up.
+            reg  = tc.registry;
+            step = makePipelineStep('AARATEP Pipeline (whole)', reg);
+            k    = find(strcmp({reg.name}, 'AARATEP Pipeline (whole)'), 1);
+
+            data = buildParamTableData(step, reg(k));
+            shown = valueShownFor(tc, data, 'Output folder');
+            tc.verifyTrue(contains(lower(shown), 'browse'), sprintf( ...
+                'An unset output folder shows "%s"; it should name Browse', shown));
+
+            % Placeholders are greyed by the '(' convention - without it the
+            % hint would read as a real value the user had already chosen.
+            tc.verifyEqual(shown(1), '(');
+        end
+
+        function a_chosen_path_replaces_the_hint(tc)
+            % The hint must not linger once Browse has written a value.
+            reg  = tc.registry;
+            step = makePipelineStep('AARATEP Pipeline (whole)', reg);
+            step.params.outputDir = tempdir;
+            k = find(strcmp({reg.name}, 'AARATEP Pipeline (whole)'), 1);
+
+            shown = valueShownFor(tc, buildParamTableData(step, reg(k)), 'Output folder');
+            tc.verifyEqual(shown, tempdir);
+            tc.verifyFalse(contains(lower(shown), 'browse'));
+        end
+
         function path_params_convert_exactly_like_strings(tc)
             % Declaring a path must change only the editing affordance, never
             % what ends up stored - otherwise the same value would round-trip
@@ -89,4 +119,10 @@ params = tc.registry(k).params;
 j = find(strcmp({params.key}, key), 1);
 tc.assertNotEmpty(j, sprintf('%s has no param %s', stepName, key));
 p = params(j);
+end
+
+function v = valueShownFor(tc, data, friendlyName)
+row = find(strcmp(data(:, 1), friendlyName), 1);
+tc.assertNotEmpty(row, sprintf('No "%s" row in the parameter table', friendlyName));
+v = char(data{row, 2});
 end

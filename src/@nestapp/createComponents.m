@@ -168,22 +168,26 @@ function createComponents(app)
             app.DefaultValueButton = uibutton(app.CleaningTab, 'push');
             app.DefaultValueButton.ButtonPushedFcn = createCallbackFcn(app, @DefaultValueButtonPushed, true);
             app.DefaultValueButton.BackgroundColor = [0.8 0.8 0.8];
-            app.DefaultValueButton.Position = [450 15 92 23];
+            app.DefaultValueButton.Position = [485 15 110 23];
             app.DefaultValueButton.Text = 'Default Value';
 
-            % Create BrowsePathButton - only enabled for folder/file params, so
-            % a path never has to be typed into a table cell.
+            % Create BrowsePathButton - flush against the right edge of the
+            % value editor, which is the pairing users already know from every
+            % file field. Enabled only while a folder/file parameter is
+            % selected, so a path never has to be typed by hand.
             app.BrowsePathButton = uibutton(app.CleaningTab, 'push');
             app.BrowsePathButton.ButtonPushedFcn = createCallbackFcn(app, @BrowsePathButtonPushed, true);
             app.BrowsePathButton.BackgroundColor = [0.8 0.8 0.8];
-            app.BrowsePathButton.Position = [548 15 90 23];
+            app.BrowsePathButton.Position = [578 46 60 56];
             app.BrowsePathButton.Text = 'Browse...';
+            app.BrowsePathButton.Tooltip = 'Choose a folder or file for the selected parameter';
             app.BrowsePathButton.Enable = 'off';
 
-            % Create TextArea
+            % Create TextArea - the value editor for the row selected in the
+            % parameter table above it.
             app.TextArea = uitextarea(app.CleaningTab);
             app.TextArea.ValueChangedFcn = createCallbackFcn(app, @TextAreaValueChanged, true);
-            app.TextArea.Position = [450 46 188 56];
+            app.TextArea.Position = [450 46 126 56];
 
             % Create SelectedListBoxLabel_2
             app.SelectedListBoxLabel_2 = uilabel(app.CleaningTab);
