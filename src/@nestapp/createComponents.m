@@ -168,8 +168,17 @@ function createComponents(app)
             app.DefaultValueButton = uibutton(app.CleaningTab, 'push');
             app.DefaultValueButton.ButtonPushedFcn = createCallbackFcn(app, @DefaultValueButtonPushed, true);
             app.DefaultValueButton.BackgroundColor = [0.8 0.8 0.8];
-            app.DefaultValueButton.Position = [485 15 110 23];
+            app.DefaultValueButton.Position = [450 15 92 23];
             app.DefaultValueButton.Text = 'Default Value';
+
+            % Create BrowsePathButton - only enabled for folder/file params, so
+            % a path never has to be typed into a table cell.
+            app.BrowsePathButton = uibutton(app.CleaningTab, 'push');
+            app.BrowsePathButton.ButtonPushedFcn = createCallbackFcn(app, @BrowsePathButtonPushed, true);
+            app.BrowsePathButton.BackgroundColor = [0.8 0.8 0.8];
+            app.BrowsePathButton.Position = [548 15 90 23];
+            app.BrowsePathButton.Text = 'Browse...';
+            app.BrowsePathButton.Enable = 'off';
 
             % Create TextArea
             app.TextArea = uitextarea(app.CleaningTab);

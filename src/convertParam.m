@@ -51,7 +51,9 @@ switch type
     case 'logical'
         v = raw;   % keep as 'on'/'off' string
 
-    case 'string'
+    % 'folder' and 'file' are strings that the GUI offers a picker for -
+    % the stored value is a plain path, so they convert identically.
+    case {'string', 'folder', 'file'}
         if ischar(raw) && isrow(raw)
             v = raw;
         elseif ischar(raw)

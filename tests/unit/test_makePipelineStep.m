@@ -87,7 +87,7 @@ classdef test_makePipelineStep < matlab.unittest.TestCase
 
         function all_params_have_type_field(tc)
             % Phase A invariant: every param entry must carry a type string.
-            validTypes = {'scalar','integer','vector','logical','string','stringlist'};
+            validTypes = {'scalar','integer','vector','logical','string','stringlist','folder','file'};
             for k = 1:numel(tc.registry)
                 params = tc.registry(k).params;
                 for p = 1:numel(params)

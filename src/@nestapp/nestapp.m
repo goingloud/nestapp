@@ -22,6 +22,7 @@ classdef nestapp < matlab.apps.AppBase
         SelectedListBoxLabel_2          matlab.ui.control.Label
         TextArea                        matlab.ui.control.TextArea
         DefaultValueButton              matlab.ui.control.Button
+        BrowsePathButton                matlab.ui.control.Button
         UITable                         matlab.ui.control.Table
         SelectedListBoxLabel            matlab.ui.control.Label
         RemoveButton                    matlab.ui.control.Button
@@ -2170,6 +2171,7 @@ classdef nestapp < matlab.apps.AppBase
             paramMeta = params(row);
             app.currentParamKey  = paramMeta.key;
             app.currentParamType = paramMeta.type;
+            refreshBrowseButton(app);
 
             val = step.params.(paramMeta.key);
             if isnumeric(val)
@@ -2200,6 +2202,67 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         % Button pushed function: DefaultValueButton
+        function BrowsePathButtonPushed(app, ~)
+        % Pick a folder or file for the selected parameter instead of typing a
+        % path into a table cell. Enabled only for params declared 'folder' or
+        % 'file' (see makeParam), so the button cannot be used on a parameter
+        % where a path makes no sense.
+            stepIdx = selectedStepIndex(app);
+            if isempty(stepIdx) || stepIdx > numel(app.spec); return; end
+            key = app.currentParamKey;
+            if isempty(key); return; end
+
+            reg    = stepRegistry();
+            regIdx = find(strcmp({reg.name}, app.spec(stepIdx).name), 1);
+            if isempty(regIdx); return; end
+            pIdx = find(strcmp({reg(regIdx).params.key}, key), 1);
+            if isempty(pIdx); return; end
+            meta = reg(regIdx).params(pIdx);
+
+            % Start where the user last was, then where they already pointed
+            % this parameter - guessing a folder is better than starting at the
+            % MATLAB install directory every time.
+            start = getpref('nestapp', 'lastDataFolder', '');
+            cur   = app.spec(stepIdx).params.(key);
+            if (ischar(cur) || isstring(cur)) && ~isempty(char(cur))
+                cur = char(cur);
+                if isfolder(cur)
+                    start = cur;
+                elseif isfile(cur)
+                    start = fileparts(cur);
+                end
+            end
+
+            switch meta.type
+                case 'folder'
+                    chosen = uigetdir(start, sprintf('Select %s', meta.friendlyName));
+                    if isequal(chosen, 0); return; end
+                case 'file'
+                    [f, pth] = uigetfile('*.*', sprintf('Select %s', meta.friendlyName), start);
+                    if isequal(f, 0); return; end
+                    chosen = fullfile(pth, f);
+                otherwise
+                    return
+            end
+
+            % uigetdir/uigetfile can bury the app behind the dialog's parent.
+            if isvalid(app.UIFigure); figure(app.UIFigure); end
+
+            app.spec(stepIdx).params.(key) = chosen;
+            refreshParamTable(app, stepIdx);
+            app.pipelineDirty = true;
+            updateStatusBar(app);
+        end
+
+        function refreshBrowseButton(app)
+        % The Browse button is meaningful only for a path parameter.
+            isPath = ~isempty(app.currentParamType) && ...
+                     any(strcmp(app.currentParamType, {'folder', 'file'}));
+            if isvalid(app.BrowsePathButton)
+                app.BrowsePathButton.Enable = matlab.lang.OnOffSwitchState(isPath);
+            end
+        end
+
         function DefaultValueButtonPushed(app, ~)
             stepIdx = selectedStepIndex(app);
             if isempty(stepIdx) || stepIdx > numel(app.spec); return; end
@@ -2209,6 +2272,7 @@ classdef nestapp < matlab.apps.AppBase
             app.currentParamKey  = '';
             app.currentParamType = '';
             app.TextArea.Value   = '';
+            refreshBrowseButton(app);
             refreshParamTable(app, stepIdx);
             app.pipelineDirty = true;
             updateStatusBar(app);
