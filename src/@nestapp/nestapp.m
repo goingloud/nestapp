@@ -1989,7 +1989,36 @@ classdef nestapp < matlab.apps.AppBase
                     app.SelectedListBox.Value = app.SelectedListBox.ItemsData{1};
                     refreshParamTable(app, 1);
                 end
+                promptForRequiredParams(app);
             end
+        end
+
+        function promptForRequiredParams(app)
+        % Some templates cannot carry a working default for every setting -
+        % AARATEP needs an output folder and there is no reasonable guess. Ask
+        % on load, with that step's parameter table already in front of the
+        % user, rather than letting them start a run that fails on the first
+        % file for a reason they then have to go and find.
+        %
+        % Which parameters are required is declared on the parameter itself
+        % (makeParam(..., 'required', true)) and found by
+        % unsetRequiredParams, so this does not need updating when a step
+        % gains one.
+            [stepIdx, ~, labels] = unsetRequiredParams(app.spec);
+            if isempty(stepIdx); return; end
+
+            % Put the offending step's parameters on screen first, so the
+            % dialog is pointing at something the user can actually edit.
+            if numel(app.SelectedListBox.ItemsData) >= stepIdx
+                app.SelectedListBox.Value = app.SelectedListBox.ItemsData{stepIdx};
+                refreshParamTable(app, stepIdx);
+            end
+
+            uialert(app.UIFigure, sprintf( ...
+                ['"%s" needs these before the pipeline can run:\n\n    %s\n\n' ...
+                 'Its parameters are shown below - fill them in, then Run.'], ...
+                app.spec(stepIdx).name, strjoin(labels, sprintf('\n    '))), ...
+                'Settings needed', 'Icon', 'info');
         end
 
         % Button pushed function: RunAnalysisButton

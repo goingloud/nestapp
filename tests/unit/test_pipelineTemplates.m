@@ -143,6 +143,47 @@ locVal = t.spec(filterIdx).params.locutoff;
 testCase.verifyGreaterThan(locVal, 0, 'Minimal HPF locutoff must be > 0 Hz');
 end
 
+function test_aaratepIsASingleOrchestratorStep(testCase)
+% The template calls upstream's pipeline rather than reproducing it. If it
+% ever grows the old per-stage steps back, the fidelity burden comes with
+% them - so assert the handover explicitly.
+templates = loadTemplates(testCase);
+t = templates(contains({templates.name}, 'AARATEP'));
+testCase.verifyTrue(ismember('AARATEP Pipeline (whole)', t.steps), ...
+    'The AARATEP template must call the orchestrator step');
+testCase.verifyLessThan(numel(t.steps), 8, ...
+    'It should be a handover, not a reproduction of the pipeline');
+end
+
+function test_aaratepFindsPulsesBeforeHandingOver(testCase)
+% The orchestrator matches pulse events by type; it does not detect them. So
+% pulse detection has to happen first, and the labels have to agree - a
+% mismatch here would fail deep inside upstream on the first file.
+templates = loadTemplates(testCase);
+t = templates(contains({templates.name}, 'AARATEP'));
+findIdx = find(strcmp(t.steps, 'Find TMS Pulses (TESA)'), 1);
+orchIdx = find(strcmp(t.steps, 'AARATEP Pipeline (whole)'), 1);
+testCase.assertNotEmpty(findIdx, 'AARATEP must find pulses before handing over');
+testCase.assertNotEmpty(orchIdx);
+testCase.verifyLessThan(findIdx, orchIdx);
+
+label = t.spec(findIdx).params.tmslabel;
+events = cellstr(t.spec(orchIdx).params.pulseEvents);
+testCase.verifyTrue(ismember(label, events), sprintf( ...
+    ['The event label written by Find TMS Pulses (%s) must be one the ' ...
+     'orchestrator looks for (%s)'], label, strjoin(events, ', ')));
+end
+
+function test_aaratepDoesNotEpochBeforeHandingOver(testCase)
+% Upstream epochs itself and asserts on continuous input. An Epoching step in
+% this template would break the run - and the dispatch guards for it, but the
+% template should not be building that situation in the first place.
+templates = loadTemplates(testCase);
+t = templates(contains({templates.name}, 'AARATEP'));
+testCase.verifyFalse(ismember('Epoching', t.steps), ...
+    'The orchestrator does its own epoching and needs continuous data');
+end
+
 function test_aaratepTemplateExists(testCase)
 templates = loadTemplates(testCase);
 testCase.verifyTrue(any(contains({templates.name}, 'AARATEP')), ...
@@ -162,41 +203,6 @@ t = templates(contains({templates.name}, 'AARATEP'));
 testCase.verifyEqual(t.steps{end}, 'Save New Set', ...
     'AARATEP template must end with Save New Set');
 end
-
-function test_aaratepSoundLambdaMatchesSource(testCase)
-% AARATEP source: SOUNDlambda = 10^-1.5.
-templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'AARATEP'));
-soundIdx = find(strcmp(t.steps, 'Source-Informed Sensor Cleaning (SOUND)'), 1);
-testCase.verifyEqual(t.spec(soundIdx).params.lambdaValue, 10^-1.5, ...
-    'AbsTol', 1e-6, ...
-    'AARATEP SOUND lambda must be 10^-1.5 per c_TMSEEG_Preprocess_AARATEPPipeline.m');
-end
-
-function test_aaratepDownsampleMatchesSource(testCase)
-% AARATEP source: downsampleTo = 1000.
-templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'AARATEP'));
-rsIdx = find(strcmp(t.steps, 'Re-Sample'), 1);
-testCase.verifyEqual(t.spec(rsIdx).params.freq, 1000, ...
-    'AARATEP must downsample to 1000 Hz per upstream defaults.');
-end
-
-function test_aaratepArtifactWindowMatchesSource(testCase)
-% AARATEP source: artifactTimespan = [-0.002, 0.012] s -> [-2, 12] ms.
-templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'AARATEP'));
-arIdx = find(strcmp(t.steps, 'Interpolate Missing Data (AR-Blend)'), 1);
-testCase.verifyEqual(t.spec(arIdx).params.artifactStartMs, -2, ...
-    'AARATEP AR-Blend start must be -2 ms.');
-testCase.verifyEqual(t.spec(arIdx).params.artifactEndMs, 12, ...
-    'AARATEP AR-Blend end must be 12 ms.');
-end
-
-% ── CleanLine ordering: never put CleanLine after Epoching ───────────────
-% CleanLine's default 4-s window spans trial boundaries on epoched data
-% and prompts the user with 'y/n' or creates discontinuity artifacts. Every
-% built-in template that uses CleanLine must run it on continuous data.
 
 function test_cleanlineNeverAfterEpoching(testCase)
 templates = loadTemplates(testCase);
@@ -221,63 +227,3 @@ end
 
 % ── Paper-fidelity audit guards ──────────────────────────────────────────
 
-function test_aaratepRerefBeforeEarlyEyeICA(testCase)
-% Upstream c_TMSEEG_Preprocess_AARATEPPipeline.m line 244:
-% pop_reref(EEG, []) is called BEFORE the early eye-IC ICA so the early
-% decomposition is on average-referenced data.
-templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'AARATEP'));
-rerefIdx = find(strcmp(t.steps, 'Re-Reference'));
-icaIdx   = find(strcmp(t.steps, 'Run ICA (FastICA)'));
-testCase.verifyNotEmpty(rerefIdx, 'AARATEP must include Re-Reference.');
-testCase.verifyNotEmpty(icaIdx,   'AARATEP must include Run ICA (FastICA).');
-testCase.verifyLessThan(rerefIdx(1), icaIdx(1), ...
-    'AARATEP early Re-Reference must precede the first ICA round.');
-end
-
-function test_aaratepEarlyEyeICAFlagsEyeOnly(testCase)
-% Upstream line 254: muscleComponentThreshold = NaN,
-% brainComponentThreshold = NaN, otherComponentThreshold = NaN. Only Eye
-% is flagged in the early pass. The registry default for Muscle is
-% [0.9, 1] so the template MUST override it to [NaN, NaN].
-templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'AARATEP'));
-flagIdx = find(strcmp(t.steps, 'Flag ICA Components for Rejection'));
-p = t.spec(flagIdx(1)).params;
-testCase.verifyTrue(all(isnan(p.Muscle)), ...
-    ['AARATEP early Flag step must have Muscle = [NaN, NaN] (upstream ' ...
-     'muscleComponentThreshold = NaN).']);
-testCase.verifyTrue(all(isnan(p.Brain)), ...
-    'AARATEP early Flag step must have Brain = [NaN, NaN].');
-testCase.verifyTrue(all(isnan(p.Heart)), ...
-    'AARATEP early Flag step must have Heart = [NaN, NaN].');
-testCase.verifyEqual(p.Eye, [0.9, 1], ...
-    'AARATEP early Flag step must reject ICs with Eye prob >= 0.9.');
-end
-
-function test_aaratepMuscleFlagAfterICLabelFlag(testCase)
-% pop_icflag in "Flag ICA Components for Rejection" ASSIGNS to
-% EEG.reject.gcompreject (replacing prior flags). The AARATEP muscle
-% classifier ORs into gcompreject. Therefore Flag (ICLabel) must run
-% BEFORE Flag (AARATEP Muscle), or pop_icflag clobbers the muscle flags.
-templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'AARATEP'));
-labelIdx = find(strcmp(t.steps, 'Label ICA Components'), 1, 'last');
-flagIdx  = find(strcmp(t.steps, 'Flag ICA Components for Rejection'), 1, 'last');
-muscleIdx = find(strcmp(t.steps, 'Flag ICA Components (AARATEP Muscle)'), 1);
-testCase.verifyNotEmpty(muscleIdx, 'AARATEP must include the muscle classifier step.');
-testCase.verifyLessThan(labelIdx, flagIdx, ...
-    'Label ICA Components must precede Flag ICA Components for Rejection.');
-testCase.verifyLessThan(flagIdx, muscleIdx, ...
-    ['AARATEP muscle flag must come AFTER the ICLabel flag step - ' ...
-     'pop_icflag replaces gcompreject and would clobber muscle flags.']);
-end
-
-function test_aaratepFinalRereferenceIsAverage(testCase)
-% Upstream line 498: pop_reref(EEG, []) (average reference) before save.
-templates = loadTemplates(testCase);
-t = templates(contains({templates.name}, 'AARATEP'));
-rerefIdx = find(strcmp(t.steps, 'Re-Reference'));
-testCase.verifyEqual(t.spec(rerefIdx(end)).params.ref, '[]', ...
-    'AARATEP final Re-Reference must be average ([]).');
-end

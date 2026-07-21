@@ -32,6 +32,10 @@ function cases = characterizationCases()
 %     Automatic Cleaning     survive rng seeding (internal RNG use), so a
 %     Data, Automatic        golden would flap. Worth revisiting with a
 %     Continuous Rejection   tolerance-based comparison rather than exact.
+%     Flag ICA Components  de-registered as a step (our interpretation of a
+%     (AARATEP Peak)         paper threshold, absent from the maintained
+%                            AARATEP code). The function remains on the path
+%                            and saved pipelines call it via Manual Command.
 %     Find Artifacts EDM   tesa_edm always blocks: it opens a figure, waits
 %     (TESA)                 for a keypress (tesa_edm.m:227) and then a
 %                            questdlg, ungated by any parameter. It cannot run
@@ -52,7 +56,6 @@ cases = {
   'Remove Bad Epoch',                  'epoched',       struct(),                              {}
   'Remove TMS Artifacts (TESA)',       'epochedPulses', struct(),                              {}
   'Interpolate Missing Data (TESA)',   'epochedPulses', struct(),     {'Remove TMS Artifacts (TESA)'}
-  'Flag ICA Components (AARATEP Peak)','epochedICA',    struct(),                              {}
   'Extract TEP (TESA)',                'epochedPulses', struct(),                              {}
   'Find TEP Peaks (TESA)',             'epochedPulses', struct(),        {'Extract TEP (TESA)'}
   'TEP Peak Output',                   'epochedPulses', struct('tablePlot','off'), ...

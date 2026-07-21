@@ -138,10 +138,6 @@ function clause = methodsClause(stepName, params)
         case 'Flag ICA Components (AARATEP Muscle)'
             clause = 'residual muscle components identified by the AARATEP classifier were also removed';
 
-        case 'Flag ICA Components (AARATEP Peak)'
-            clause = sprintf('components with trial-averaged peak amplitude above %g uV were removed', ...
-                getf(p,'peakThresholdUv',15));
-
         case 'Modified Bandpass Filter (AARATEP)'
             lo = getf(p,'lowCutoff',0); hi = getf(p,'highCutoff',0);
             if lo > 0 && hi > 0
@@ -155,19 +151,16 @@ function clause = methodsClause(stepName, params)
                 'Butterworth filter (%s with autoregressive extrapolation to ' ...
                 'limit artifact spread)'], edges);
 
-        case 'Detect Bad Channels (PREP deviation)'
-            clause = 'bad channels were detected by robust deviation and interpolated';
-
-        case 'Detect Bad Channels (DDWiener)'
-            clause = 'further bad channels were detected by a data-driven Wiener estimate and interpolated';
+        case 'AARATEP Pipeline (whole)'
+            % One clause for the whole pipeline: it is a published, named
+            % method, so the citation carries the detail and enumerating its
+            % internal stages here would only invite them to drift from what
+            % upstream actually does.
+            clause = ['the data were preprocessed with the AARATEP pipeline ' ...
+                '(automated artifact rejection for TMS-EEG)'];
 
         case 'Source-Informed Sensor Cleaning (SOUND)'
-            if strcmpi(getf(p,'reconstructBadChannels','off'),'on')
-                clause = ['sensor noise was suppressed and removed channels ' ...
-                    'reconstructed using the SOUND algorithm'];
-            else
-                clause = 'sensor noise was suppressed using the SOUND algorithm';
-            end
+            clause = 'sensor noise was suppressed using the SOUND algorithm';
 
         case 'Remove Decay Artifact'
             per = ''; if strcmpi(getf(p,'perTrial','off'),'on'); per = ' on a per-trial basis'; end

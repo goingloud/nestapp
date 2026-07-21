@@ -52,6 +52,31 @@ function [name, params, note] = migrateParams(name, params)
 note = '';
 
 switch name
+    case 'Flag ICA Components (AARATEP Peak)'
+        % De-registered as a step: it is our own interpretation of a threshold
+        % the 2021 paper states without giving a formula, and it is absent from
+        % the maintained AARATEP code - so it is not something nestapp should
+        % offer as a first-class step. The function stays on the path, and
+        % pipelines that used it keep working by calling it directly.
+        %
+        % Migrated rather than left to break: ten saved pipelines use this
+        % step, so rewriting one .mat would have left nine of them failing to
+        % load. Carrying the threshold across matters - dropping it would
+        % silently substitute the default for whatever the pipeline chose.
+        thresh = 15;
+        if isfield(params, 'peakThresholdUv') && ~isempty(params.peakThresholdUv)
+            thresh = params.peakThresholdUv;
+        end
+        name   = 'Manual Command';
+        params = struct( ...
+            'command', sprintf( ...
+                'EEG = aaratepPeakAmplitudeClassifier(EEG, ''peakThresholdUv'', %g);', thresh), ...
+            'description', sprintf( ...
+                'AARATEP peak-amplitude IC flag (%g uV) - was a step, now a direct call', thresh));
+        note = sprintf(['Flag ICA Components (AARATEP Peak) -> Manual Command ' ...
+                        '(threshold %g uV preserved); the step was de-registered ' ...
+                        'but the function still runs'], thresh);
+
     case 'Run ICA'
         % 'Run ICA' chose its algorithm through an `icatype` parameter and
         % passed everything to pop_runica. It is now three steps, one per

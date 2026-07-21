@@ -238,6 +238,65 @@ for si = 1:nSteps
                 EEG = eeg_checkset(EEG);
                 [ALLEEG, EEG, CURRENTSET] = pop_newset(ALLEEG, EEG, CURRENTSET,vars{:});
 
+            case 'AARATEP Pipeline (whole)'
+                ensureAaratepOnPath();
+                o = varinToStruct(varin);
+
+                % Upstream expects CONTINUOUS data with pulse events already
+                % present - it epochs itself. Fail here with something the
+                % user can act on rather than deep inside the orchestrator.
+                if size(EEG.data, 3) > 1
+                    error('nestapp:aaratepNeedsContinuous', ...
+                        ['AARATEP Pipeline (whole) does its own epoching, so it ' ...
+                         'needs continuous data. Remove the Epoching step - the ' ...
+                         'pipeline epochs using its own epochTimespan.']);
+                end
+                if isempty(o.pulseEvents) || all(cellfun(@isempty, cellstr(o.pulseEvents)))
+                    error('nestapp:aaratepNoPulseEvents', ...
+                        ['AARATEP Pipeline (whole) needs the event type marking ' ...
+                         'each TMS pulse. Run "Find TMS Pulses (TESA)" first and ' ...
+                         'set Pulse event type(s) to match.']);
+                end
+                if isempty(o.outputDir)
+                    error('nestapp:aaratepNoOutputDir', ...
+                        ['AARATEP Pipeline (whole) writes its results to a folder ' ...
+                         'and upstream requires one to be named. Set Output folder.']);
+                end
+
+                % Passed through in upstream's own units and defaults. Note
+                % maximizePlotsToMonitor is deliberately absent - its
+                % validator (@isschar) is not a function, so setting it at all
+                % raises an undefined-function error.
+                EEG = c_TMSEEG_Preprocess_AARATEPPipeline(EEG, ...
+                    'pulseEvents',                  cellstr(o.pulseEvents), ...
+                    'outputDir',                    o.outputDir, ...
+                    'epochTimespan',                o.epochTimespan, ...
+                    'outputFilePrefix',             o.outputFilePrefix, ...
+                    'artifactTimespan',             o.artifactTimespan, ...
+                    'baselineTimespan',             o.baselineTimespan, ...
+                    'filterPrePostExtrapolationDurations', o.filterPrePostExtrapolationDurations, ...
+                    'downsampleTo',                 o.downsampleTo, ...
+                    'bandpassFreqSpan',             o.bandpassFreqSpan, ...
+                    'badChannelDetectionMethod',    cellstr(o.badChannelDetectionMethod), ...
+                    'badChannelThreshold',          o.badChannelThreshold, ...
+                    'initialEyeComponentThreshold', o.initialEyeComponentThreshold, ...
+                    'SOUNDlambda',                  o.SOUNDlambda, ...
+                    'leadFieldPath',                o.leadFieldPath, ...
+                    'doDecayRemovalPerTrial',       strcmpi(o.doDecayRemovalPerTrial, 'on'), ...
+                    'lineNoiseFreq',                o.lineNoiseFreq, ...
+                    'lineNoiseNumHarmonics',        o.lineNoiseNumHarmonics, ...
+                    'ICAType',                      o.ICAType, ...
+                    'brainComponentThreshold',      o.brainComponentThreshold, ...
+                    'stimMuscleComponentThreshold', o.stimMuscleComponentThreshold, ...
+                    'onOverRejection',              o.onOverRejection, ...
+                    'doPostICAArtifactInterpolation', strcmpi(o.doPostICAArtifactInterpolation, 'on'), ...
+                    'doDebug',                      strcmpi(o.doDebug, 'on'), ...
+                    'doPlotFinalTimtopo',           strcmpi(o.doPlotFinalTimtopo, 'on'), ...
+                    'plotXLim',                     o.plotXLim, ...
+                    'plotTPOIs',                    o.plotTPOIs, ...
+                    'plotChans',                    cellstr(o.plotChans));
+                EEG = eeg_checkset( EEG );
+
             case 'Manual Command'
                 cmd = step.params.command;
                 if ischar(cmd) && ~isrow(cmd)
@@ -935,33 +994,7 @@ for si = 1:nSteps
 
             case 'Source-Informed Sensor Cleaning (SOUND)'
                 o = varinToStruct(varin);
-                if isfield(o, 'reconstructBadChannels') && strcmpi(o.reconstructBadChannels, 'on')
-                    % AARATEP backend: reconstruct the channels flagged by
-                    % "Detect Bad Channels (AARATEP)" from the lead field.
-                    ensureAaratepOnPath();
-                    replaceIdx = [];
-                    if isfield(EEG, 'etc') && isfield(EEG.etc, 'aaratepBadChannels') ...
-                            && ~isempty(EEG.etc.aaratepBadChannels)
-                        replaceIdx = find(ismember({EEG.chanlocs.labels}, EEG.etc.aaratepBadChannels));
-                    end
-                    lf = '';
-                    if isfield(o, 'leadFieldPath') && ~isempty(o.leadFieldPath) ...
-                            && ~strcmp(o.leadFieldPath, '[]')
-                        lf = o.leadFieldPath;
-                    end
-                    % doRereferenceBeforeSOUND is just pop_reref([]) inside the
-                    % helper; in nestapp that is the composable "Re-Reference"
-                    % step, so we keep it false here (matches AARATEP upstream).
-                    EEG = c_TMSEEG_runSOUND(EEG, ...
-                        'replaceChannels',          replaceIdx, ...
-                        'lambda',                   o.lambdaValue, ...
-                        'numIterations',            o.iter, ...
-                        'leadFieldPath',            lf, ...
-                        'doRereferenceBeforeSOUND', false);
-                else
-                    % Standard TESA SOUND (pass only its own parameters).
-                    EEG = pop_tesa_sound(EEG, 'lambdaValue', o.lambdaValue, 'iter', o.iter);
-                end
+                EEG = pop_tesa_sound(EEG, 'lambdaValue', o.lambdaValue, 'iter', o.iter);
                 EEG = eeg_checkset( EEG );
 
             case 'Interpolate Missing Data (AR-Blend)'
@@ -1009,11 +1042,6 @@ for si = 1:nSteps
                 EEG = aaratepMuscleClassifier(EEG, vars{:});
                 EEG = eeg_checkset( EEG );
 
-            case 'Flag ICA Components (AARATEP Peak)'
-                vars = convertContainedStringsToChars(varin);
-                EEG = aaratepPeakAmplitudeClassifier(EEG, vars{:});
-                EEG = eeg_checkset( EEG );
-
             case 'Modified Bandpass Filter (AARATEP)'
                 ensureAaratepOnPath();
                 o = varinToStruct(varin);
@@ -1031,39 +1059,6 @@ for si = 1:nSteps
                     'doPiecewise',                   true, ...
                     'piecewiseTimeToExtend',         tExt, ...
                     'prePostExtrapolationDurations', [preDur, preDur]);
-                EEG = eeg_checkset( EEG );
-
-            case {'Detect Bad Channels (PREP deviation)', 'Detect Bad Channels (DDWiener)'}
-                ensureAaratepOnPath();
-                o = varinToStruct(varin);
-                if contains(stepName, 'PREP')
-                    method = 'PREP_deviation';
-                else
-                    method = 'TESA_DDWiener_PerTrial';
-                end
-                priorBad = {};
-                if isfield(EEG, 'etc') && isfield(EEG.etc, 'aaratepBadChannels')
-                    priorBad = EEG.etc.aaratepBadChannels;
-                end
-                artSpan = [o.artifactStartMs, o.artifactEndMs] * 1e-3 * o.artifactMultiplier;
-                % replaceMethod='interpolate' interpolates flagged channels in
-                % place (montage preserved), so a following detector sees the
-                % cleaned data - reproducing the AARATEP ensemble loop. Labels
-                % accumulate in EEG.etc.aaratepBadChannels for SOUND.
-                [EEG, mscBad] = c_TMSEEG_detectBadChannels(EEG, ...
-                    'detectionMethod',  method, ...
-                    'threshold',        o.threshold, ...
-                    'artifactTimespan', artSpan, ...
-                    'replaceMethod',    'interpolate', ...
-                    'doPlot',           false);
-                badIdx = mscBad.badChannelIndices;
-                if islogical(badIdx), badIdx = find(badIdx); end
-                newLabels = {EEG.chanlocs(badIdx).labels};
-                % Channels newly flagged by THIS step (not already interpolated by
-                % a prior detector). Recorded so the report tallies can count them
-                % even though in-place interpolation leaves nbchan unchanged.
-                EEG.etc.aaratepLastDetected = setdiff(newLabels, priorBad, 'stable');
-                EEG.etc.aaratepBadChannels  = union(priorBad, newLabels);
                 EEG = eeg_checkset( EEG );
 
             case 'Median Filter 1D'
@@ -1263,23 +1258,6 @@ for si = 1:nSteps
                 addedNames = setdiff(labelsAfter, labelsBefore, 'stable');
                 fileReport.channels.interpolatedNames = ...
                     [fileReport.channels.interpolatedNames, addedNames(:)'];
-            end
-            % The AARATEP detectors interpolate bad channels IN PLACE, so nbchan
-            % is unchanged and the diff-based tallies above miss them. Count the
-            % channels each flagged this step as both bad/rejected (so the QC
-            % gate's rejectedChanPct sees them) and interpolated (their data was
-            % restored) - matching the standard remove-then-interpolate flow.
-            if any(strcmp(stepName, {'Detect Bad Channels (PREP deviation)', ...
-                    'Detect Bad Channels (DDWiener)'})) ...
-                    && isfield(EEG, 'etc') && isfield(EEG.etc, 'aaratepLastDetected') ...
-                    && ~isempty(EEG.etc.aaratepLastDetected)
-                added = EEG.etc.aaratepLastDetected(:)';
-                nAdded = numel(added);
-                fileReport.channels.nRejected     = fileReport.channels.nRejected + nAdded;
-                fileReport.channels.rejectedNames  = [fileReport.channels.rejectedNames, added];
-                fileReport.channels.badChannelNames = [fileReport.channels.badChannelNames, added];
-                fileReport.channels.nInterpolated  = fileReport.channels.nInterpolated + nAdded;
-                fileReport.channels.interpolatedNames = [fileReport.channels.interpolatedNames, added];
             end
             if strcmp(stepName, 'Epoching') && fileReport.trials.original == 0
                 fileReport.trials.original    = size(EEG.data, 3);

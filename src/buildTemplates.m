@@ -144,155 +144,42 @@ saveMat(reg, steps, ovs, 'Minimal ERP', fullfile(outDir, '3_minimal.mat'));
 
 %% 4 - TMS-EEG / AARATEP
 % AARATEP (Cline et al. 2021, IEEE NER, doi:10.1109/NER49283.2021.9441147).
-% Helpers vendored from chriscline/AARATEPPipeline under MIT.
-% Faithful reproduction of c_TMSEEG_Preprocess_AARATEPPipeline.m (v2.1.1),
-% using dedicated steps that wrap the vendored AARATEP helpers rather than
-% generic/TESA substitutes. Numeric values trace to that script's parameter
-% defaults; order traced verbatim. Key points:
-%   - Modified Bandpass Filter (AARATEP) is the AR-extrapolation high-pass
-%     (line 194) - NOT a plain FIR high-pass.
-%   - Bad channels: "Detect Bad Channels (PREP deviation)" then "Detect Bad
-%     Channels (DDWiener)" each detect and interpolate IN PLACE (line 208,
-%     replaceMethod='interpolate'). Run in sequence they reproduce the upstream
-%     ensemble exactly - the second method sees the PREP-cleaned data, and the
-%     bad-channel labels accumulate in EEG.etc.aaratepBadChannels for SOUND.
-%   - SOUND reconstructs those channels: the shared "Source-Informed Sensor
-%     Cleaning (SOUND)" step with reconstructBadChannels = on routes to the
-%     AARATEP c_TMSEEG_runSOUND backend (replaceChannels, line 315).
-%   - pop_reref([]) is applied BEFORE the early eye-IC ICA (line 244).
-%   - the early eye-IC pass flags ONLY Eye (muscleComponentThreshold = NaN,
-%     line 254).
-%   - round-2 IC rejection ORs muscle flags onto ICLabel flags before a
-%     single pop_subcomp, so Label/Flag (ICLabel) must precede the AARATEP
-%     muscle classifier.
-%   - Notch (58-62 Hz bandstop) and final 200 Hz low-pass use TESA's
-%     zero-phase Butterworth ("Frequency Filter (TESA)"), the same algorithm
-%     as upstream's c_EEG_filter_butterworth.
-% The only AARATEP-specific steps are the AR-extrapolation high-pass
-% ("Modified Bandpass Filter (AARATEP)") and the two atomic ensemble detectors
-% ("Detect Bad Channels (PREP deviation)" / "(DDWiener)"); everything else
-% reuses shared steps.
-% The 2021 paper's final "reject ICs with peak amplitude > 15 uV" check is NOT in
-% the v2.1.1 code (verified: code rejection is ICLabel thresholds + the TMS-muscle
-% ratio only). It is INCLUDED here as "Flag ICA Components (AARATEP Peak)" per an
-% explicit request to follow the paper for this step (paper-over-code). The exact
-% metric - trial-averaged, back-projected, peak |amplitude| in uV - is our
-% interpretation; the paper gives the 15 uV threshold but no formula.
+% Vendored from chriscline/AARATEPPipeline under MIT.
+%
+% This template used to reproduce the AARATEP pipeline as ~20 individual
+% nestapp steps, each wrapping a vendored helper, with the ordering and
+% parameter values traced by hand against
+% c_TMSEEG_Preprocess_AARATEPPipeline.m and kept correct by comments. That
+% made nestapp responsible for the fidelity of a decomposition it did not
+% own: every upstream change would have to be re-traced, and any drift would
+% be silent, since a mis-ordered but still-running pipeline produces
+% perfectly plausible output.
+%
+% It now calls upstream's orchestrator directly, so fidelity is upstream's by
+% construction. nestapp does the two things the orchestrator expects to be
+% done already - load the file, find the pulses - and hands over. The
+% orchestrator epochs, downsamples, re-references, cleans and saves itself.
+%
+% Loading this template opens a parameter wizard, because three of its
+% settings (pulse event type, output folder, epoch window) are required by
+% upstream and have no sensible default.
 steps = { ...
-    'Load Data', 'Load Channel Location', 'Remove un-needed Channels', ...
+    'Load Data', 'Load Channel Location', ...
     'Find TMS Pulses (TESA)', ...
-    'Epoching', ...
-    'Interpolate Missing Data (AR-Blend)', ...
-    'Re-Sample', ...
-    'Remove Baseline', ...
-    'Modified Bandpass Filter (AARATEP)', ...
-    'Detect Bad Channels (PREP deviation)', ...
-    'Detect Bad Channels (DDWiener)', ...
-    'Re-Reference', ...
-    'Run ICA (FastICA)', ...
-    'Label ICA Components', ...
-    'Flag ICA Components for Rejection', ...
-    'Remove Flagged ICA Components', ...
-    'Source-Informed Sensor Cleaning (SOUND)', ...
-    'Remove Decay Artifact', ...
-    'Interpolate Missing Data (AR-Blend)', ...
-    'Frequency Filter (TESA)', ...
-    'Run ICA (FastICA)', ...
-    'Label ICA Components', ...
-    'Flag ICA Components for Rejection', ...
-    'Flag ICA Components (AARATEP Muscle)', ...
-    'Flag ICA Components (AARATEP Peak)', ...
-    'Remove Flagged ICA Components', ...
-    'Frequency Filter (TESA)', ...
-    'Re-Reference', ...
+    'AARATEP Pipeline (whole)', ...
     'Save New Set'};
 ovs = emptyOvs(steps);
-% Epoching: upstream epochTimespan = [-1, 1.5] s.
-ovs = setOv(ovs, steps, 'Epoching',  'timelim',   [-1, 1.5]);
-% AR-Blend interp: artifactTimespan = [-0.002, 0.012] s -> [-2, 12] ms.
-% prePostFitDurations = [20, 20] ms hardcoded upstream.
-ovs = setOv(ovs, steps, 'Interpolate Missing Data (AR-Blend)', 'artifactStartMs', -2, 1);
-ovs = setOv(ovs, steps, 'Interpolate Missing Data (AR-Blend)', 'artifactEndMs',   12, 1);
-ovs = setOv(ovs, steps, 'Interpolate Missing Data (AR-Blend)', 'prePostFitMs',    20, 1);
-ovs = setOv(ovs, steps, 'Interpolate Missing Data (AR-Blend)', 'artifactStartMs', -2, 2);
-ovs = setOv(ovs, steps, 'Interpolate Missing Data (AR-Blend)', 'artifactEndMs',   12, 2);
-ovs = setOv(ovs, steps, 'Interpolate Missing Data (AR-Blend)', 'prePostFitMs',    20, 2);
-ovs = setOv(ovs, steps, 'Re-Sample',                     'freq',                    1000);
-ovs = setOv(ovs, steps, 'Remove Baseline',               'timerange',               [-500, -10]);
-% Modified high-pass: 1 Hz, AR-extrapolation, artifact span x3 -> [-6, 36] ms,
-% 0.5 s extrapolation (upstream c_TMSEEG_applyModifiedBandpassFilter call).
-ovs = setOv(ovs, steps, 'Modified Bandpass Filter (AARATEP)', 'lowCutoff',             1);
-ovs = setOv(ovs, steps, 'Modified Bandpass Filter (AARATEP)', 'highCutoff',            0);
-ovs = setOv(ovs, steps, 'Modified Bandpass Filter (AARATEP)', 'artifactStartMs',       -2);
-ovs = setOv(ovs, steps, 'Modified Bandpass Filter (AARATEP)', 'artifactEndMs',         12);
-ovs = setOv(ovs, steps, 'Modified Bandpass Filter (AARATEP)', 'artifactMultiplier',    3);
-ovs = setOv(ovs, steps, 'Modified Bandpass Filter (AARATEP)', 'piecewiseTimeToExtend', 0.5);
-ovs = setOv(ovs, steps, 'Modified Bandpass Filter (AARATEP)', 'prePostExtrapMs',       0);
-% Bad channels: PREP deviation then DDWiener, each threshold 10, artifact span
-% x2, interpolated in place. Run sequentially they equal the upstream ensemble.
-ovs = setOv(ovs, steps, 'Detect Bad Channels (PREP deviation)', 'threshold',          10);
-ovs = setOv(ovs, steps, 'Detect Bad Channels (PREP deviation)', 'artifactStartMs',    -2);
-ovs = setOv(ovs, steps, 'Detect Bad Channels (PREP deviation)', 'artifactEndMs',      12);
-ovs = setOv(ovs, steps, 'Detect Bad Channels (PREP deviation)', 'artifactMultiplier', 2);
-ovs = setOv(ovs, steps, 'Detect Bad Channels (DDWiener)',       'threshold',          10);
-ovs = setOv(ovs, steps, 'Detect Bad Channels (DDWiener)',       'artifactStartMs',    -2);
-ovs = setOv(ovs, steps, 'Detect Bad Channels (DDWiener)',       'artifactEndMs',      12);
-ovs = setOv(ovs, steps, 'Detect Bad Channels (DDWiener)',       'artifactMultiplier', 2);
-% Early average reference before the early eye-IC ICA (upstream line 244).
-ovs = setOv(ovs, steps, 'Re-Reference', 'ref', '[]', 1);
-% Both ICA rounds use the FastICA step ('Run ICA (FastICA)').
-% Early eye-IC pass: c_TMSEEG_runICLabel called with eyeThreshold=0.9 and
-% muscle/brain/other = NaN (line 254). Only Eye is flagged. Explicitly
-% disable Muscle (registry default is [0.9, 1]) and all others.
-ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'Brain',        [NaN, NaN], 1);
-ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'Muscle',       [NaN, NaN], 1);
-ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'Eye',          [0.9, 1],   1);
-ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'Heart',        [NaN, NaN], 1);
-ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'LineNoise',    [NaN, NaN], 1);
-ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'ChannelNoise', [NaN, NaN], 1);
-ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'Other',        [NaN, NaN], 1);
-% SOUND: lambda = 10^-1.5 ~ 0.0316; 10 iterations; reconstruct the channels
-% flagged by the detect step (AARATEP backend, replaceChannels = badChannels).
-ovs = setOv(ovs, steps, 'Source-Informed Sensor Cleaning (SOUND)', 'lambdaValue',              10^-1.5);
-ovs = setOv(ovs, steps, 'Source-Informed Sensor Cleaning (SOUND)', 'iter',                     10);
-ovs = setOv(ovs, steps, 'Source-Informed Sensor Cleaning (SOUND)', 'leadFieldPath',            '[]');
-ovs = setOv(ovs, steps, 'Source-Informed Sensor Cleaning (SOUND)', 'reconstructBadChannels',   'on');
-% Decay removal: artifactTimespan = [-2, 12] ms, doDecayRemovalPerTrial = true.
-ovs = setOv(ovs, steps, 'Remove Decay Artifact', 'artifactStartMs', -2);
-ovs = setOv(ovs, steps, 'Remove Decay Artifact', 'artifactEndMs',   12);
-ovs = setOv(ovs, steps, 'Remove Decay Artifact', 'perTrial',        'on');
-% Line noise: 58-62 Hz zero-phase Butterworth bandstop, order 4 (TESA's
-% pop_tesa_filtbutter; same algorithm as upstream c_EEG_filter_butterworth.
-% lineNoiseFreq 60, lineNoiseNumHarmonics 1 -> fundamental only).
-ovs = setOv(ovs, steps, 'Frequency Filter (TESA)', 'high', 58,         1);
-ovs = setOv(ovs, steps, 'Frequency Filter (TESA)', 'low',  62,         1);
-ovs = setOv(ovs, steps, 'Frequency Filter (TESA)', 'ord',  4,          1);
-ovs = setOv(ovs, steps, 'Frequency Filter (TESA)', 'type', 'bandstop', 1);
-% Round-2 IC rejection: pop_icflag writes gcompreject from ICLabel
-% probabilities FIRST, then the AARATEP muscle classifier ORs its flags
-% into gcompreject. Reverse order would let pop_icflag clobber the muscle
-% flags. Thresholds are the c_TMSEEG_runICLabel defaults (verified in
-% third_party/aaratep): eye > 0.08, muscle > 0.2, brain < 0.3 - and that
-% wrapper checks ONLY Eye/Muscle/Brain, so Heart/LineNoise/ChannelNoise are
-% left OFF (the upstream code never tests them; an earlier version wrongly
-% set them to 0.8 and used eye 0.8 / muscle 0.9, which under-removed eye/
-% muscle and spuriously removed heart/line/channel components).
-ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'Brain',        [0, 0.3],   2);
-ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'Eye',          [0.08, 1],  2);
-ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'Muscle',       [0.2, 1],   2);
-ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'Heart',        [NaN, NaN], 2);
-ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'LineNoise',    [NaN, NaN], 2);
-ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'ChannelNoise', [NaN, NaN], 2);
-ovs = setOv(ovs, steps, 'Flag ICA Components for Rejection', 'Other',        [NaN, NaN], 2);
-% Final low-pass: 200 Hz zero-phase Butterworth, order 4 (TESA lowpass; high
-% empty so only the low-pass edge applies). Upstream bandpassFreqSpan = [1 200].
-ovs = setOv(ovs, steps, 'Frequency Filter (TESA)', 'high', [],        2);
-ovs = setOv(ovs, steps, 'Frequency Filter (TESA)', 'low',  200,       2);
-ovs = setOv(ovs, steps, 'Frequency Filter (TESA)', 'ord',  4,         2);
-ovs = setOv(ovs, steps, 'Frequency Filter (TESA)', 'type', 'lowpass', 2);
-% Final average reference (upstream line 498).
-ovs = setOv(ovs, steps, 'Re-Reference',  'ref',     '[]', 2);
-ovs = setOv(ovs, steps, 'Save New Set',  'savenew', 'aaratep');
+
+% Pulse detection is nestapp's job here - the orchestrator matches events by
+% type, it does not detect them. Upstream labels them 'TMS'.
+ovs = setOv(ovs, steps, 'Find TMS Pulses (TESA)', 'tmslabel', 'TMS');
+ovs = setOv(ovs, steps, 'AARATEP Pipeline (whole)', 'pulseEvents', {'TMS'});
+% Upstream's own epochTimespan default for this pipeline (line 211 of the
+% previous hand-traced template): [-1, 1.5] s.
+ovs = setOv(ovs, steps, 'AARATEP Pipeline (whole)', 'epochTimespan', [-1, 1.5]);
+% Save the returned dataset as a .set alongside the orchestrator's own
+% outputs, so the result lands in nestapp's normal output layout too.
+ovs = setOv(ovs, steps, 'Save New Set', 'savenew', 'aaratep');
 saveMat(reg, steps, ovs, 'TMS-EEG / AARATEP', ...
     fullfile(outDir, '4_aaratep.mat'));
 
