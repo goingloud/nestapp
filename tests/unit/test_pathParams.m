@@ -5,15 +5,12 @@
 classdef test_pathParams < matlab.unittest.TestCase
 % TEST_PATHPARAMS  Path parameters are declared as such, and behave as strings.
 %
-%   A path typed by hand into a table cell is easy to get wrong and gives no
-%   feedback until the run fails. Parameters that hold one are declared
-%   'folder' or 'file', which is what enables the Browse button beside the
-%   parameter table.
-%
-%   The button itself needs the app open and is not covered here. What is
-%   covered is everything that decides its behaviour: which parameters are
-%   paths, and that declaring one does not change how the value is stored or
-%   converted.
+%   The AARATEP output folder is the only output path in the app a user could
+%   be asked to type. It should not be: left empty it resolves from the same
+%   output root every other step writes under, so the common case needs no
+%   path at all. Covered here: that it is optional, that the type declaration
+%   does not change how a value is stored, and that a hand-set path still
+%   round-trips for anyone who wants to override the default.
 
     properties
         registry
@@ -34,8 +31,8 @@ classdef test_pathParams < matlab.unittest.TestCase
             % Browse button exists.
             p = paramFor(tc, 'AARATEP Pipeline (whole)', 'outputDir');
             tc.verifyEqual(p.type, 'folder');
-            tc.verifyTrue(p.required, ...
-                'It is required as well as browsable - the run cannot start without it');
+            tc.verifyFalse(p.required, ...
+                'Empty is meaningful - it means "use the output root" - so it cannot be required');
         end
 
         function the_lead_field_is_a_file_param(tc)
@@ -45,26 +42,22 @@ classdef test_pathParams < matlab.unittest.TestCase
                 'Optional - empty means the template lead field');
         end
 
-        function an_unset_path_cell_names_the_control_that_fills_it(tc)
-            % '(not set)' says something is missing but not what to do. The
-            % required one has to point at Browse, because a user who does not
-            % find that button types the path by hand or gives up.
+        function an_unset_output_folder_says_where_output_goes(tc)
+            % '(not set)' would read as something missing. Empty is the
+            % normal, correct state here, so the cell says what it resolves to.
             reg  = tc.registry;
             step = makePipelineStep('AARATEP Pipeline (whole)', reg);
             k    = find(strcmp({reg.name}, 'AARATEP Pipeline (whole)'), 1);
 
-            data = buildParamTableData(step, reg(k));
-            shown = valueShownFor(tc, data, 'Output folder');
-            tc.verifyTrue(contains(lower(shown), 'browse'), sprintf( ...
-                'An unset output folder shows "%s"; it should name Browse', shown));
-
-            % Placeholders are greyed by the '(' convention - without it the
-            % hint would read as a real value the user had already chosen.
+            shown = valueShownFor(tc, buildParamTableData(step, reg(k)), 'Output folder');
+            tc.verifyTrue(contains(lower(shown), 'output root'), sprintf( ...
+                'An empty output folder shows "%s"; it should say it uses the output root', shown));
+            % The '(' convention greys it, so the hint cannot read as a real path.
             tc.verifyEqual(shown(1), '(');
         end
 
         function a_chosen_path_replaces_the_hint(tc)
-            % The hint must not linger once Browse has written a value.
+            % Overriding the default must actually show the override.
             reg  = tc.registry;
             step = makePipelineStep('AARATEP Pipeline (whole)', reg);
             step.params.outputDir = tempdir;
@@ -88,8 +81,8 @@ classdef test_pathParams < matlab.unittest.TestCase
         end
 
         function a_browsed_path_survives_a_save_and_load(tc)
-            % What the Browse button writes has to come back unchanged, or the
-            % user picks a folder and the run still fails.
+            % An override has to come back unchanged, or a user who set one
+            % deliberately silently gets the default instead.
             reg  = tc.registry;
             step = makePipelineStep('AARATEP Pipeline (whole)', reg);
             chosen = tempdir;

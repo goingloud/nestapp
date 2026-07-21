@@ -257,10 +257,19 @@ for si = 1:nSteps
                          'each TMS pulse. Run "Find TMS Pulses (TESA)" first and ' ...
                          'set Pulse event type(s) to match.']);
                 end
+                % Left blank, the output folder comes from the same output
+                % root every other step writes under, in a per-file subfolder.
+                % Per-file is not cosmetic: upstream MOVES an existing output
+                % folder to <folder>_old# before writing, so one shared folder
+                % would have each file displace the previous file's results.
+                if isempty(o.outputDir)
+                    o.outputDir = aaratepOutputDir(opts.batchCtx, fullPath);
+                end
                 if isempty(o.outputDir)
                     error('nestapp:aaratepNoOutputDir', ...
-                        ['AARATEP Pipeline (whole) writes its results to a folder ' ...
-                         'and upstream requires one to be named. Set Output folder.']);
+                        ['AARATEP Pipeline (whole) writes its results to a folder. ' ...
+                         'Normally this comes from the output root, but this run ' ...
+                         'has no batch context, so set Output folder explicitly.']);
                 end
 
                 % Passed through in upstream's own units and defaults. Note
