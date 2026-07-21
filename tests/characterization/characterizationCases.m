@@ -32,6 +32,11 @@ function cases = characterizationCases()
 %     Automatic Cleaning     survive rng seeding (internal RNG use), so a
 %     Data, Automatic        golden would flap. Worth revisiting with a
 %     Continuous Rejection   tolerance-based comparison rather than exact.
+%     Find Artifacts EDM   tesa_edm always blocks: it opens a figure, waits
+%     (TESA)                 for a keypress (tesa_edm.m:227) and then a
+%                            questdlg, ungated by any parameter. It cannot run
+%                            unattended at all, so a golden would hang the
+%                            suite rather than fail it.
 %     SSP SIR              needs a TMS-artifact-bearing montage with real
 %                          spatial structure; the synthetic ring montage does
 %                          not produce a meaningful projection.
@@ -52,5 +57,9 @@ cases = {
   'Find TEP Peaks (TESA)',             'epochedPulses', struct(),        {'Extract TEP (TESA)'}
   'TEP Peak Output',                   'epochedPulses', struct('tablePlot','off'), ...
                                         {'Extract TEP (TESA)','Find TEP Peaks (TESA)'}
+  % Needs epochs wider than the +/-1 s it re-epochs to, and an artifact big
+  % enough to trip a 1e4 uV-per-sample derivative threshold - hence its own
+  % fixture. Shipped defaults, no overrides.
+  'Fix TMS Pulse (TESA)',              'epochedTmsArtifact', struct(),         {}
 };
 end

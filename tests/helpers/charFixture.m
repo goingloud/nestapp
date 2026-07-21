@@ -11,6 +11,10 @@ function EEG = charFixture(kind)
 %     'continuous'    32 ch x 20 s @ 1 kHz, TMS pulse events every 2 s
 %     'epoched'       32 ch x 600 samples x 24 trials @ 1 kHz, [-200, 400) ms
 %     'epochedPulses' as 'epoched', plus a TMS event at t=0 in every epoch
+%     'epochedTmsArtifact'
+%                     16 ch x 2400 samples x 4 trials, [-1.2, 1.199] s, with a
+%                     real-scale (15 mV) TMS artifact - for steps that
+%                     re-detect the pulse from the signal
 %     'epochedICA'    as 'epoched', plus a full ICA decomposition
 %
 %   Every fixture is seeded (rng(42), per the project convention) and built
@@ -93,6 +97,48 @@ switch lower(kind)
         end
         EEG = eeg_checkset(EEG, 'eventconsistency');
 
+    case 'epochedtmsartifact'
+        % Wide epochs with a REAL-scale TMS artifact, for the steps that
+        % re-detect the pulse from the signal rather than from events.
+        %
+        % Two things the other epoched fixtures cannot provide:
+        %   - epochs wider than the window those steps re-epoch to
+        %     (tesa_fixevent rejects newEpoch outside [xmin, xmax], and its
+        %     default target is +/-1 s)
+        %   - an artifact big enough to trip the detector. TESA thresholds on
+        %     the first derivative at 1e4 uV PER SAMPLE by default, so the
+        %     40 uV decay in 'epoched' is three orders of magnitude short. A
+        %     real TMS artifact is thousands of uV, which is what this is.
+        %
+        % Kept separate rather than widening 'epochedPulses': six goldens
+        % depend on that fixture, and none of them are about pulse detection.
+        srate = 1000; nPnts = 2400; nTrial = 4; nCh = 16;
+        t = (0:nPnts-1) / srate;
+        EEG = baseStruct(nCh, nPnts, nTrial, srate);
+        d = zeros(nCh, nPnts, nTrial);
+        for k = 1:nTrial
+            d(:, :, k) = synthSignal(nCh, t, srate);
+        end
+        EEG.data  = d;
+        EEG.xmin  = -1.2;
+        EEG.xmax  = 1.199;
+        EEG.times = linspace(-1200, 1199, nPnts);
+        onset = find(EEG.times >= 0, 1);
+        % Single-sample 15 mV step: derivative 1.5e4 uV/sample, above the
+        % 1e4 default, and the decay after it is the shape the artifact steps
+        % exist to remove.
+        for k = 1:nTrial
+            EEG.data(:, onset, k)     = EEG.data(:, onset, k) + 15000;
+            tail                      = 0:(nPnts - onset - 1);
+            EEG.data(:, onset+1:end, k) = EEG.data(:, onset+1:end, k) + ...
+                repmat(60 * exp(-tail / (0.02 * srate)), nCh, 1);
+            EEG.event(k).type     = 'TMS';
+            EEG.event(k).latency  = (k-1)*nPnts + onset;
+            EEG.event(k).duration = 0;
+            EEG.event(k).epoch    = k;
+        end
+        EEG = eeg_checkset(EEG, 'eventconsistency');
+
     case 'epochedica'
         EEG = charFixture('epoched');
         % A fixed, well-conditioned mixing matrix - not random - so the
@@ -109,7 +155,7 @@ switch lower(kind)
     otherwise
         error('charFixture:UnknownKind', ...
             ['Unknown fixture kind "%s". Use tiny | continuous | epoched | ' ...
-             'epochedPulses | epochedICA.'], kind);
+             'epochedPulses | epochedTmsArtifact | epochedICA.'], kind);
 end
 
 EEG = eeg_checkset(EEG);

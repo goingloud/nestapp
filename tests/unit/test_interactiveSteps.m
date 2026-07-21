@@ -38,7 +38,8 @@ classdef test_interactiveSteps < matlab.unittest.TestCase
 
     methods (Test)
         function known_blocking_steps_are_flagged(tc)
-            for name = {'Visualize EEG Data', 'Remove Bad Trials'}
+            for name = {'Visualize EEG Data', 'Remove Bad Trials', ...
+                        'Find Artifacts EDM (TESA)'}
                 k = find(strcmp({tc.registry.name}, name{1}), 1);
                 tc.assertNotEmpty(k, sprintf('%s missing from registry', name{1}));
                 tc.verifyTrue(tc.registry(k).interactive, ...
