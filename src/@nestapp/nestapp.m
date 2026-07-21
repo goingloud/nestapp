@@ -1721,7 +1721,10 @@ classdef nestapp < matlab.apps.AppBase
         % Code that executes after component creation
         function startupFcn(app)
             clc
-            steps = stepRegistry();
+            % Only steps this machine can run - see availableSteps. Items and
+            % info are built from the SAME filtered list because
+            % StepsListBoxValueChanged indexes info by position in Items.
+            steps = availableSteps();
             app.StepsListBox.Items = {steps.name};
 
             app.info = {steps.info};

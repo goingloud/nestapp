@@ -52,38 +52,21 @@ if anyStepNeedsVendoredHelper(stepNames, steps, nameList)
     end
 end
 
-% missing: containers.Map keyed by plugin name
+% missing: containers.Map keyed by plugin display name
 missing = containers.Map('KeyType','char','ValueType','any');
 
 for i = 1:numel(stepNames)
     idx = find(strcmp(nameList, stepNames{i}), 1);
     if isempty(idx); continue; end
-    reqs = steps(idx).requires;
-    if isempty(reqs); continue; end
-    for j = 1:numel(reqs)
-        r = reqs(j);
-        % Skip format-specific loaders when no files are selected or no file of
-        % that format is present in the selection.
-        if ~isempty(r.fileExt) && (isempty(filePaths) || ~any(strcmpi(exts, r.fileExt)))
-            continue
-        end
-
-        % A license-gated toolbox function needs a stronger check than which():
-        % which('fit') stays non-empty even when the real toolbox fit() is gone
-        % (it falls through to the @gmdistribution method). The probe below also
-        % repairs a mis-set path when it can, so the run is not blocked on a
-        % problem we can fix here.
-        if isFieldSet(r, 'feature')
-            [isAvail, reason] = toolboxFnAvailable(r);
-            if ~isAvail
-                missing = addMissing(missing, r.plugin, reason, stepNames{i}, r.fn);
-            end
-            continue
-        end
-
-        if isempty(which(r.fn))
-            missing = addMissing(missing, r.plugin, r.installNote, stepNames{i}, r.fn);
-        end
+    % One resolver answers this for both the picker and the pre-flight, so a
+    % step cannot be offered in the list and then rejected here (or the
+    % reverse). See stepAvailability.
+    if isempty(filePaths); checkExts = {}; else; checkExts = exts; end
+    [avail, unmet] = stepAvailability(steps(idx), checkExts);
+    if avail; continue; end
+    for j = 1:numel(unmet)
+        missing = addMissing(missing, unmet(j).plugin, unmet(j).note, ...
+                             stepNames{i}, unmet(j).fn);
     end
 end
 
@@ -124,24 +107,6 @@ for i = 1:numel(stepNames)
             tf = true; return
         end
     end
-end
-end
-
-function tf = isFieldSet(r, name)
-% True when struct field `name` exists and is non-empty (older req() structs
-% built before the field was added simply do not carry it).
-tf = isfield(r, name) && ~isempty(r.(name));
-end
-
-function [isAvail, note] = toolboxFnAvailable(r)
-% Availability check for a license-gated toolbox function. Curve Fitting's
-% fit() has a dedicated probe (ensureCurveFittingFit) that also repairs a
-% mis-set path; any other feature falls back to which() + a license test.
-if strcmpi(r.feature, 'Curve_Fitting_Toolbox')
-    [isAvail, note] = ensureCurveFittingFit();
-else
-    isAvail = ~isempty(which(r.fn)) && license('test', r.feature) == 1;
-    note    = r.installNote;
 end
 end
 

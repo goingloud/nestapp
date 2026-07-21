@@ -499,6 +499,71 @@ for si = 1:nSteps
                 EEG = pop_cleanline(EEG, vars{:});
                 EEG = eeg_checkset( EEG );
 
+            % ---- TESA 1.2 -------------------------------------------
+            % Reachable only when the installed TESA declares 1.2 or later;
+            % stepAvailability hides these from the picker and blocks a run
+            % that references one otherwise. Argument shapes are upstream's:
+            % robustdetrend / robustdemean take positional arguments, the
+            % rest take name/value pairs. nestapp exposes times in ms and
+            % converts where upstream wants seconds.
+            case 'Robust Detrend (TESA)'
+                o = varinToStruct(varin);
+                EEG = pop_tesa_robustdetrend(EEG, o.timeWindow, ...
+                    o.thresholdSD, o.polyOrder, o.excludeWindow);
+                EEG = eeg_checkset( EEG );
+
+            case 'Robust Demean (TESA)'
+                o = varinToStruct(varin);
+                EEG = pop_tesa_robustdemean(EEG, o.timeWindow, ...
+                    o.thresholdSD, o.excludeWindow);
+                EEG = eeg_checkset( EEG );
+
+            case 'Modified Bandpass Filter (TESA)'
+                o = varinToStruct(varin);
+                % artifactTimespan and pieceWiseTimeToExtend are SECONDS
+                % upstream; the step exposes ms like every other nestapp step.
+                EEG = pop_tesa_modifiedbandpassfilter(EEG, ...
+                    'lowCutoff',             o.lowCutoff, ...
+                    'highCutoff',            o.highCutoff, ...
+                    'filterMethod',          o.filterMethod, ...
+                    'artifactTimespan',      [o.artifactStartMs, o.artifactEndMs] * 1e-3, ...
+                    'pieceWiseTimeToExtend', o.extendMs * 1e-3, ...
+                    'filtOrder',             o.filtOrder, ...
+                    'filtType',              o.filtType);
+                EEG = eeg_checkset( EEG );
+
+            case 'Detect Bad Channels (TESA)'
+                o = varinToStruct(varin);
+                % artifactTimespan is in ms for this one - upstream differs
+                % between these two functions, so do not factor the conversion.
+                EEG = pop_tesa_detectbadchannels(EEG, ...
+                    'detectionMethod',  o.detectionMethod, ...
+                    'replaceMethod',    o.replaceMethod, ...
+                    'artifactTimespan', [o.artifactStartMs, o.artifactEndMs], ...
+                    'threshold',        o.threshold);
+                EEG = eeg_checkset( EEG );
+
+            case 'Fit Artifact Model (TESA)'
+                o = varinToStruct(varin);
+                EEG = pop_tesa_fitartifactmodel(EEG, ...
+                    'tPulseMs',          o.tPulseMs, ...
+                    'tPulseDurationMs',  o.tPulseDurationMs, ...
+                    'tSkipMs',           o.tSkipMs, ...
+                    'tSelectMs',         o.tSelectMs, ...
+                    't_fitmodel_p_ms',   o.tFitPosMs, ...
+                    't_fitmodel_n_ms',   o.tFitNegMs, ...
+                    't_lincomb_ms',      o.tLinCombMs, ...
+                    'epoch_range',       o.epochRangeMs);
+                EEG = eeg_checkset( EEG );
+
+            case 'Interactive Channel Reject (TESA)'
+                % Takes no options and returns the data with the user's
+                % selection applied - it blocks on uiwait until they choose.
+                badBefore = {EEG.chanlocs.labels};
+                EEG = pop_tesa_interactivechanreject(EEG);
+                EEG = eeg_checkset( EEG );
+                EEG = recordBadChannels(EEG, badBefore);
+
             case 'Frequency Filter (TESA)'
                 vars = convertContainedStringsToChars(varin);
                 ind1 = find(strcmp(vars,'high'));

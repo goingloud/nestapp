@@ -81,8 +81,11 @@ function createComponents(app)
             app.CleaningTab.AutoResizeChildren = 'off';
             app.CleaningTab.Title = 'Cleaning';
 
-            % Create StepsListBox - items derived from stepRegistry, not hardcoded
-            reg_init = stepRegistry();
+            % Create StepsListBox - items derived from the registry, not
+            % hardcoded, and filtered to what this machine can actually run
+            % (availableSteps). startupFcn repopulates it the same way; both
+            % must use the same source or the list differs between them.
+            reg_init = availableSteps();
             app.StepsListBox = uilistbox(app.CleaningTab);
             app.StepsListBox.Items = {reg_init.name};
             app.StepsListBox.ValueChangedFcn = createCallbackFcn(app, @StepsListBoxValueChanged, true);
