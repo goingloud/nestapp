@@ -1161,8 +1161,12 @@ s.params = [ ...
        'Inter-stimulus interval for paired-pulse correction.', 'placeholder', '(single pulse)', 'type', 'scalar')];
 s.requires = req('tesa_fixevent', 'TESA', ...
     'EEGLAB Plugin Manager -> search "TESA" (v1.1.1 or later)');
-% ISI applies only to paired-pulse correction.
-s.paramEnableWhen = struct('param','ISI','controller','paired','values',{{'yes'}});
+% ISI and the refractory period are both read only inside upstream's
+% paired-pulse branch (tesa_fixevent.m:182). Set under paired='no' they are
+% accepted by the table and then never looked at.
+s.paramEnableWhen = [ ...
+    struct('param','ISI',    'controller','paired','values',{{'yes'}}), ...
+    struct('param','refract','controller','paired','values',{{'yes'}})];
 steps(end+1) = s;
 
 %% ---- Interpolate Channels -------------------------------------------
@@ -1329,8 +1333,12 @@ s.params = [ ...
        'Inter-stimulus interval for paired-pulse paradigm.', 'placeholder', '(single pulse)', 'type', 'scalar')];
 s.requires = req('pop_tesa_tepextract', 'TESA', ...
     'EEGLAB Plugin Manager -> search "TESA" (v1.1.1 or later)');
-% Electrodes apply only to ROI extraction (GMFA uses all channels).
-s.paramEnableWhen = struct('param','elecs','controller','type','values',{{'ROI'}});
+% Electrodes apply only to ROI extraction (GMFA uses all channels). ISI is
+% stripped from the call unless pairCorrect is on (see processOneFile), so
+% without this rule the table would accept a value it then discards.
+s.paramEnableWhen = [ ...
+    struct('param','elecs','controller','type',       'values',{{'ROI'}}), ...
+    struct('param','ISI',  'controller','pairCorrect','values',{{'on'}})];
 steps(end+1) = s;
 
 %% ---- Find TEP Peaks (TESA) ------------------------------------------
@@ -1987,9 +1995,8 @@ function p = makeParam(key, friendlyName, unit, validRange, description, varargi
 %   Optional name-value pairs:
 %     'placeholder' - shown in UITable for [] values, e.g. '(all channels)'
 %     'type'        - scalar (default) | integer | vector | logical | string |
-%                     stringlist | folder | file. folder/file behave as string
-%                     but get a Browse button in the parameter table, so a path
-%                     never has to be typed by hand.
+%                     stringlist | folder | file. folder/file behave exactly as
+%                     string; they record that the value is a path.
 %     'required'    - true when the step cannot run until the user supplies a
 %                     value. Used to prompt on load rather than letting the run
 %                     fail later, and kept as data here so the check is not

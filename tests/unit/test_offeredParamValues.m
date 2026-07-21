@@ -33,6 +33,42 @@ classdef test_offeredParamValues < matlab.unittest.TestCase
     end
 
     methods (Test)
+        function isi_is_greyed_out_unless_paired_correction_is_on(tc)
+            % Extract TEP strips ISI from the call unless pairCorrect is on
+            % (processOneFile). Without the rule the table takes a value and
+            % throws it away - the user sees a setting that does nothing.
+            reg  = tc.registry;
+            step = makePipelineStep('Extract TEP (TESA)', reg);
+            k    = find(strcmp({reg.name}, 'Extract TEP (TESA)'), 1);
+
+            step.params.pairCorrect = 'off';
+            tc.verifyTrue(ismember('ISI', disabledParamKeys(reg(k), step.params)), ...
+                'ISI is discarded when pairCorrect is off, so it must be greyed');
+
+            step.params.pairCorrect = 'on';
+            tc.verifyFalse(ismember('ISI', disabledParamKeys(reg(k), step.params)), ...
+                'With pairCorrect on, ISI is the value the correction needs');
+        end
+
+        function refract_is_greyed_out_unless_pulses_are_paired(tc)
+            % tesa_fixevent reads refract only inside its paired branch
+            % (tesa_fixevent.m:182), exactly like ISI beside it.
+            reg  = tc.registry;
+            step = makePipelineStep('Fix TMS Pulse (TESA)', reg);
+            k    = find(strcmp({reg.name}, 'Fix TMS Pulse (TESA)'), 1);
+
+            step.params.paired = 'no';
+            disabled = disabledParamKeys(reg(k), step.params);
+            tc.verifyTrue(ismember('refract', disabled));
+            tc.verifyTrue(ismember('ISI', disabled), ...
+                'The pre-existing ISI rule must survive alongside the new one');
+
+            step.params.paired = 'yes';
+            disabled = disabledParamKeys(reg(k), step.params);
+            tc.verifyFalse(ismember('refract', disabled));
+            tc.verifyFalse(ismember('ISI', disabled));
+        end
+
         function interpolation_offers_only_methods_tesa_accepts(tc)
             p = paramFor(tc, 'Interpolate Missing Data (TESA)', 'interpolation');
             offered = strsplit(p.validRange, '|');
