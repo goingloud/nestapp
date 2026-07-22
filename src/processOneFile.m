@@ -175,8 +175,14 @@ for si = 1:nSteps
                     end
                     [chPath, chBase, chExt] = fileparts(chanLocFile);
                     chPath = [chPath, filesep];
-                    EEG = pop_chanedit(EEG, 'lookup', lookforchnlocs, ...
-                        'load', {[chPath, chBase, chExt], 'filetype', 'autodetect'});
+                    % 'load' must come BEFORE 'lookup': pop_chanedit processes
+                    % its args in order, and the 'load' case replaces the whole
+                    % chanlocs struct (and resets chaninfo). With 'lookup' first
+                    % its work was discarded, so the standard_1005 coordinates
+                    % were never actually merged. Load the file, THEN look up.
+                    EEG = pop_chanedit(EEG, ...
+                        'load', {[chPath, chBase, chExt], 'filetype', 'autodetect'}, ...
+                        'lookup', lookforchnlocs);
                     [ALLEEG, EEG, CURRENTSET] = eeg_store(ALLEEG, EEG, CURRENTSET);
                 end
                 % Validate coordinates (after any lookup): invalid coords
@@ -351,12 +357,19 @@ for si = 1:nSteps
                 EEG = eeg_checkset( EEG );
 
             case 'Remove Bad Channels (manual)'
+                % pop_topochansel draws only the channels that HAVE
+                % coordinates and returns indices into that reduced set. If
+                % any channel lacks coordinates the returned indices no longer
+                % line up with EEG.chanlocs, and pop_select would remove the
+                % wrong channels - so require EVERY channel to have a location,
+                % not just some.
                 if ~isfield(EEG, 'chanlocs') || isempty(EEG.chanlocs) || ...
-                        ~isfield(EEG.chanlocs, 'X') || all(cellfun(@isempty, {EEG.chanlocs.X}))
+                        ~isfield(EEG.chanlocs, 'X') || any(cellfun(@isempty, {EEG.chanlocs.X}))
                     error('nestapp:noChanlocsForPicker', ...
                         ['Remove Bad Channels (manual) draws the electrodes on ' ...
-                         'the scalp, so it needs channel locations. Run "Load ' ...
-                         'Channel Location" before it.']);
+                         'the scalp, so it needs a location for EVERY channel. ' ...
+                         'Run "Load Channel Location" first, or remove the ' ...
+                         'channels that have no coordinates.']);
                 end
                 % pop_topochansel RETURNS the selection - no base-workspace
                 % side effects to plumb - so the user's choice reaches the
@@ -756,9 +769,26 @@ for si = 1:nSteps
 
             case 'Flag ICA Components for Rejection'
                 vars = convertContainedStringsToChars(varin);
-                threshold = zeros(7,2);
+                classNames = {'Brain','Muscle','Eye','Heart','LineNoise', ...
+                              'ChannelNoise','Other'};
+                threshold = nan(7,2);
                 for nflag = 2:2:14
-                    threshold(nflag/2,:) = vars{nflag};
+                    t = vars{nflag};
+                    cls = nflag/2;
+                    if isempty(t) || (numel(t) == 2 && all(isnan(t)))
+                        threshold(cls,:) = [NaN NaN];   % disabled for this class
+                    elseif numel(t) == 2
+                        threshold(cls,:) = t(:)';
+                    else
+                        % A single number scalar-expands to [x x], and
+                        % pop_icflag then tests p > x & p < x, which is never
+                        % true - the class is silently NOT flagged. Refuse it.
+                        error('nestapp:icflagBadThreshold', ...
+                            ['Flag ICA Components: the %s threshold must be a ' ...
+                             '[min max] pair (e.g. [0.9 1]), or empty to ' ...
+                             'disable. A single number flags nothing.'], ...
+                            classNames{cls});
+                    end
                 end
                 EEG = pop_icflag(EEG, threshold);
                 EEG = eeg_checkset( EEG );

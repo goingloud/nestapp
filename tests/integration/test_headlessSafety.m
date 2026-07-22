@@ -98,6 +98,37 @@ classdef test_headlessSafety < matlab.unittest.TestCase
                 'The failure must name the step that provides the locations');
         end
 
+        function manual_channel_picker_fails_on_partial_locations(tc)
+            % pop_topochansel draws only the channels that HAVE coordinates and
+            % returns indices into that reduced set. With SOME channels missing
+            % coordinates those indices misalign with EEG.chanlocs and the wrong
+            % channels get removed - so a partly-located montage must be
+            % rejected up front, not silently mis-handled.
+            reg = stepRegistry();
+            d = tempname; mkdir(d);
+            tc.addTeardown(@() rmdir(d, 's'));
+            fx = charFixture('tiny');
+            fx.chanlocs(2).X = [];    % one channel loses its coordinate
+            fx.chanlocs(2).Y = [];
+            fx.chanlocs(2).Z = [];
+            evalc('pop_saveset(fx, ''filename'', ''partloc.set'', ''filepath'', d);');
+
+            spec = [makePipelineStep('Load Data', reg), ...
+                    makePipelineStep('Remove Bad Channels (manual)', reg)];
+            err = [];
+            try
+                evalc(['processOneFile(spec, fullfile(d, ''partloc.set''), ' ...
+                       'struct(''pipelineName'',''headless'',''fileIndex'',1,''uiFigure'',[]));']);
+            catch e
+                err = e;
+            end
+            tc.assertNotEmpty(err, ...
+                'A partly-located montage must be rejected, not silently mis-handled');
+            tc.verifyTrue(contains(err.message, 'every channel') || ...
+                contains(err.message, 'EVERY channel'), ...
+                'The message must say a location is needed for every channel');
+        end
+
         function reReference_to_a_present_channel_still_works(tc)
             % The guard must not have broken the ordinary path.
             reg  = stepRegistry();

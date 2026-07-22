@@ -32,6 +32,16 @@ classdef test_convertParam < matlab.unittest.TestCase
             tc.verifyEqual(convertParam([5 10 15], 'scalar'), 5);
         end
 
+        function scalar_off_is_preserved_not_nan(tc)
+            % Several EEGLAB scalar params (clean_rawdata *Criterion) accept
+            % 'off' to disable a stage. Coercing it to NaN left the stage
+            % running with a NaN threshold (or stripped it to the default).
+            tc.verifyEqual(convertParam('off', 'scalar'), 'off');
+            tc.verifyEqual(convertParam('off', 'integer'), 'off');
+            tc.verifyEqual(convertParam({'off'}, 'scalar'), 'off');
+            tc.verifyEqual(convertParam(' OFF ', 'scalar'), 'off');   % trimmed, normalised
+        end
+
         function integer_numeric_passthrough(tc)
             tc.verifyEqual(convertParam(1000, 'integer'), 1000);
         end

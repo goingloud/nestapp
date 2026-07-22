@@ -17,7 +17,16 @@ function v = convertParam(raw, type)
 
 switch type
     case {'scalar', 'integer'}
-        if isnumeric(raw) && isscalar(raw)
+        % Several EEGLAB scalar params (clean_rawdata's *Criterion values)
+        % accept the literal 'off' to disable that stage. Preserve it rather
+        % than coercing it to NaN, which would leave the stage running with a
+        % NaN threshold or be stripped into the upstream default.
+        if (ischar(raw) || isstring(raw)) && strcmpi(strtrim(char(raw)), 'off')
+            v = 'off';
+        elseif iscell(raw) && isscalar(raw) && (ischar(raw{1}) || isstring(raw{1})) ...
+                && strcmpi(strtrim(char(raw{1})), 'off')
+            v = 'off';
+        elseif isnumeric(raw) && isscalar(raw)
             v = raw;
         elseif isnumeric(raw) && ~isempty(raw)
             v = raw(1);
