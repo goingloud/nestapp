@@ -30,6 +30,18 @@ classdef test_qualityGate < matlab.unittest.TestCase
                 EEG.event(k).latency = k * 100;
             end
         end
+
+        function EEG = epochedWithGmfaPeak()
+            % Epoched data with a deterministic cross-channel deflection at
+            % 100 ms (inside the default [20 300] window). The trial-mean GMFA
+            % (std across channels) peaks there at a known, large value, well
+            % above the small residual noise elsewhere.
+            EEG = test_qualityGate.makeEEG(8, 20, 500, 1000);   % times: -200..299 ms
+            EEG.data = single(0.1 * EEG.data);                  % small baseline noise
+            tIdx = find(EEG.times >= 100, 1);                   % ~100 ms
+            offset = (0:7)' * 10;                               % std ~24.5 uV across chans
+            EEG.data(:, tIdx, :) = EEG.data(:, tIdx, :) + offset;
+        end
     end
 
     methods (Test)
@@ -172,6 +184,44 @@ classdef test_qualityGate < matlab.unittest.TestCase
             EEG.data = single(EEG.data - mean(EEG.data, 1));
             gate = qualityGate(EEG, struct('minRankRatio', 0.99));
             tc.verifyEqual(gate.verdict, 'Fail');
+        end
+
+        function gmfa_peak_check_is_reachable_from_the_registry(tc)
+            % The check is fully wired in qualityGate.m but was declared in the
+            % registry NOWHERE, so the GUI could never enable it. Confirm the
+            % three params (threshold, window, warn) are now declared.
+            root = fileparts(fileparts(fileparts(mfilename('fullpath'))));
+            addpath(genpath(fullfile(root, 'src')));
+            reg = stepRegistry();
+            k = find(strcmp({reg.name}, 'Quality Gate'), 1);
+            keys = {reg(k).params.key};
+            for want = {'maxGmfaPeak', 'gmfaWindowMs', 'maxGmfaPeakWarnAt'}
+                tc.verifyTrue(ismember(want{1}, keys), sprintf( ...
+                    '%s must be a declared Quality Gate param', want{1}));
+                tc.verifyTrue(isfield(reg(k).defaults, want{1}), sprintf( ...
+                    '%s must have a default so a fresh step carries it', want{1}));
+            end
+        end
+
+        function gmfa_peak_over_threshold_fails(tc)
+            % An elevated grand-average TEP must trip the gate - this is the
+            % blown-GMFA failure mode the check exists for.
+            EEG = test_qualityGate.epochedWithGmfaPeak();
+            % Read the metric the gate computes, then bracket it.
+            peak = qualityGate(EEG, struct('thresholdMode','batch', ...
+                'maxGmfaPeak', 1)).metrics.gmfaPeakUv;
+            tc.assertGreaterThan(peak, 5, 'fixture must have a clear GMFA peak');
+            gate = qualityGate(EEG, struct('maxGmfaPeak', peak / 2));
+            tc.verifyEqual(gate.verdict, 'Fail');
+            tc.verifyTrue(any(contains(gate.reasons, 'GMFA')));
+        end
+
+        function gmfa_peak_under_threshold_passes(tc)
+            EEG = test_qualityGate.epochedWithGmfaPeak();
+            peak = qualityGate(EEG, struct('thresholdMode','batch', ...
+                'maxGmfaPeak', 1)).metrics.gmfaPeakUv;
+            gate = qualityGate(EEG, struct('maxGmfaPeak', peak * 2));
+            tc.verifyEqual(gate.verdict, 'Pass');
         end
 
         function minTrials_catches_low_trial_count(tc)
