@@ -657,6 +657,15 @@ for si = 1:nSteps
 
             case 'Modified Bandpass Filter (TESA)'
                 o = varinToStruct(varin);
+                % The Butterworth design requires an even order (it fails deep
+                % in an inputParser with @(x)mod(x,2)==0). Catch it here with a
+                % message that names the step, as the sibling Frequency Filter
+                % (TESA) does, rather than letting the cryptic one surface.
+                if ~isempty(o.filtOrder) && mod(o.filtOrder, 2) ~= 0
+                    error('nestapp:modBandpassOddOrder', ...
+                        ['Modified Bandpass Filter (TESA): filter order must be ' ...
+                         'an even number (got %g). Use 4, 6, ...'], o.filtOrder);
+                end
                 % artifactTimespan and pieceWiseTimeToExtend are SECONDS
                 % upstream; the step exposes ms like every other nestapp step.
                 EEG = pop_tesa_modifiedbandpassfilter(EEG, ...
