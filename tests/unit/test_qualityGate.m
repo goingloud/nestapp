@@ -224,6 +224,23 @@ classdef test_qualityGate < matlab.unittest.TestCase
             tc.verifyEqual(gate.verdict, 'Pass');
         end
 
+        function batch_mode_persists_warn_overrides(tc)
+            % QG-3: enabledThresholds omitted every *WarnAt key, so the batch
+            % finalizer's per-metric warn override (getOr(thresholds,
+            % [param 'WarnAt'])) always missed and silently fell back to
+            % marginalSlack. The persisted thresholds must now carry the WarnAt
+            % siblings for the finalizer to read.
+            EEG = test_qualityGate.makeEEG(8, 30, 500, 1000);
+            gate = qualityGate(EEG, struct('thresholdMode', 'batch', ...
+                'maxFlatChans', 2, 'maxFlatChansWarnAt', 1, ...
+                'maxOutlierChanPct', 10, 'maxOutlierChanPctWarnAt', 4));
+            tc.verifyEqual(gate.verdict, 'Pending');
+            tc.verifyTrue(isfield(gate.thresholds, 'maxFlatChansWarnAt'), ...
+                'batch thresholds must carry the WarnAt override');
+            tc.verifyEqual(gate.thresholds.maxFlatChansWarnAt, 1);
+            tc.verifyEqual(gate.thresholds.maxOutlierChanPctWarnAt, 4);
+        end
+
         function minTrials_catches_low_trial_count(tc)
             EEG = test_qualityGate.makeEEG(8, 5, 500, 1000);
             gate = qualityGate(EEG, struct('minTrials', 30, 'marginalSlack', 0.8));

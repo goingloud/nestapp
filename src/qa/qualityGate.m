@@ -437,15 +437,29 @@ end
 end
 
 function t = enabledThresholds(p)
-% Mirror of params, but only the threshold-bearing fields, kept for log.
+% Mirror of params, kept for the log AND read back by finalizeBatchVerdicts in
+% batch mode. It must therefore carry the per-metric *WarnAt overrides too:
+% finalizeBatchVerdicts looks up [paramName 'WarnAt'] here, and if the key is
+% absent it silently falls back to marginalSlack - so every batch-mode WarnAt
+% override was dead until these were included.
 fields = {'expectedChans','expectedSrate','minTriggers','maxTriggers','maxFlatChans', ...
     'maxSatChans','maxGmfaPeak','minRankRatio', ...
     'maxRejectedTrialPct','maxRejectedChanPct', ...
     'maxOutlierTrialPct','maxOutlierChanPct', ...
     'minTrials','maxTrials','maxEMGFraction','maxElectrodeCount'};
+warnFields = {'minTriggersWarnAt','maxTriggersWarnAt','maxFlatChansWarnAt', ...
+    'maxSatChansWarnAt','maxGmfaPeakWarnAt','minRankRatioWarnAt', ...
+    'maxRejectedTrialPctWarnAt','maxRejectedChanPctWarnAt', ...
+    'maxOutlierTrialPctWarnAt','maxOutlierChanPctWarnAt', ...
+    'minTrialsWarnAt','maxTrialsWarnAt','maxEMGFractionWarnAt','maxElectrodeCountWarnAt'};
 t = struct();
 for k = 1:numel(fields)
     t.(fields{k}) = p.(fields{k});
+end
+for k = 1:numel(warnFields)
+    if isfield(p, warnFields{k})
+        t.(warnFields{k}) = p.(warnFields{k});
+    end
 end
 t.marginalSlack = p.marginalSlack;
 t.outlierSigmas = p.outlierSigmas;
