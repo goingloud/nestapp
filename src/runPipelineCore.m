@@ -48,10 +48,6 @@ if ~depsOk
     return
 end
 
-% One-time deprecation log: warn the user about Quality Gate params
-% renamed in this version. The gate itself silently aliases them.
-warnDeprecatedGateParams(spec);
-
 % Unified batch output: every run gets one timestamped folder.
 % Destination priority: opts.outputRoot (programmatic override, used
 % by tests) > nestapp.outputRoot pref > common parent of inputs.
@@ -393,30 +389,6 @@ if ~cancelled && ~isempty(failed)
     end
 end
 
-% Batch-mode Quality Gate verdicts: resolved across all completed reports
-% (including any just re-attempted) using median + N * MAD cutoffs. Pending
-% verdicts inside successful reports become Pass / Marginal / Fail; reports
-% with no batch-mode gates are unaffected.
-if ~cancelled
-    successReports = reports(~cellfun(@isempty, reports));
-    if hasPendingBatchGates(successReports)
-        if skipOnQualityFail
-            nestLog('QC', ['Batch-mode Quality Gates ignore skipOnQualityFail ' ...
-                '(verdicts are not known until after the run completes)']);
-        end
-        successReports = finalizeBatchVerdicts(successReports);
-        % Write resolved reports back into the per-file slots so the
-        % downstream summary / CSV / save sees the final verdicts.
-        slot = 0;
-        for fi = 1:nFiles
-            if ~isempty(reports{fi})
-                slot = slot + 1;
-                reports{fi} = successReports{slot};
-            end
-        end
-    end
-end
-
 % Collect summaries for all successfully processed files.
 summaries = cell(nFiles, 1);
 for fi = 1:nFiles
@@ -704,20 +676,6 @@ switch verdict
     case 'Marginal', c = [0.95 0.80 0.20];   % yellow
     case 'Fail',     c = [0.85 0.20 0.20];   % red
     otherwise,       c = [0.70 0.70 0.70];   % gray
-end
-end
-
-function tf = hasPendingBatchGates(reports)
-% Scan completed reports for any Quality Gate left in 'Pending' state.
-tf = false;
-for k = 1:numel(reports)
-    r = reports{k};
-    if ~isfield(r, 'quality') || ~isfield(r.quality, 'gates'), continue, end
-    for gi = 1:numel(r.quality.gates)
-        if strcmpi(r.quality.gates{gi}.verdict, 'Pending')
-            tf = true; return
-        end
-    end
 end
 end
 
@@ -1084,27 +1042,6 @@ if strcmp(answer, 'Cancel')
 end
 end
 
-function warnDeprecatedGateParams(spec)
-% Scan a pipeline spec for Quality Gate steps using renamed params and
-% emit one CFG log line per unique mapping so users update their saved
-% pipelines. Silent when nothing deprecated is found.
-aliases = deprecatedGateAliases();
-seen = false(size(aliases, 1), 1);
-for si = 1:numel(spec)
-    if ~strcmp(spec(si).name, 'Quality Gate'), continue, end
-    p = spec(si).params;
-    for k = 1:size(aliases, 1)
-        if seen(k), continue, end
-        old = aliases{k, 1};
-        if isfield(p, old) && ~isempty(p.(old)) && p.(old) ~= 0
-            nestLog('CFG', ['Quality Gate param "%s" is deprecated. ' ...
-                'Rename to "%s" in your saved pipeline (the run will ' ...
-                'still honor the old name).'], old, aliases{k, 2});
-            seen(k) = true;
-        end
-    end
-end
-end
 
 function closeDlg(dlg)
 if isfield(dlg, 'overlay') && ~isempty(dlg.overlay) && isvalid(dlg.overlay)

@@ -23,18 +23,14 @@ classdef test_aggregateMetricDistributions < matlab.unittest.TestCase
                                       'worstVerdict', 'Pass'));
         end
 
-        function g = gate(mode, thresholds, metrics, varargin)
+        function g = gate(thresholds, metrics)
             g = struct( ...
                 'label',      'g', ...
-                'mode',       mode, ...
                 'verdict',    'Pass', ...
                 'reasons',    {{}}, ...
                 'metrics',    metrics, ...
                 'thresholds', thresholds, ...
                 'stepIndex',  1);
-            for k = 1:2:numel(varargin)
-                g.(varargin{k}) = varargin{k+1};
-            end
         end
     end
 
@@ -43,8 +39,7 @@ classdef test_aggregateMetricDistributions < matlab.unittest.TestCase
             mk = @test_aggregateMetricDistributions.reportWithGates;
             mg = @test_aggregateMetricDistributions.gate;
             % All thresholds disabled (= 0) -> nothing to plot.
-            r = mk({mg('absolute', struct('maxFlatChans', 0), ...
-                struct('nFlatChans', 3))});
+            r = mk({mg(struct('maxFlatChans', 0), struct('nFlatChans', 3))});
             d = aggregateMetricDistributions({r});
             tc.verifyEmpty(d);
         end
@@ -52,43 +47,30 @@ classdef test_aggregateMetricDistributions < matlab.unittest.TestCase
         function single_enabled_metric_appears_once(tc)
             mk = @test_aggregateMetricDistributions.reportWithGates;
             mg = @test_aggregateMetricDistributions.gate;
-            r = mk({mg('absolute', struct('maxFlatChans', 5), ...
-                struct('nFlatChans', 2))});
+            r = mk({mg(struct('maxFlatChans', 5), struct('nFlatChans', 2))});
             d = aggregateMetricDistributions({r});
             tc.verifyLength(d, 1);
             tc.verifyEqual(d(1).name, 'nFlatChans');
             tc.verifyEqual(d(1).values, 2);
             tc.verifyEqual(d(1).absThresholds, 5);
-            tc.verifyEmpty(d(1).batchCutoffs);
-            tc.verifyEqual(d(1).mode, 'absolute');
         end
 
-        function mixed_modes_record_both_thresholds(tc)
+        function values_accumulate_across_files(tc)
             mk = @test_aggregateMetricDistributions.reportWithGates;
             mg = @test_aggregateMetricDistributions.gate;
-
-            absGate = mg('absolute', struct('maxOutlierTrialPct', 10), ...
-                struct('pctOutlierTrials', 3));
-            batchGate = mg('batch', struct('maxOutlierTrialPct', 1), ...
-                struct('pctOutlierTrials', 8), ...
-                'batchCutoffs', struct('pctOutlierTrials', 12));
-
-            d = aggregateMetricDistributions({mk({absGate, batchGate})});
+            r1 = mk({mg(struct('maxFlatChans', 5), struct('nFlatChans', 2))});
+            r2 = mk({mg(struct('maxFlatChans', 5), struct('nFlatChans', 4))});
+            d = aggregateMetricDistributions({r1, r2});
             tc.verifyLength(d, 1);
-            tc.verifyEqual(d.name, 'pctOutlierTrials');
-            tc.verifyEqual(sort(d.values), [3 8]);
-            tc.verifyEqual(d.absThresholds, 10);
-            tc.verifyEqual(d.batchCutoffs, 12);
-            tc.verifyEqual(d.mode, 'mixed');
+            tc.verifyEqual(sort(d.values), [2 4]);
+            tc.verifyEqual(sort(d.absThresholds), [5 5]);
         end
 
         function NaN_metric_values_omitted(tc)
             mk = @test_aggregateMetricDistributions.reportWithGates;
             mg = @test_aggregateMetricDistributions.gate;
-            r1 = mk({mg('absolute', struct('maxEMGFraction', 0.3), ...
-                struct('emgFraction', NaN))});
-            r2 = mk({mg('absolute', struct('maxEMGFraction', 0.3), ...
-                struct('emgFraction', 0.15))});
+            r1 = mk({mg(struct('maxEMGFraction', 0.3), struct('emgFraction', NaN))});
+            r2 = mk({mg(struct('maxEMGFraction', 0.3), struct('emgFraction', 0.15))});
             d = aggregateMetricDistributions({r1, r2});
             tc.verifyLength(d, 1);
             tc.verifyEqual(d.values, 0.15);   % only the non-NaN entry
@@ -97,8 +79,7 @@ classdef test_aggregateMetricDistributions < matlab.unittest.TestCase
         function min_style_metric_picked_up_via_minTriggers(tc)
             mk = @test_aggregateMetricDistributions.reportWithGates;
             mg = @test_aggregateMetricDistributions.gate;
-            r = mk({mg('absolute', struct('minTriggers', 100), ...
-                struct('nTriggers', 85))});
+            r = mk({mg(struct('minTriggers', 100), struct('nTriggers', 85))});
             d = aggregateMetricDistributions({r});
             tc.verifyEqual(d.name, 'nTriggers');
             tc.verifyEqual(d.values, 85);

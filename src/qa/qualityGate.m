@@ -8,20 +8,20 @@ function gate = qualityGate(EEG, params, context)
 %   gate = QUALITYGATE(EEG, params, context)
 %
 %   Measures a battery of quality metrics on EEG and compares each to a
-%   threshold from the step's params struct. The optional context
+%   HARD threshold from the step's params struct. The optional context
 %   struct carries the running channel / trial rejection tally from
 %   processOneFile (fileReport.channels and fileReport.trials), used by
 %   the maxRejected*Pct metrics below.
 %
-%   Disabled checks: any threshold equal to 0 is skipped (the metric
-%   is still recorded for batch-mode aggregation).
+%   Each metric is a plain threshold with an optional warn level:
+%     value beyond the threshold        -> Fail
+%     value beyond the *WarnAt (if set) -> Marginal
+%     otherwise                         -> Pass
+%   A threshold of 0 disables that check. A *WarnAt of 0 means "no
+%   Marginal band" for that metric (it goes straight Pass -> Fail).
 %
-%   params fields (all optional except gateLabel / thresholdMode /
-%   marginalSlack / outlierSigmas which always carry defaults):
+%   params fields (all optional except gateLabel, which carries a default):
 %     gateLabel              string shown in CSV / report
-%     thresholdMode          'absolute' | 'batch'
-%     marginalSlack          scalar in (0, 1] - default Marginal width
-%                            for max checks (slack * threshold)
 %     expectedChans          exact-match check on EEG.nbchan
 %     expectedSrate          exact-match check on EEG.srate
 %     minTriggers            EEG.event count must be >= threshold
@@ -32,54 +32,34 @@ function gate = qualityGate(EEG, params, context)
 %     maxGmfaPeak            peak GMFA (std across channels of the TRIAL-MEAN)
 %                              within gmfaWindowMs must be <= threshold [uV].
 %                              Catches an elevated / blown grand-average TEP.
-%                              (Single-trial excursions are handled by the
-%                              pre-ICA2 amplitude/probability trial rejection,
-%                              not here.)
 %     gmfaWindowMs           [lo hi] ms window for maxGmfaPeak (default [20 300]).
 %     minRankRatio           rank(EEG.data) / nbchan must be >= threshold
-%     maxRejectedChanPct     % of original channels removed by the
-%                              pipeline so far must be <= threshold
+%     maxRejectedChanPct     % of original channels removed by the pipeline
+%                              so far must be <= threshold
 %                              (needs context.channels.original/.nRejected)
-%     maxRejectedTrialPct    % of original trials removed must be <=
-%                              threshold (needs context.trials)
-%     maxOutlierChanPct      % statistical-outlier channels in current
-%                              EEG (SM median > N*MAD above batch
-%                              median) must be <= threshold. Useful
-%                              BEFORE cleaning; near-zero after.
-%     maxOutlierTrialPct     same idea for trials
+%     maxRejectedTrialPct    % of original trials removed must be <= threshold
+%                              (needs context.trials)
 %     minTrials              EEG.trials must be >= threshold
 %     maxTrials              EEG.trials must be <= threshold (catches
 %                              over-segmentation from spurious triggers)
 %     maxEMGFraction         ICA classifier emg fraction must be <= threshold
 %     maxElectrodeCount      ICA electrode-artifact count must be <= threshold
-%     outlierSigmas          scalar - N for the median + N * 1.4826 *
-%                              MAD rule (drives maxOutlier*Pct and
-%                              cross-file batch-mode outlier detection)
-%
-%   Deprecated aliases (still honored, silently mapped):
-%     maxBadChanPct  -> maxOutlierChanPct
-%     maxBadTrialPct -> maxOutlierTrialPct
-%     (plus the *WarnAt siblings). Their old name described the
-%     outlier behavior poorly. The maxRejected* metrics are the ones
-%     most users actually want for post-cleanup gates.
+%     <metric>WarnAt         optional Marginal cutoff for the metric above.
+%                              For a max metric set it below the threshold;
+%                              for a min metric set it above the threshold.
 %
 %   Output gate:
-%     .label, .mode
-%     .verdict      'Pass' | 'Marginal' | 'Fail' | 'Pending'
-%                     ('Pending' in batch mode; resolved by
-%                      finalizeBatchVerdicts after the run completes)
+%     .label
+%     .verdict      'Pass' | 'Marginal' | 'Fail'
 %     .reasons      cellstr - one per check that flagged (empty for Pass)
-%     .metrics      struct of raw metric values (one field per enabled
-%                     check, used by batch-mode finalization)
-%     .thresholds   struct mirroring the absolute thresholds that were
-%                     used (for log readability and batch fallback)
+%     .metrics      struct of raw metric values (one field per enabled check)
+%     .thresholds   struct mirroring the thresholds that were used (for logs)
 %
 %   Reuses Phase 1 helpers:
 %     computeAttributeMatrix    SM matrix + flat/sat masks + per-axis medians
 %     computeICAQualityMetrics  source-aware ICA classification
 %
-%   See also: finalizeBatchVerdicts, computeAttributeMatrix,
-%             computeICAQualityMetrics
+%   See also: computeAttributeMatrix, computeICAQualityMetrics
 
 if nargin < 2 || ~isstruct(params), params = struct(); end
 if nargin < 3 || ~isstruct(context), context = struct(); end
@@ -87,7 +67,6 @@ params = applyDefaults(params);
 
 gate = struct( ...
     'label',      params.gateLabel, ...
-    'mode',       params.thresholdMode, ...
     'verdict',    'Pass', ...
     'reasons',    {{}}, ...
     'metrics',    struct(), ...
@@ -95,13 +74,7 @@ gate = struct( ...
 
 gate.metrics    = collectMetrics(EEG, params, context);
 gate.thresholds = enabledThresholds(params);
-
-if strcmpi(params.thresholdMode, 'batch')
-    gate.verdict = 'Pending';
-    return
-end
-
-[gate.verdict, gate.reasons] = evaluateAbsolute(gate.metrics, params);
+[gate.verdict, gate.reasons] = evaluate(gate.metrics, params);
 end
 
 % -- metric collection ----------------------------------------------------
@@ -122,24 +95,15 @@ m.rankRatio = computeRankRatio(EEG);
 m.rejectedChanPct  = rejectionPct(context, 'channels', 'nRejected');
 m.rejectedTrialPct = rejectionPct(context, 'trials',   'rejected');
 
-needsSM = anyEnabled(params, {'maxFlatChans','maxSatChans', ...
-    'maxOutlierTrialPct','maxOutlierChanPct'});
+needsSM = anyEnabled(params, {'maxFlatChans','maxSatChans'});
 if needsSM
-    [SM, sm] = computeAttributeMatrix(EEG, ...
+    [~, sm] = computeAttributeMatrix(EEG, ...
         struct('attribute', 'minmax_no_tms'));
-    m.nFlatChans       = sum(sm.flatChanMask);
-    m.nSatChans        = sum(sm.satChanMask);
-    m.pctOutlierTrials = pctOutliers(sm.perTrialMedian, params.outlierSigmas);
-    skipMask = sm.flatChanMask | sm.satChanMask;
-    chanScores = sm.perChanMedian;
-    chanScores(skipMask) = NaN;     % exclude already-flagged channels
-    m.pctOutlierChans  = pctOutliers(chanScores, params.outlierSigmas);
-    m.smShape          = size(SM);  % stored for batch-mode diagnostics
+    m.nFlatChans = sum(sm.flatChanMask);
+    m.nSatChans  = sum(sm.satChanMask);
 else
-    m.nFlatChans       = NaN;
-    m.nSatChans        = NaN;
-    m.pctOutlierTrials = NaN;
-    m.pctOutlierChans  = NaN;
+    m.nFlatChans = NaN;
+    m.nSatChans  = NaN;
 end
 
 needsICA = anyEnabled(params, {'maxEMGFraction','maxElectrodeCount'});
@@ -159,9 +123,9 @@ else
     m.electrodeCount = NaN;
 end
 
-% Output-TEP metrics: only computed when a TEP check is enabled, and only
-% meaningful on epoched data with a time axis (NaN -> check skipped otherwise,
-% e.g. on a continuous-data gate).
+% Output-TEP metric: only computed when enabled, and only meaningful on
+% epoched data with a time axis (NaN -> check skipped otherwise, e.g. on a
+% continuous-data gate).
 needsTEP = anyEnabled(params, {'maxGmfaPeak'});
 if needsTEP
     m.gmfaPeakUv = tepGmfaPeak(EEG, params.gmfaWindowMs);
@@ -185,9 +149,9 @@ gmfa      = std(trialMean, 0, 1);        % 1 x time
 v         = max(gmfa(idx));
 end
 
-% -- absolute-mode evaluation ---------------------------------------------
+% -- evaluation -----------------------------------------------------------
 
-function [verdict, reasons] = evaluateAbsolute(m, p)
+function [verdict, reasons] = evaluate(m, p)
 verdict = 'Pass';
 reasons = {};
 
@@ -202,80 +166,60 @@ if p.expectedSrate > 0 && abs(m.srate - p.expectedSrate) > eps
 end
 
 % Min checks: fail if metric < threshold; marginal if threshold <=
-% metric < warn cutoff. Warn cutoff = warnAt if set, else threshold /
-% slack (symmetric with the max-check default).
+% metric < WarnAt (only when WarnAt is set above threshold).
 [verdict, reasons] = checkMin(verdict, reasons, m.nTriggers,  p.minTriggers, ...
-    p.marginalSlack, p.minTriggersWarnAt,  'triggers');
+    p.minTriggersWarnAt,  'triggers');
 [verdict, reasons] = checkMin(verdict, reasons, m.rankRatio,  p.minRankRatio, ...
-    p.marginalSlack, p.minRankRatioWarnAt, 'rank/nbchan');
+    p.minRankRatioWarnAt, 'rank/nbchan');
 [verdict, reasons] = checkMin(verdict, reasons, m.nTrials,    p.minTrials, ...
-    p.marginalSlack, p.minTrialsWarnAt,    'trials');
+    p.minTrialsWarnAt,    'trials');
 
-% Max checks: fail if metric > threshold; marginal if metric above the
-% warn cutoff. Warn cutoff = warnAt if set, else slack * threshold.
+% Max checks: fail if metric > threshold; marginal if metric > WarnAt
+% (only when WarnAt is set below threshold).
 [verdict, reasons] = checkMax(verdict, reasons, m.nTriggers,        p.maxTriggers, ...
-    p.marginalSlack, p.maxTriggersWarnAt,          'triggers');
+    p.maxTriggersWarnAt,          'triggers');
 [verdict, reasons] = checkMax(verdict, reasons, m.nTrials,          p.maxTrials, ...
-    p.marginalSlack, p.maxTrialsWarnAt,            'trials');
+    p.maxTrialsWarnAt,            'trials');
 [verdict, reasons] = checkMax(verdict, reasons, m.nFlatChans,       p.maxFlatChans, ...
-    p.marginalSlack, p.maxFlatChansWarnAt,         'flat channels');
+    p.maxFlatChansWarnAt,         'flat channels');
 [verdict, reasons] = checkMax(verdict, reasons, m.nSatChans,        p.maxSatChans, ...
-    p.marginalSlack, p.maxSatChansWarnAt,          'saturated channels');
+    p.maxSatChansWarnAt,          'saturated channels');
 [verdict, reasons] = checkMax(verdict, reasons, m.gmfaPeakUv,       p.maxGmfaPeak, ...
-    p.marginalSlack, p.maxGmfaPeakWarnAt,          'GMFA peak uV');
+    p.maxGmfaPeakWarnAt,          'GMFA peak uV');
 [verdict, reasons] = checkMax(verdict, reasons, m.rejectedTrialPct, p.maxRejectedTrialPct, ...
-    p.marginalSlack, p.maxRejectedTrialPctWarnAt,  '% rejected trials');
+    p.maxRejectedTrialPctWarnAt,  '% rejected trials');
 [verdict, reasons] = checkMax(verdict, reasons, m.rejectedChanPct,  p.maxRejectedChanPct, ...
-    p.marginalSlack, p.maxRejectedChanPctWarnAt,   '% rejected channels');
-[verdict, reasons] = checkMax(verdict, reasons, m.pctOutlierTrials, p.maxOutlierTrialPct, ...
-    p.marginalSlack, p.maxOutlierTrialPctWarnAt,   '% outlier trials');
-[verdict, reasons] = checkMax(verdict, reasons, m.pctOutlierChans,  p.maxOutlierChanPct, ...
-    p.marginalSlack, p.maxOutlierChanPctWarnAt,    '% outlier channels');
+    p.maxRejectedChanPctWarnAt,   '% rejected channels');
 [verdict, reasons] = checkMax(verdict, reasons, m.emgFraction,      p.maxEMGFraction, ...
-    p.marginalSlack, p.maxEMGFractionWarnAt,       'EMG fraction');
+    p.maxEMGFractionWarnAt,       'EMG fraction');
 [verdict, reasons] = checkMax(verdict, reasons, m.electrodeCount,   p.maxElectrodeCount, ...
-    p.marginalSlack, p.maxElectrodeCountWarnAt,    'electrode-artifact comps');
+    p.maxElectrodeCountWarnAt,    'electrode-artifact comps');
 end
 
-function [verdict, reasons] = checkMin(verdict, reasons, value, threshold, slack, warnAt, name)
-% slack is unused for min checks (see comment below) but kept in the
-% signature for parity with checkMax.
-%#ok<*INUSD>
+function [verdict, reasons] = checkMin(verdict, reasons, value, threshold, warnAt, name)
 if threshold <= 0 || isnan(value), return, end
-% warnAt sits above threshold for a min check: the marginal band is
-% [threshold, warnAt). With warnAt <= threshold (including the default
-% of 0) there is no marginal band - any value below threshold fails
-% outright. Min metrics like rankRatio are capped at 1.0, so a sensible
-% default cannot be derived from slack alone; users opt into the
-% marginal band by setting WarnAt above threshold.
-warnCutoff = max(warnAt, threshold);
+% The marginal band is [threshold, warnAt), used only when WarnAt is set
+% above threshold. With WarnAt <= threshold (including the default 0) there
+% is no marginal band - any value below threshold fails outright.
 if value < threshold
     [verdict, reasons] = bump(verdict, reasons, 'Fail', ...
         sprintf('%s %g < %g', name, value, threshold));
-elseif value < warnCutoff
+elseif warnAt > threshold && value < warnAt
     [verdict, reasons] = bump(verdict, reasons, 'Marginal', ...
-        sprintf('%s %g near min %g', name, value, warnCutoff));
+        sprintf('%s %g near min %g', name, value, warnAt));
 end
 end
 
-function [verdict, reasons] = checkMax(verdict, reasons, value, threshold, slack, warnAt, name)
+function [verdict, reasons] = checkMax(verdict, reasons, value, threshold, warnAt, name)
 if threshold <= 0 || isnan(value), return, end
-warnCutoff = pickCutoff(warnAt, slack * threshold);
+% The marginal band is (warnAt, threshold], used only when WarnAt is set
+% (below threshold). With WarnAt of 0 there is no marginal band.
 if value > threshold
     [verdict, reasons] = bump(verdict, reasons, 'Fail', ...
         sprintf('%s %g > %g', name, value, threshold));
-elseif value > warnCutoff
+elseif warnAt > 0 && value > warnAt
     [verdict, reasons] = bump(verdict, reasons, 'Marginal', ...
-        sprintf('%s %g near max %g', name, value, threshold));
-end
-end
-
-function c = pickCutoff(warnAt, slackCutoff)
-% warnAt > 0 overrides the slack-derived boundary; otherwise fall back.
-if warnAt > 0
-    c = warnAt;
-else
-    c = slackCutoff;
+        sprintf('%s %g near max %g (warn %g)', name, value, threshold, warnAt));
 end
 end
 
@@ -308,20 +252,6 @@ orig = g.original;
 rej  = g.(rejField);
 if isempty(orig) || isempty(rej) || ~isnumeric(orig) || orig <= 0, return, end
 pct = 100 * double(rej) / double(orig);
-end
-
-function pct = pctOutliers(values, nSigmas)
-% % of finite entries that exceed median + nSigmas * 1.4826 * MAD.
-v = values(:);
-v = v(~isnan(v));
-if isempty(v)
-    pct = NaN;
-    return
-end
-med   = median(v);
-madV  = median(abs(v - med));
-cutoff = med + nSigmas * 1.4826 * madV;
-pct    = 100 * sum(v > cutoff) / numel(v);
 end
 
 function r = computeRankRatio(EEG)
@@ -369,18 +299,8 @@ end
 % -- param plumbing -------------------------------------------------------
 
 function p = applyDefaults(p)
-% Deprecated-key aliasing: see deprecatedGateAliases for the table.
-% Saved pipelines using old names still work; a non-zero new value
-% wins if both are set.
-aliases = deprecatedGateAliases();
-for k = 1:size(aliases, 1)
-    p = aliasDeprecated(p, aliases{k, 1}, aliases{k, 2});
-end
-
 defs = struct( ...
     'gateLabel',                'gate', ...
-    'thresholdMode',            'absolute', ...
-    'marginalSlack',            0.8, ...
     'expectedChans',            0, ...
     'expectedSrate',            0, ...
     'minTriggers',              0, ...
@@ -392,13 +312,10 @@ defs = struct( ...
     'minRankRatio',             0, ...
     'maxRejectedTrialPct',      0, ...
     'maxRejectedChanPct',       0, ...
-    'maxOutlierTrialPct',       0, ...
-    'maxOutlierChanPct',        0, ...
     'minTrials',                0, ...
     'maxTrials',                0, ...
     'maxEMGFraction',           0, ...
     'maxElectrodeCount',        0, ...
-    'outlierSigmas',            3, ...
     'minTriggersWarnAt',        0, ...
     'maxTriggersWarnAt',        0, ...
     'maxFlatChansWarnAt',       0, ...
@@ -407,8 +324,6 @@ defs = struct( ...
     'minRankRatioWarnAt',       0, ...
     'maxRejectedTrialPctWarnAt',0, ...
     'maxRejectedChanPctWarnAt', 0, ...
-    'maxOutlierTrialPctWarnAt', 0, ...
-    'maxOutlierChanPctWarnAt',  0, ...
     'minTrialsWarnAt',          0, ...
     'maxTrialsWarnAt',          0, ...
     'maxEMGFractionWarnAt',     0, ...
@@ -425,32 +340,15 @@ if ischar(p.gateLabel) || isstring(p.gateLabel)
 end
 end
 
-function p = aliasDeprecated(p, oldKey, newKey)
-% Map an old threshold name onto its new name when set. Silent at the
-% per-call level - runPipelineCore emits a one-time deprecation log
-% on behalf of the whole spec before the file loop starts.
-if isfield(p, oldKey) && ~isempty(p.(oldKey)) && p.(oldKey) ~= 0
-    if ~isfield(p, newKey) || isempty(p.(newKey)) || p.(newKey) == 0
-        p.(newKey) = p.(oldKey);
-    end
-end
-end
-
 function t = enabledThresholds(p)
-% Mirror of params, kept for the log AND read back by finalizeBatchVerdicts in
-% batch mode. It must therefore carry the per-metric *WarnAt overrides too:
-% finalizeBatchVerdicts looks up [paramName 'WarnAt'] here, and if the key is
-% absent it silently falls back to marginalSlack - so every batch-mode WarnAt
-% override was dead until these were included.
+% Mirror of the thresholds, kept for log / report readability.
 fields = {'expectedChans','expectedSrate','minTriggers','maxTriggers','maxFlatChans', ...
     'maxSatChans','maxGmfaPeak','minRankRatio', ...
     'maxRejectedTrialPct','maxRejectedChanPct', ...
-    'maxOutlierTrialPct','maxOutlierChanPct', ...
     'minTrials','maxTrials','maxEMGFraction','maxElectrodeCount'};
 warnFields = {'minTriggersWarnAt','maxTriggersWarnAt','maxFlatChansWarnAt', ...
     'maxSatChansWarnAt','maxGmfaPeakWarnAt','minRankRatioWarnAt', ...
     'maxRejectedTrialPctWarnAt','maxRejectedChanPctWarnAt', ...
-    'maxOutlierTrialPctWarnAt','maxOutlierChanPctWarnAt', ...
     'minTrialsWarnAt','maxTrialsWarnAt','maxEMGFractionWarnAt','maxElectrodeCountWarnAt'};
 t = struct();
 for k = 1:numel(fields)
@@ -461,8 +359,6 @@ for k = 1:numel(warnFields)
         t.(warnFields{k}) = p.(warnFields{k});
     end
 end
-t.marginalSlack = p.marginalSlack;
-t.outlierSigmas = p.outlierSigmas;
 end
 
 function tf = anyEnabled(p, fields)

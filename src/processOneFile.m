@@ -1732,7 +1732,7 @@ end
 
 function v = worseVerdict(a, b)
 % Return the worst severity of two verdicts: Fail > Marginal > Pass > NotChecked.
-order = {'NotChecked', 'Pass', 'Marginal', 'Fail', 'Pending'};
+order = {'NotChecked', 'Pass', 'Marginal', 'Fail'};
 ia = find(strcmp(a, order));
 ib = find(strcmp(b, order));
 if isempty(ia), ia = 0; end

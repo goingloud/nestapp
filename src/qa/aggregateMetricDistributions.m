@@ -13,21 +13,16 @@ function dist = aggregateMetricDistributions(reports)
 %   plot meaningless histograms.
 %
 %   Returns a struct array (one entry per enabled metric):
-%     .name           field name on gate.metrics (e.g. 'pctOutlierTrials')
+%     .name           field name on gate.metrics (e.g. 'nFlatChans')
 %     .displayName    pretty label for axis / panel title
 %     .values         numeric vector (NaN-stripped)
-%     .absThresholds  numeric vector of absolute thresholds when used
-%                       (empty when no gate used absolute mode)
-%     .batchCutoffs   numeric vector of batch cutoffs when used
-%                       (empty when no gate used batch mode)
-%     .mode           'absolute' | 'batch' | 'mixed'
+%     .absThresholds  numeric vector of the thresholds that were set
 %
-%   The metric-to-threshold mapping mirrors finalizeBatchVerdicts: a
-%   metric counts as enabled when the corresponding 'max*' or 'min*'
+%   A metric counts as enabled when the corresponding 'max*' or 'min*'
 %   param on the gate's thresholds struct is > 0.
 
 dist = struct('name', {}, 'displayName', {}, 'values', {}, ...
-    'absThresholds', {}, 'batchCutoffs', {}, 'mode', {});
+    'absThresholds', {});
 
 if isempty(reports), return, end
 
@@ -39,9 +34,8 @@ fieldMap = { ...
     'nSatChans',        'maxSatChans',          'Saturated channels',      'max'; ...
     'rejectedTrialPct', 'maxRejectedTrialPct',  '% rejected trials',       'max'; ...
     'rejectedChanPct',  'maxRejectedChanPct',   '% rejected channels',     'max'; ...
-    'pctOutlierTrials', 'maxOutlierTrialPct',   '% outlier trials',        'max'; ...
-    'pctOutlierChans',  'maxOutlierChanPct',    '% outlier channels',      'max'; ...
     'emgFraction',      'maxEMGFraction',       'EMG / muscle fraction',   'max'; ...
+    'gmfaPeakUv',       'maxGmfaPeak',          'GMFA peak uV',            'max'; ...
     'electrodeCount',   'maxElectrodeCount',    'Electrode-artifact comps','max'; ...
     'nTriggers',        'minTriggers',          'Trigger count',           'min'; ...
     'nTrials',          'minTrials',            'Trial count',             'min'; ...
@@ -74,23 +68,11 @@ for ri = 1:numel(reports)
                 acc(metricName) = struct( ...
                     'displayName',  display, ...
                     'values',       [], ...
-                    'absThresholds',[], ...
-                    'batchCutoffs', [], ...
-                    'modes',        {{}});
+                    'absThresholds',[]);
             end
             entry = acc(metricName);
             entry.values(end+1) = v;
-            if strcmpi(getOr(g, 'mode', 'absolute'), 'batch')
-                entry.modes{end+1} = 'batch';
-                if isfield(g, 'batchCutoffs') ...
-                        && isfield(g.batchCutoffs, metricName) ...
-                        && ~isnan(g.batchCutoffs.(metricName))
-                    entry.batchCutoffs(end+1) = g.batchCutoffs.(metricName);
-                end
-            else
-                entry.modes{end+1} = 'absolute';
-                entry.absThresholds(end+1) = g.thresholds.(paramName);
-            end
+            entry.absThresholds(end+1) = g.thresholds.(paramName);
             acc(metricName) = entry;
         end
     end
@@ -107,9 +89,7 @@ for fi = 1:size(fieldMap, 1)
         'name',          metricName, ...
         'displayName',   entry.displayName, ...
         'values',        entry.values, ...
-        'absThresholds', entry.absThresholds, ...
-        'batchCutoffs',  entry.batchCutoffs, ...
-        'mode',          summariseMode(entry.modes)); %#ok<AGROW>
+        'absThresholds', entry.absThresholds); %#ok<AGROW>
 end
 if ~isempty(out)
     dist = [out{:}];
@@ -117,18 +97,6 @@ end
 end
 
 % -- small helpers --------------------------------------------------------
-
-function m = summariseMode(modes)
-hasAbs   = any(strcmp(modes, 'absolute'));
-hasBatch = any(strcmp(modes, 'batch'));
-if hasAbs && hasBatch
-    m = 'mixed';
-elseif hasBatch
-    m = 'batch';
-else
-    m = 'absolute';
-end
-end
 
 function v = getOr(s, field, default)
 if isfield(s, field) && ~isempty(s.(field))

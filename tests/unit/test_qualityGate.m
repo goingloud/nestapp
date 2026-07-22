@@ -52,7 +52,6 @@ classdef test_qualityGate < matlab.unittest.TestCase
             gate = qualityGate(EEG, struct());
             tc.verifyEqual(gate.verdict, 'Pass');
             tc.verifyEmpty(gate.reasons);
-            tc.verifyEqual(gate.mode, 'absolute');
         end
 
         function records_label_and_thresholds(tc)
@@ -85,7 +84,7 @@ classdef test_qualityGate < matlab.unittest.TestCase
         function minTriggers_fail_below_slack(tc)
             EEG = test_qualityGate.makeEEG(8, 10, 500, 1000);
             EEG = test_qualityGate.withEvents(EEG, 50);   % below 0.8 * 100 = 80
-            gate = qualityGate(EEG, struct('minTriggers', 100, 'marginalSlack', 0.8));
+            gate = qualityGate(EEG, struct('minTriggers', 100));
             tc.verifyEqual(gate.verdict, 'Fail');
         end
 
@@ -144,12 +143,16 @@ classdef test_qualityGate < matlab.unittest.TestCase
         function maxSatChans_counts_saturated_channels(tc)
             EEG = test_qualityGate.makeEEG(8, 30, 500, 1000);
             EEG.data(1, :, :) = 500;  % > 250 uV
-            % With threshold 5 and value 1, 1 < 0.8*5=4 -> Pass.
+            EEG.data(2, :, :) = 500;  % 2 saturated channels
+            % value 2 <= threshold 5, no WarnAt -> Pass.
             gate = qualityGate(EEG, struct('maxSatChans', 5));
-            tc.verifyEqual(gate.metrics.nSatChans, 1);
+            tc.verifyEqual(gate.metrics.nSatChans, 2);
             tc.verifyEqual(gate.verdict, 'Pass');
-            % With threshold 1 and value 1, 1 > 0.8 -> Marginal (right at edge).
+            % value 2 > threshold 1 -> Fail (a hard cutoff, no slack band).
             gate = qualityGate(EEG, struct('maxSatChans', 1));
+            tc.verifyEqual(gate.verdict, 'Fail');
+            % With a WarnAt below the threshold, the same value is Marginal.
+            gate = qualityGate(EEG, struct('maxSatChans', 5, 'maxSatChansWarnAt', 1));
             tc.verifyEqual(gate.verdict, 'Marginal');
         end
 
@@ -172,7 +175,7 @@ classdef test_qualityGate < matlab.unittest.TestCase
             % reported full rank (ratio 1.0) no matter its true state.
             EEG = test_qualityGate.makeEEG(16, 1, 4000, 1000);
             EEG.data = single(EEG.data - mean(EEG.data, 1));   % exact rank 15
-            gate = qualityGate(EEG, struct('thresholdMode', 'batch'));
+            gate = qualityGate(EEG, struct());
             tc.verifyLessThan(gate.metrics.rankRatio, 1, ...
                 'average-referenced data cannot be full rank');
             tc.verifyEqual(gate.metrics.rankRatio, 15/16, 'AbsTol', 1e-6);
@@ -208,8 +211,7 @@ classdef test_qualityGate < matlab.unittest.TestCase
             % blown-GMFA failure mode the check exists for.
             EEG = test_qualityGate.epochedWithGmfaPeak();
             % Read the metric the gate computes, then bracket it.
-            peak = qualityGate(EEG, struct('thresholdMode','batch', ...
-                'maxGmfaPeak', 1)).metrics.gmfaPeakUv;
+            peak = qualityGate(EEG, struct('maxGmfaPeak', 1)).metrics.gmfaPeakUv;
             tc.assertGreaterThan(peak, 5, 'fixture must have a clear GMFA peak');
             gate = qualityGate(EEG, struct('maxGmfaPeak', peak / 2));
             tc.verifyEqual(gate.verdict, 'Fail');
@@ -218,32 +220,14 @@ classdef test_qualityGate < matlab.unittest.TestCase
 
         function gmfa_peak_under_threshold_passes(tc)
             EEG = test_qualityGate.epochedWithGmfaPeak();
-            peak = qualityGate(EEG, struct('thresholdMode','batch', ...
-                'maxGmfaPeak', 1)).metrics.gmfaPeakUv;
+            peak = qualityGate(EEG, struct('maxGmfaPeak', 1)).metrics.gmfaPeakUv;
             gate = qualityGate(EEG, struct('maxGmfaPeak', peak * 2));
             tc.verifyEqual(gate.verdict, 'Pass');
         end
 
-        function batch_mode_persists_warn_overrides(tc)
-            % QG-3: enabledThresholds omitted every *WarnAt key, so the batch
-            % finalizer's per-metric warn override (getOr(thresholds,
-            % [param 'WarnAt'])) always missed and silently fell back to
-            % marginalSlack. The persisted thresholds must now carry the WarnAt
-            % siblings for the finalizer to read.
-            EEG = test_qualityGate.makeEEG(8, 30, 500, 1000);
-            gate = qualityGate(EEG, struct('thresholdMode', 'batch', ...
-                'maxFlatChans', 2, 'maxFlatChansWarnAt', 1, ...
-                'maxOutlierChanPct', 10, 'maxOutlierChanPctWarnAt', 4));
-            tc.verifyEqual(gate.verdict, 'Pending');
-            tc.verifyTrue(isfield(gate.thresholds, 'maxFlatChansWarnAt'), ...
-                'batch thresholds must carry the WarnAt override');
-            tc.verifyEqual(gate.thresholds.maxFlatChansWarnAt, 1);
-            tc.verifyEqual(gate.thresholds.maxOutlierChanPctWarnAt, 4);
-        end
-
         function minTrials_catches_low_trial_count(tc)
             EEG = test_qualityGate.makeEEG(8, 5, 500, 1000);
-            gate = qualityGate(EEG, struct('minTrials', 30, 'marginalSlack', 0.8));
+            gate = qualityGate(EEG, struct('minTrials', 30));
             tc.verifyEqual(gate.verdict, 'Fail');
         end
 
@@ -254,34 +238,9 @@ classdef test_qualityGate < matlab.unittest.TestCase
             EEG = test_qualityGate.withEvents(EEG, 85);   % marginal for minTriggers=100
             gate = qualityGate(EEG, struct( ...
                 'minTriggers', 100, ...
-                'expectedChans', 64, ...   % fail (8 != 64)
-                'marginalSlack', 0.8));
+                'expectedChans', 64));   % fail (8 != 64)
             tc.verifyEqual(gate.verdict, 'Fail');
             tc.verifyGreaterThanOrEqual(numel(gate.reasons), 2);
-        end
-
-        % -- batch mode --------------------------------------------------
-
-        function batch_mode_returns_pending(tc)
-            EEG = test_qualityGate.makeEEG(8, 10, 500, 1000);
-            gate = qualityGate(EEG, struct( ...
-                'thresholdMode',      'batch', ...
-                'maxOutlierTrialPct', 10));
-            tc.verifyEqual(gate.verdict, 'Pending');
-            tc.verifyEmpty(gate.reasons);
-            tc.verifyTrue(~isnan(gate.metrics.pctOutlierTrials));
-        end
-
-        function batch_mode_collects_metrics_regardless_of_threshold(tc)
-            % In batch mode the threshold is irrelevant - we still
-            % collect every metric whose enabling toggle is on.
-            EEG = test_qualityGate.makeEEG(8, 10, 500, 1000);
-            EEG = test_qualityGate.withEvents(EEG, 50);
-            gate = qualityGate(EEG, struct( ...
-                'thresholdMode', 'batch', ...
-                'minTriggers', 1));   % any non-zero enables collection
-            tc.verifyEqual(gate.metrics.nTriggers, 50);
-            tc.verifyEqual(gate.verdict, 'Pending');
         end
 
         % -- ICA-based checks --------------------------------------------
@@ -322,33 +281,29 @@ classdef test_qualityGate < matlab.unittest.TestCase
 
         % -- WarnAt overrides (Phase 4) ----------------------------------
 
-        function maxWarnAt_overrides_slack(tc)
-            % maxFlatChans = 10, slack = 0.8 -> warn cutoff at 8.
-            % Override with WarnAt = 3 so anything > 3 (and <= 10) is
-            % Marginal, anything > 10 is Fail.
+        function maxWarnAt_defines_the_marginal_band(tc)
+            % maxFlatChans = 10 (Fail above), WarnAt = 3 (Marginal above):
+            % 5 flat channels is > 3 and <= 10, so Marginal.
             EEG = test_qualityGate.makeEEG(8, 30, 500, 1000);
             for k = 1:5
                 EEG.data(k, :, :) = 0;   % 5 flat channels
             end
             gate = qualityGate(EEG, struct( ...
                 'maxFlatChans',       10, ...
-                'marginalSlack',      0.8, ...
                 'maxFlatChansWarnAt', 3));
             tc.verifyEqual(gate.metrics.nFlatChans, 5);
             tc.verifyEqual(gate.verdict, 'Marginal');
         end
 
-        function maxWarnAt_zero_falls_back_to_slack(tc)
-            % Same fixture as above; WarnAt = 0 -> slack semantics:
-            % nFlatChans = 5 < slack * 10 = 8 -> Pass.
+        function no_warnAt_means_no_marginal_band(tc)
+            % Without a WarnAt, a max metric goes straight Pass -> Fail:
+            % 5 flat channels under a threshold of 10 is a clean Pass (there
+            % is no slack-derived Marginal band any more).
             EEG = test_qualityGate.makeEEG(8, 30, 500, 1000);
             for k = 1:5
                 EEG.data(k, :, :) = 0;
             end
-            gate = qualityGate(EEG, struct( ...
-                'maxFlatChans',       10, ...
-                'marginalSlack',      0.8, ...
-                'maxFlatChansWarnAt', 0));
+            gate = qualityGate(EEG, struct('maxFlatChans', 10));
             tc.verifyEqual(gate.verdict, 'Pass');
         end
 
@@ -391,18 +346,15 @@ classdef test_qualityGate < matlab.unittest.TestCase
             EEG = test_qualityGate.makeEEG(8, 10, 500, 1000);
             EEG = test_qualityGate.withEvents(EEG, 99);
             gate = qualityGate(EEG, struct( ...
-                'minTriggers',   100, ...
-                'marginalSlack', 0.8));
+                'minTriggers',   100));
             tc.verifyEqual(gate.verdict, 'Fail');
         end
 
         % -- rejected-pct metrics (Phase 5) ------------------------------
 
         function maxRejectedChanPct_fails_above_threshold(tc)
-            % Regression for the bug where maxBadChanPct never fired
-            % even with 8/63 channels removed. The new maxRejectedChanPct
-            % reads the running tally from the context, not statistical
-            % outliers of the surviving channels.
+            % maxRejectedChanPct reads the running rejection tally from the
+            % context (channels removed so far / original count).
             EEG = test_qualityGate.makeEEG(55, 10, 500, 1000); % 55 left now
             ctx = struct( ...
                 'channels', struct('original', 63, 'nRejected', 8), ...
@@ -450,34 +402,12 @@ classdef test_qualityGate < matlab.unittest.TestCase
         end
 
         function maxRejected_NaN_when_context_missing(tc)
-            % No context -> metric is NaN -> check skipped silently.
+            % No context -> metric is NaN -> check skipped (Pass). This
+            % silent-skip is the deliberately-kept behaviour.
             EEG = test_qualityGate.makeEEG(8, 10, 500, 1000);
             gate = qualityGate(EEG, struct('maxRejectedChanPct', 10));
             tc.verifyEqual(gate.verdict, 'Pass');
             tc.verifyTrue(isnan(gate.metrics.rejectedChanPct));
-        end
-
-        % -- deprecated alias behavior ----------------------------------
-
-        function maxBadChanPct_alias_maps_to_maxOutlier(tc)
-            % Saved pipelines using the old key must still work. With one
-            % flat channel and seven normal ones, pctOutlierChans is 0%
-            % (the flat channel is excluded), so a permissive 0.5%
-            % outlier threshold still passes the gate either way - what
-            % we are testing here is that the *threshold* gets carried
-            % across into the new name.
-            EEG = test_qualityGate.makeEEG(8, 30, 500, 1000);
-            gate = qualityGate(EEG, struct('maxBadChanPct', 25));
-            tc.verifyEqual(gate.thresholds.maxOutlierChanPct, 25);
-            % The deprecated field is NOT mirrored in thresholds (it's
-            % been folded into the new one).
-            tc.verifyFalse(isfield(gate.thresholds, 'maxBadChanPct'));
-        end
-
-        function maxBadTrialPct_alias_maps_to_maxOutlier(tc)
-            EEG = test_qualityGate.makeEEG(8, 30, 500, 1000);
-            gate = qualityGate(EEG, struct('maxBadTrialPct', 12));
-            tc.verifyEqual(gate.thresholds.maxOutlierTrialPct, 12);
         end
 
         function metrics_always_has_cheap_fields(tc)

@@ -37,7 +37,7 @@ Progress: **DONE** = fixed + regression test + pushed. Others pending.
 | 2 | `tmslabel`/`pairlabel` silently ignored (casing) | dispatch → `renameVarinKeys.m` | **DONE** `3e17f7a` |
 | 3 | TEP Peak Output discards its result | `processOneFile.m` → `EEG.etc.nestapp.tepPeakOutput` | **DONE** `7640f2a` |
 | 4 | `detrend` offers `polynomial` (upstream rejects) | `stepRegistry.m` + dispatch guard | **DONE** `37a42ad` (offer all 3, guard toolbox deps with clear error) |
-| 5 | SSP-SIR `PC` labelled inverse of behaviour | `stepRegistry.m:1274` label/description | pending (description) |
+| 5 | SSP-SIR `PC` labelled inverse of behaviour | `stepRegistry.m` label/description | **DONE** `03f8188` |
 | 6 | `fromASR` always throws; DDWiener thresh 9-vs-20 | `processOneFile.m` dispatch — method-dependent threshold | pending (TESA 1.2 only) |
 | 7 | `interpchan` offers crashing `on` | dispatch: on→[] | **DONE** `72fbadf` |
 | 8 | `pop_rejcont` offers `sum`/`fill`/`hann`/`blackman` | `stepRegistry.m` offered lists → real upstream values | **DONE** `974fbed` |
@@ -45,8 +45,8 @@ Progress: **DONE** = fixed + regression test + pushed. Others pending.
 | 9 | `pop_chanedit` lookup killed by arg order | `processOneFile.m:178-179` order load before lookup |
 | 10 | `Choose Data Set` default `''` type-invalid | default []→guard | **DONE** `72fbadf` |
 | 11 | Manual channel removal index misalignment | `processOneFile.m:342-343` tighten coord guard |
-| 12 | `components` description inverts behaviour | `stepRegistry.m:893` description (call is correct) |
-| 13 | `maxrej` documented fraction, consumed percent | `stepRegistry.m:1019,1027` description/units |
+| 12 | `components` description inverts behaviour | `stepRegistry.m:893` description | **DONE** `03f8188` |
+| 13 | `maxrej` documented fraction, consumed percent | `stepRegistry.m` description/units | **DONE** `03f8188` |
 | 14 | Quality Gate QG-1…QG-4 | `src/qa/*` — entirely nestapp code |
 | 15 | `Flag ICA` scalar threshold silently disables class | `convertParam`/dispatch — reject 1-elem, or expand |
 | 16 | `'off'` unreachable for 5 clean_rawdata criteria | `convertParam` scalar coercion (nestapp) |

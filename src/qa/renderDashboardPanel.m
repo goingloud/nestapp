@@ -56,9 +56,9 @@ nErrored  = numel(failed);
 if nFiles == 0 && nErrored == 0
     sub = 'No reports yet - run a pipeline with a Quality Gate.';
 else
-    sub = sprintf('%d files: %d Pass / %d Marginal / %d Fail / %d Pending', ...
+    sub = sprintf('%d files: %d Pass / %d Marginal / %d Fail', ...
         nFiles, verdicts.counts.Pass, verdicts.counts.Marginal, ...
-        verdicts.counts.Fail, verdicts.counts.Pending);
+        verdicts.counts.Fail);
     if nErrored > 0
         sub = sprintf('%s / %d did not complete', sub, nErrored);
     end
@@ -92,7 +92,7 @@ end
 
 imagesc(ax, v.verdicts);
 colormap(ax, verdictColormap());
-caxis(ax, [0 4]);
+caxis(ax, [0 3]);
 
 ax.YTick = 1:numel(v.files);
 ax.YTickLabel = v.files;
@@ -105,13 +105,12 @@ ylabel(ax, 'File');
 end
 
 function cmap = verdictColormap()
-% Index by code: 0 NotChecked, 1 Pass, 2 Marginal, 3 Fail, 4 Pending.
+% Index by code: 0 NotChecked, 1 Pass, 2 Marginal, 3 Fail.
 cmap = [ ...
     0.85 0.85 0.85;   % 0 gray
     0.20 0.70 0.30;   % 1 green
     0.95 0.80 0.20;   % 2 yellow
-    0.85 0.20 0.20;   % 3 red
-    0.30 0.45 0.85];  % 4 blue (Pending)
+    0.85 0.20 0.20];  % 3 red
 end
 
 % -- failed-files table ----------------------------------------------------
@@ -249,9 +248,6 @@ hold(ax, 'on');
 yl = ylim(ax);
 for t = m.absThresholds
     plot(ax, [t t], yl, 'r-', 'LineWidth', 1.2);
-end
-for t = m.batchCutoffs
-    plot(ax, [t t], yl, 'm--', 'LineWidth', 1.2);
 end
 hold(ax, 'off');
 end
