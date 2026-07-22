@@ -77,6 +77,16 @@ classdef test_offeredParamValues < matlab.unittest.TestCase
                  'errors the run. Do not offer it in the picker.']);
         end
 
+        function detrend_offers_the_values_tesa_accepts(tc)
+            % tesa_detrend accepts linear|exponential|double and hard-rejects
+            % anything else. The picker previously offered 'polynomial', which
+            % does not exist upstream and aborts the run.
+            p = paramFor(tc, 'TESA De-Trend', 'detrend');
+            offered = sort(strsplit(p.validRange, '|'));
+            tc.verifyEqual(offered, {'double', 'exponential', 'linear'}, ...
+                'Offered detrend values must be exactly what tesa_detrend accepts');
+        end
+
         function continuous_rejection_offers_only_values_pop_rejcont_accepts(tc)
             % pop_rejcont's finputcheck rejects anything outside its enum with
             % a hard error that aborts the run. The picker previously offered

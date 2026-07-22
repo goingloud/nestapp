@@ -500,6 +500,36 @@ for si = 1:nSteps
                 % new struct; calling it bare detrended a copy and discarded it,
                 % so this step was a complete no-op that still logged "Linear
                 % detrend complete." See test_stepCharacterization.
+                %
+                % The exponential and double fits need two toolboxes, and
+                % tesa_detrend crashes cryptically when either is absent - a
+                % message naming neither the real dependency nor this step.
+                % Guard up front and fail with something the user can act on.
+                % Linear uses only polyfit and needs no toolbox.
+                if any(strcmpi(Tdetrend, {'exponential', 'double'}))
+                    % fit() does the actual exponential fit.
+                    [fitAvailable, fitReason] = ensureCurveFittingFit();
+                    if ~fitAvailable
+                        error('nestapp:detrendNeedsCurveFitting', ...
+                            ['TESA De-Trend "%s" needs the Curve Fitting Toolbox. %s ' ...
+                             'Use "linear" instead, or install/license the toolbox.'], ...
+                            Tdetrend, fitReason);
+                    end
+                    % tesa_detrend detects the Curve Fitting Toolbox with
+                    % extractfield - itself a Mapping Toolbox function - so
+                    % without Mapping the step dies in its own check
+                    % ("Undefined function 'extractfield'") even when the fit
+                    % it wants to run is available. That is a limitation of
+                    % TESA's check, not of the fit; name it plainly.
+                    if isempty(which('extractfield'))
+                        error('nestapp:detrendNeedsMappingForCheck', ...
+                            ['TESA De-Trend "%s" cannot run here: tesa_detrend checks ' ...
+                             'for the Curve Fitting Toolbox using extractfield (Mapping ' ...
+                             'Toolbox), which is not installed. This is a quirk of TESA''s ' ...
+                             'own toolbox check, not of the fit. Use "linear", or install ' ...
+                             'the Mapping Toolbox.'], Tdetrend);
+                    end
+                end
                 EEG = pop_tesa_detrend(EEG, Tdetrend, TtimeWin);
                 EEG = eeg_checkset( EEG );
 
