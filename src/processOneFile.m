@@ -892,7 +892,6 @@ for si = 1:nSteps
 
             case 'Interpolate Channels'
                 method = step.params.method;
-                trange = step.params.trange;
                 % Interpolate ONLY channels that were removed *as bad* by a
                 % bad-channel step (recorded in EEG.etc.nestapp.badChannels by
                 % recordBadChannels). Channels dropped on purpose - e.g. by
@@ -929,7 +928,10 @@ for si = 1:nSteps
                     fprintf(['Interpolate Channels: no bad removed ' ...
                         'channels to restore; skipping interpolation.\n']);
                 else
-                    EEG = pop_interp(EEG, rc, method, trange);
+                    % No time-range arg: pop_interp discards its 4th argument
+                    % on entry (pop_interp.m:61 sets t_range=''), so it never
+                    % worked. Call the plain 3-arg form.
+                    EEG = pop_interp(EEG, rc, method);
                     interpElecs = [interpElecs; num2cell(rc)]; %#ok<AGROW>
                     EEG.interpElecs = interpElecs;
                 end
