@@ -1165,7 +1165,20 @@ for si = 1:nSteps
             case 'TEP Peak Output'
                 vars = convertContainedStringsToChars(varin);
                 vars = stripEmptyVarin(vars);
-                pop_tesa_peakoutput( EEG, vars{:} );
+                % Capture the peak table upstream returns - the step's whole
+                % purpose - and store it on the dataset. It was previously
+                % discarded, so the step produced nothing observable. With
+                % averageWin or calcType='area' set, output.amp is a windowed
+                % measure that is NOT on EEG.ROI, so this is the only place it
+                % is preserved (and it round-trips through pop_saveset).
+                tepPeakOutput = pop_tesa_peakoutput( EEG, vars{:} );
+                if ~isfield(EEG, 'etc') || ~isstruct(EEG.etc)
+                    EEG.etc = struct();
+                end
+                if ~isfield(EEG.etc, 'nestapp') || ~isstruct(EEG.etc.nestapp)
+                    EEG.etc.nestapp = struct();
+                end
+                EEG.etc.nestapp.tepPeakOutput = tepPeakOutput;
 
             case 'Quality Gate'
                 % Pass the running rejection tally as context so the
