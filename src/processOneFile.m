@@ -319,6 +319,18 @@ for si = 1:nSteps
                 vars = convertContainedStringsToChars(varin);
                 ind = find(strcmp(vars,'dataSetInd'));
                 setIndex = vars{ind+1};
+                % An unset index reaches pop_newset as '' or NaN and dies inside
+                % finputcheck with "argument 'retrieve' must be numeric" - a
+                % message that names neither this step nor the fix. Validate up
+                % front. (Default is [] = unset; a GUI-cleared cell yields NaN.)
+                if ~(isnumeric(setIndex) && isscalar(setIndex) ...
+                        && isfinite(setIndex) && setIndex >= 1 ...
+                        && setIndex == floor(setIndex))
+                    error('nestapp:chooseDataSetNoIndex', ...
+                        ['Choose Data Set needs a dataset index (a positive ' ...
+                         'integer). Set "Dataset index" on the step to the ' ...
+                         'ALLEEG slot you want to switch to.']);
+                end
                 [ALLEEG, EEG, CURRENTSET] = pop_newset(ALLEEG, EEG, CURRENTSET,'retrieve',setIndex);
 
             case 'Visualize EEG Data'
@@ -576,7 +588,22 @@ for si = 1:nSteps
                     ref = eval(ref);
                 end
                 vars([ind,ind+1]) = [];
+                % interpchan: pop_reref interpolates the removed reference
+                % channels when this is [] (its own GUI passes exactly that);
+                % passing the string 'on' instead reaches isreal('on')==true and
+                % indexes EEG.urchanlocs('on'), which crashes. Translate the
+                % on/off toggle to what pop_reref expects, and pull it out
+                % before stripEmptyVarin so the [] enable value is not deleted.
+                indInterp = find(strcmp(vars, 'interpchan'));
+                interpOn = false;
+                if ~isempty(indInterp)
+                    interpOn = strcmpi(vars{indInterp+1}, 'on');
+                    vars([indInterp, indInterp+1]) = [];
+                end
                 vars = stripEmptyVarin(vars);
+                if interpOn
+                    vars = [vars, {'interpchan', []}];
+                end
                 EEG = pop_reref(EEG,ref, vars{:});
                 EEG = eeg_checkset( EEG );
 
