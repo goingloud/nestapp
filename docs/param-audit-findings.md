@@ -38,7 +38,7 @@ Progress: **DONE** = fixed + regression test + pushed. Others pending.
 | 3 | TEP Peak Output discards its result | `processOneFile.m` → `EEG.etc.nestapp.tepPeakOutput` | **DONE** `7640f2a` |
 | 4 | `detrend` offers `polynomial` (upstream rejects) | `stepRegistry.m` + dispatch guard | **DONE** `37a42ad` (offer all 3, guard toolbox deps with clear error) |
 | 5 | SSP-SIR `PC` labelled inverse of behaviour | `stepRegistry.m` label/description | **DONE** `03f8188` |
-| 6 | `fromASR` always throws; DDWiener thresh 9-vs-20 | `processOneFile.m` dispatch — method-dependent threshold | pending (TESA 1.2 only) |
+| 6 | `fromASR` always throws; DDWiener thresh 9-vs-20 | dispatch: threshold=[] default, pass only when set, gate off for fromASR | **DONE** `be5320a` (TESA 1.2 now installed & verified) |
 | 7 | `interpchan` offers crashing `on` | dispatch: on→[] | **DONE** `72fbadf` |
 | 8 | `pop_rejcont` offers `sum`/`fill`/`hann`/`blackman` | `stepRegistry.m` offered lists → real upstream values | **DONE** `974fbed` |
 
