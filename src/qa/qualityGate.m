@@ -330,7 +330,16 @@ if ~isfield(EEG, 'data') || isempty(EEG.data) || EEG.nbchan == 0
     return
 end
 data2D = reshape(EEG.data, size(EEG.data, 1), []);
-r = rank(double(data2D)) / EEG.nbchan;
+% Compute rank at the data's OWN precision. Real pipeline data is single;
+% upcasting single->double before rank() turns float32 quantization noise
+% into a spurious extra dimension, so every single-precision dataset (e.g.
+% average-referenced, which is exactly rank-deficient) reported full rank.
+% rank() derives its tolerance from the class of its input, so single input
+% gets a single-appropriate tolerance. Only non-float data needs a cast.
+if ~isfloat(data2D)
+    data2D = double(data2D);
+end
+r = rank(data2D) / EEG.nbchan;
 end
 
 function n = numEvents(EEG)

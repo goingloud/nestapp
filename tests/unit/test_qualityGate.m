@@ -151,6 +151,29 @@ classdef test_qualityGate < matlab.unittest.TestCase
             tc.verifyEqual(gate.verdict, 'Fail');
         end
 
+        function rank_deficiency_is_seen_in_single_precision_data(tc)
+            % Real pipeline data is single precision by the time a gate runs,
+            % and average-referencing forces an exact rank drop of one. The
+            % rank ratio must reflect that. Regression: computing
+            % rank(double(data)) upcast float32 quantization noise into a
+            % spurious extra dimension, so every single-precision dataset
+            % reported full rank (ratio 1.0) no matter its true state.
+            EEG = test_qualityGate.makeEEG(16, 1, 4000, 1000);
+            EEG.data = single(EEG.data - mean(EEG.data, 1));   % exact rank 15
+            gate = qualityGate(EEG, struct('thresholdMode', 'batch'));
+            tc.verifyLessThan(gate.metrics.rankRatio, 1, ...
+                'average-referenced data cannot be full rank');
+            tc.verifyEqual(gate.metrics.rankRatio, 15/16, 'AbsTol', 1e-6);
+        end
+
+        function single_precision_rank_deficiency_fails_the_gate(tc)
+            % The end-to-end consequence: a gate that should catch this must.
+            EEG = test_qualityGate.makeEEG(16, 1, 4000, 1000);
+            EEG.data = single(EEG.data - mean(EEG.data, 1));
+            gate = qualityGate(EEG, struct('minRankRatio', 0.99));
+            tc.verifyEqual(gate.verdict, 'Fail');
+        end
+
         function minTrials_catches_low_trial_count(tc)
             EEG = test_qualityGate.makeEEG(8, 5, 500, 1000);
             gate = qualityGate(EEG, struct('minTrials', 30, 'marginalSlack', 0.8));
