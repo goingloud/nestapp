@@ -42,15 +42,15 @@ Progress: **DONE** = fixed + regression test + pushed. Others pending.
 | 7 | `interpchan` offers crashing `on` | dispatch: on→[] | **DONE** `72fbadf` |
 | 8 | `pop_rejcont` offers `sum`/`fill`/`hann`/`blackman` | `stepRegistry.m` offered lists → real upstream values | **DONE** `974fbed` |
 
-| 9 | `pop_chanedit` lookup killed by arg order | `processOneFile.m:178-179` order load before lookup |
+| 9 | `pop_chanedit` lookup killed by arg order | dispatch: load before lookup | **DONE** `74cabf4` |
 | 10 | `Choose Data Set` default `''` type-invalid | default []→guard | **DONE** `72fbadf` |
-| 11 | Manual channel removal index misalignment | `processOneFile.m:342-343` tighten coord guard |
+| 11 | Manual channel removal index misalignment | tighten coord guard (require all) | **DONE** `74cabf4` |
 | 12 | `components` description inverts behaviour | `stepRegistry.m:893` description | **DONE** `03f8188` |
 | 13 | `maxrej` documented fraction, consumed percent | `stepRegistry.m` description/units | **DONE** `03f8188` |
-| 14 | Quality Gate QG-1…QG-4 | `src/qa/*` — entirely nestapp code |
-| 15 | `Flag ICA` scalar threshold silently disables class | `convertParam`/dispatch — reject 1-elem, or expand |
-| 16 | `'off'` unreachable for 5 clean_rawdata criteria | `convertParam` scalar coercion (nestapp) |
-| 17 | Misleading descriptions: `overwrite`, `plotag`, `state`, `epoch_len`, `cutEvent=[]` all-events, `tablePlot` figure-not-cmdwindow | `stepRegistry.m` descriptions only |
+| 14 | Quality Gate QG-1…QG-4 | `src/qa/*` (batch/slack removed per user) | **DONE** `90b8bf1`,`86f2119`,`a607928` |
+| 15 | `Flag ICA` scalar threshold silently disables class | dispatch rejects non-pair | **DONE** `74cabf4` |
+| 16 | `'off'` unreachable for 5 clean_rawdata criteria | `convertParam` preserves 'off' | **DONE** `74cabf4` |
+| 17 | Misleading descriptions (overwrite/plotag/state/epoch_len/cutEvent/tablePlot) | `stepRegistry.m` | **DONE** `9666095` |
 
 ## [EXPOSE] — upstream is dead; nestapp action = stop advertising / relabel
 
