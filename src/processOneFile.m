@@ -673,11 +673,18 @@ for si = 1:nSteps
                 o = varinToStruct(varin);
                 % artifactTimespan is in ms for this one - upstream differs
                 % between these two functions, so do not factor the conversion.
-                EEG = pop_tesa_detectbadchannels(EEG, ...
+                dbcArgs = { ...
                     'detectionMethod',  o.detectionMethod, ...
                     'replaceMethod',    o.replaceMethod, ...
-                    'artifactTimespan', [o.artifactStartMs, o.artifactEndMs], ...
-                    'threshold',        o.threshold);
+                    'artifactTimespan', [o.artifactStartMs, o.artifactEndMs]};
+                % Pass threshold ONLY when the user set one. Empty lets upstream
+                % apply its method-specific default (9 PREP / 20 DDWiener), and
+                % fromASR asserts the threshold is empty - so forcing a number
+                % broke DDWiener silently and made fromASR throw.
+                if isfield(o, 'threshold') && ~isempty(o.threshold)
+                    dbcArgs = [dbcArgs, {'threshold', o.threshold}];
+                end
+                EEG = pop_tesa_detectbadchannels(EEG, dbcArgs{:});
                 EEG = eeg_checkset( EEG );
 
             case 'Fit Artifact Model (TESA)'
