@@ -77,6 +77,38 @@ classdef test_offeredParamValues < matlab.unittest.TestCase
                  'errors the run. Do not offer it in the picker.']);
         end
 
+        function continuous_rejection_offers_only_values_pop_rejcont_accepts(tc)
+            % pop_rejcont's finputcheck rejects anything outside its enum with
+            % a hard error that aborts the run. The picker previously offered
+            % mode='sum', correct='fill', taper='hann'|'blackman' - none of
+            % which exist upstream - and two of them had descriptions for
+            % behaviour that was never implemented.
+            expected = struct( ...
+                'mode',    {{'max', 'mean'}}, ...
+                'correct', {{'blank', 'remove'}}, ...
+                'taper',   {{'hamming', 'none'}});
+            for key = fieldnames(expected)'
+                p = paramFor(tc, 'Automatic Continuous Rejection', key{1});
+                offered = sort(strsplit(p.validRange, '|'));
+                tc.verifyEqual(offered, expected.(key{1}), sprintf( ...
+                    'Offered %s values must be exactly what pop_rejcont accepts', key{1}));
+            end
+        end
+
+        function continuous_rejection_defaults_are_offered_values(tc)
+            % A default outside the offered set would fail finputcheck on the
+            % first run of an unedited step.
+            reg = tc.registry;
+            k = find(strcmp({reg.name}, 'Automatic Continuous Rejection'), 1);
+            for key = {'mode', 'correct', 'taper'}
+                p = paramFor(tc, 'Automatic Continuous Rejection', key{1});
+                offered = strsplit(p.validRange, '|');
+                tc.verifyTrue(ismember(reg(k).defaults.(key{1}), offered), sprintf( ...
+                    'default %s=%s must be one of the offered values', ...
+                    key{1}, reg(k).defaults.(key{1})));
+            end
+        end
+
         function interpWin_is_greyed_out_when_it_cannot_apply(tc)
             % Not "is it documented" - is the rule actually declared, so the
             % GUI acts on it.
