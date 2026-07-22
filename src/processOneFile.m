@@ -559,11 +559,10 @@ for si = 1:nSteps
                 end
                 vars = convertContainedStringsToChars(varin);
                 ind = find(strcmp(vars,'chanlist'));
-                if vars{ind+1}(2) > EEG.nbchan
-                    vars{ind+1} = 1:EEG.nbchan-1;
-                else
-                    vars{ind+1} = 1:vars{1,ind+1};
-                end
+                % Expand the [first last] range to explicit indices, clamped to
+                % the channels present. The old inline arithmetic dropped the
+                % last channel on small montages and errored (1:[1 64]) on >=64.
+                vars{ind+1} = cleanlineChanList(vars{ind+1}, EEG.nbchan);
                 EEG = pop_cleanline(EEG, vars{:});
                 EEG = eeg_checkset( EEG );
 
@@ -870,6 +869,12 @@ for si = 1:nSteps
                 if iscell(elec)
                     elec = elec{:};
                 end
+                % tesa_findpulse stores options by case-sensitive dynamic
+                % field, so nestapp's lowercase keys must be mapped to its
+                % exact spelling or the value is silently dropped and the
+                % upstream default label is used instead.
+                vars = renameVarinKeys(vars, {'tmslabel','pairlabel'}, ...
+                                             {'tmsLabel','pairLabel'});
                 EEG = pop_tesa_findpulse( EEG, elec, vars{:});
                 EEG = eeg_checkset( EEG );
 
