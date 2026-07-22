@@ -52,15 +52,15 @@ Progress: **DONE** = fixed + regression test + pushed. Others pending.
 | 16 | `'off'` unreachable for 5 clean_rawdata criteria | `convertParam` preserves 'off' | **DONE** `74cabf4` |
 | 17 | Misleading descriptions (overwrite/plotag/state/epoch_len/cutEvent/tablePlot) | `stepRegistry.m` | **DONE** `9666095` |
 
-## [EXPOSE] — upstream is dead; nestapp action = stop advertising / relabel
+## [EXPOSE] — DONE `8098af5`: stopped advertising (per user)
 
-| Finding | Upstream deadness | nestapp action |
+| Finding | Upstream deadness | action taken |
 |---|---|---|
-| `Remove Bad Epoch / threshold` | `pop_autorej.m:155-161` commented out | de-register or mark inert |
-| `Interpolate Channels / trange` | `pop_interp.m:61` clobbers on entry | de-register |
-| `Frequency Filter / usefft` | `pop_eegfiltnew` errors on non-zero | de-register |
-| `Epoching / epochinfo` | `pop_epoch.m:223` never read | de-register |
-| `Remove ICA Components / plotFreqX` mislabel | upstream uses it as analysis grid | relabel (it's NOT a plot axis) |
+| `Remove Bad Epoch / threshold` | `pop_autorej.m:155-161` commented out | **de-registered** |
+| `Interpolate Channels / trange` | `pop_interp.m:61` clobbers on entry | **de-registered** (dispatch → 3-arg pop_interp) |
+| `Frequency Filter / usefft` | `pop_eegfiltnew` errors on non-zero | **de-registered** (usefftfilt kept) |
+| `Epoching / epochinfo` | `pop_epoch.m:223` never read | **de-registered** |
+| `Remove ICA Components / plotFreqX` mislabel | functional (analysis grid), not dead | **relabelled**, not removed |
 
 ## [UPSTREAM] — inherited, NOT actionable (note only, never patch)
 
