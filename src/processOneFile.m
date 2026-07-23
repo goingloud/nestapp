@@ -696,6 +696,50 @@ for si = 1:nSteps
                 EEG = pop_tesa_detectbadchannels(EEG, dbcArgs{:});
                 EEG = eeg_checkset( EEG );
 
+            case 'Detect Bad Channels (RANSAC)'
+                o = varinToStruct(varin);
+                % clean_channels correlates channels over time windows, so it
+                % is a continuous-data operation - not meaningful on epochs.
+                if size(EEG.data, 3) > 1
+                    error('nestapp:ransacNeedsContinuous', ...
+                        ['Detect Bad Channels (RANSAC) works on CONTINUOUS ' ...
+                         'data (it correlates channels over time windows). ' ...
+                         'Place it before Epoching.']);
+                end
+                % clean_channels itself requires channel coordinates and errors
+                % clearly if most are missing, so no extra guard here.
+                %
+                % RANSAC correlation is wrecked by slow drift, so we DETECT on a
+                % throwaway high-passed copy but REMOVE the flagged channels from
+                % the untouched data - the kept signal is never filtered by this
+                % step (deferring the real high-pass past decay removal). This
+                % mirrors how EEGLAB's own clean_artifacts conditions the data
+                % (clean_drifts -> clean_channels) before detecting.
+                labelsBefore = {EEG.chanlocs.labels};
+                EEGdetect = EEG;
+                if o.detectHighpassHz > 0
+                    % pop_eegfiltnew (firfilt, core EEGLAB) FIR high-pass; the
+                    % copy may ring over the residual TMS decay, but that ringing
+                    % is shared across the montage and does not make good
+                    % channels look decorrelated - it only informs which
+                    % channels are bad.
+                    EEGdetect = pop_eegfiltnew(EEGdetect, 'locutoff', o.detectHighpassHz);
+                end
+                EEGdetect = clean_channels(EEGdetect, o.corrThreshold, ...
+                    o.noiseThreshold, o.windowLenS, o.maxBrokenTime, ...
+                    o.numSamples, o.subsetFraction);
+                % Channels that did not survive detection, as indices into the
+                % still-untouched EEG (its channel order matches labelsBefore).
+                badIdx = find(~ismember(labelsBefore, {EEGdetect.chanlocs.labels}));
+                clear EEGdetect   % free the large filtered copy before pop_select reallocates
+                if ~isempty(badIdx)
+                    EEG = pop_select(EEG, 'nochannel', badIdx);
+                end
+                % Record the removals as bad so "Interpolate Channels" can
+                % restore them (vs. intentionally-removed channels).
+                EEG = recordBadChannels(EEG, labelsBefore);
+                EEG = eeg_checkset( EEG );
+
             case 'Fit Artifact Model (TESA)'
                 o = varinToStruct(varin);
                 EEG = pop_tesa_fitartifactmodel(EEG, ...
