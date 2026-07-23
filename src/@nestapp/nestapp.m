@@ -32,7 +32,7 @@ classdef nestapp < matlab.apps.AppBase
         StepsListBoxLabel               matlab.ui.control.Label
         InfoTextArea                    matlab.ui.control.TextArea
         CommandDescriptionLabel         matlab.ui.control.Label
-        StepsListBox                    matlab.ui.control.ListBox
+        StepsTree                       matlab.ui.container.Tree
         VisualizingTab                  matlab.ui.container.Tab
         TEPvarNameEditField             matlab.ui.control.EditField
         TEPvarNameEditFieldLabel        matlab.ui.control.Label
@@ -182,7 +182,7 @@ classdef nestapp < matlab.apps.AppBase
     properties (Access = public)
         % Tab Cleaning
         selectedItem % Selected Table Item Values
-        info % Command Information and description
+        info % containers.Map: step name -> info/description text (shown in InfoTextArea)
         % Canonical pipeline state - single source of truth for steps and params.
         % appendStep/removeStep/moveStep/clearSteps/loadPipelineData all write here.
         currentParamKey  = ''  % param key selected in UITable (transient)
@@ -210,7 +210,6 @@ classdef nestapp < matlab.apps.AppBase
         StatusBar           % uilabel pinned to bottom of UIFigure - visible on both tabs
         pipelineDirty   = false    % true when pipeline has unsaved changes
         pipelineName    = ''       % filename of last saved/loaded pipeline
-        lastStepClick   = NaT     % datetime of last StepsListBox click (double-click detection)
         tepPeaks        = struct([]) % struct array from tepPeakFinder; cached after each PLOT TEP
         tepComponentDefs = struct([]) % component window definitions used by tepPeakFinder
         allPipelineReports = {}    % cell array of report entry structs from current session
@@ -232,6 +231,90 @@ classdef nestapp < matlab.apps.AppBase
         % app.spec, SelectedListBox.Items, and SelectedListBox.ItemsData must
         % stay in sync. These methods are the ONLY permitted way to add,
         % remove, move, or clear steps -- callbacks delegate here.
+
+        function name = selectedStepName(app)
+        % SELECTEDSTEPNAME  Registry step name of the selected tree node, or ''
+        % when a category/operation header (empty NodeData) is selected.
+            name = '';
+            n = app.StepsTree.SelectedNodes;
+            if isempty(n); return; end
+            d = n(1).NodeData;
+            if ischar(d) || isstring(d); name = char(d); end
+        end
+
+        function populateStepsTree(app)
+        % POPULATESTEPSTREE  (Re)build the stage-grouped picker tree and the
+        % name->info map from the steps this machine can run (availableSteps).
+        % Leaf NodeData is the exact registry step name. Any available step the
+        % taxonomy forgot is collected under "Other" so nothing silently
+        % vanishes from the picker.
+            delete(app.StepsTree.Children);
+            steps      = availableSteps();
+            availNames = {steps.name};
+            app.info   = containers.Map(availNames, {steps.info});
+
+            TAX  = stepTaxonomy();
+            OWN  = {'AARATEP', 'nestapp'};
+            flag = stepFlagIcon();
+            sCat = uistyle('FontWeight', 'bold');
+            sOp  = uistyle('FontColor', [0.42 0.47 0.53]);
+
+            placed = {};
+            for c = 1:numel(TAX)
+                cat = TAX(c);
+                % keep only the operations/variants available on this machine
+                ops = struct('name', {}, 'variants', {});
+                cnt = 0;
+                for o = 1:numel(cat.ops)
+                    v = cat.ops(o).variants;
+                    v = v(ismember({v.step}, availNames));
+                    if isempty(v); continue; end
+                    cnt = cnt + 1;
+                    ops(cnt).name     = cat.ops(o).name;
+                    ops(cnt).variants = v;
+                end
+                if cnt == 0; continue; end
+                nShown = sum(arrayfun(@(o) numel(o.variants), ops));
+                cNode = uitreenode(app.StepsTree, ...
+                    'Text', sprintf('%s   (%d)', upper(cat.name), nShown), 'NodeData', '');
+                addStyle(app.StepsTree, sCat, 'node', cNode);
+                for o = 1:numel(ops)
+                    if numel(ops(o).variants) == 1
+                        addStepLeaf(app, cNode, ops(o).variants(1), OWN, flag);
+                    else
+                        oNode = uitreenode(cNode, 'Text', ops(o).name, 'NodeData', '');
+                        addStyle(app.StepsTree, sOp, 'node', oNode);
+                        for k = 1:numel(ops(o).variants)
+                            addStepLeaf(app, oNode, ops(o).variants(k), OWN, flag);
+                        end
+                    end
+                    placed = [placed, {ops(o).variants.step}]; %#ok<AGROW>
+                end
+            end
+
+            % Safety net: surface any available step the taxonomy did not place.
+            orphan = setdiff(availNames, placed);
+            if ~isempty(orphan)
+                oNode = uitreenode(app.StepsTree, ...
+                    'Text', sprintf('OTHER   (%d)', numel(orphan)), 'NodeData', '');
+                addStyle(app.StepsTree, sCat, 'node', oNode);
+                for i = 1:numel(orphan)
+                    uitreenode(oNode, 'Text', orphan{i}, 'NodeData', orphan{i});
+                end
+            end
+
+            expand(app.StepsTree);
+        end
+
+        function addStepLeaf(~, parent, v, OWN, flagIcon)
+        % ADDSTEPLEAF  One leaf whose NodeData is the registry step name; an
+        % amber flag marks in-house / vendored (AARATEP / nestapp) providers.
+            if any(strcmp(v.provider, OWN))
+                uitreenode(parent, 'Text', v.step, 'NodeData', v.step, 'Icon', flagIcon);
+            else
+                uitreenode(parent, 'Text', v.step, 'NodeData', v.step);
+            end
+        end
 
         function appendStep(app, stepName)
         % APPENDSTEP  Append stepName to the pipeline using its default params.
@@ -1721,13 +1804,10 @@ classdef nestapp < matlab.apps.AppBase
         % Code that executes after component creation
         function startupFcn(app)
             clc
-            % Only steps this machine can run - see availableSteps. Items and
-            % info are built from the SAME filtered list because
-            % StepsListBoxValueChanged indexes info by position in Items.
-            steps = availableSteps();
-            app.StepsListBox.Items = {steps.name};
-
-            app.info = {steps.info};
+            % Fill the stage-grouped step-picker tree and the name->info map it
+            % reads on selection. Both are built from availableSteps, so what is
+            % offered here is exactly what the pre-flight will accept.
+            populateStepsTree(app);
 
             app.spec = repmat(struct('name','','params',struct()), 0, 1);
             app.SelectedListBox.Items(:) = [];
@@ -1749,29 +1829,38 @@ classdef nestapp < matlab.apps.AppBase
             clc
         end
 
-        % Clicked callback: StepsListBox
-        function StepsListBoxClicked(app, ~)
-            % Detect double-click via inter-click interval (< 500 ms).
-            % ListBoxInteraction has no NumClicks property in R2025b.
-            t = datetime('now');
-            if seconds(t - app.lastStepClick) < 0.5
-                appendStep(app, app.StepsListBox.Value);
+        % Selection changed function: StepsTree
+        function StepsTreeSelectionChanged(app, ~)
+            % Category and operation nodes have empty NodeData - they group, they
+            % are not steps, so selecting one just clears the Info panel.
+            name = selectedStepName(app);
+            if isempty(name)
+                app.InfoTextArea.Value = '';
+            elseif isKey(app.info, name)
+                app.InfoTextArea.Value = string(app.info(name));
             end
-            app.lastStepClick = t;
+            app.selectedItem = [];
         end
 
-        % Value changed function: StepsListBox
-        function StepsListBoxValueChanged(app, ~)
-            value = app.StepsListBox.Value;
-            ind = find(ismember(app.StepsListBox.Items,value));
-            app.InfoTextArea.Value = string(app.info{ind});
-            app.selectedItem = [];
+        % Double-clicked callback: StepsTree
+        function StepsTreeDoubleClicked(app, ~)
+            % Double-clicking a step adds it; double-clicking a category/
+            % operation header (empty NodeData) does nothing here and lets the
+            % tree's native expand/collapse take over.
+            name = selectedStepName(app);
+            if isempty(name)
+                return
+            end
+            appendStep(app, name);
         end
 
         % Button pushed function: AddButton
         function AddButtonPushed(app, ~)
-            stepName = app.StepsListBox.Value;
-            appendStep(app, stepName);
+            name = selectedStepName(app);
+            if isempty(name)
+                return   % a category/operation header is selected - nothing to add
+            end
+            appendStep(app, name);
         end
 
         % Button pushed function: MoveUpButton

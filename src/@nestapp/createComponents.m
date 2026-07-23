@@ -81,18 +81,20 @@ function createComponents(app)
             app.CleaningTab.AutoResizeChildren = 'off';
             app.CleaningTab.Title = 'Cleaning';
 
-            % Create StepsListBox - items derived from the registry, not
-            % hardcoded, and filtered to what this machine can actually run
-            % (availableSteps). startupFcn repopulates it the same way; both
-            % must use the same source or the list differs between them.
-            reg_init = availableSteps();
-            app.StepsListBox = uilistbox(app.CleaningTab);
-            app.StepsListBox.Items = {reg_init.name};
-            app.StepsListBox.ValueChangedFcn = createCallbackFcn(app, @StepsListBoxValueChanged, true);
-            app.StepsListBox.FontSize = 11;
-            app.StepsListBox.ClickedFcn = createCallbackFcn(app, @StepsListBoxClicked, true);
-            app.StepsListBox.Position = [10 173 207 294];
-            app.StepsListBox.Value = reg_init(1).name;
+            % Create StepsTree - a stage-grouped tree of the available steps
+            % (see stepTaxonomy / populateStepsTree). Nodes are filled in
+            % startupFcn via populateStepsTree so the empty tree here and the
+            % populated one share one source. NodeData on each leaf is the exact
+            % registry step name, which the Add/selection callbacks read.
+            app.StepsTree = uitree(app.CleaningTab);
+            app.StepsTree.FontSize = 11;
+            app.StepsTree.Position = [10 173 207 294];
+            app.StepsTree.SelectionChangedFcn = createCallbackFcn(app, @StepsTreeSelectionChanged, true);
+            % Double-click a step to add it. DoubleClickedFcn is a recent uitree
+            % addition; guard so older releases just fall back to the Add button.
+            if isprop(app.StepsTree, 'DoubleClickedFcn')
+                app.StepsTree.DoubleClickedFcn = createCallbackFcn(app, @StepsTreeDoubleClicked, true);
+            end
 
             % Create CommandDescriptionLabel
             app.CommandDescriptionLabel = uilabel(app.CleaningTab);
