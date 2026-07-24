@@ -135,19 +135,16 @@ function clause = methodsClause(stepName, params)
                 clause = sprintf('%s components were removed', listJoin(cats));
             end
 
-        case 'Flag ICA Components (AARATEP Muscle)'
-            clause = 'residual muscle components identified by the AARATEP classifier were also removed';
-
-        case 'Modified Bandpass Filter (AARATEP)'
+        case 'Modified Bandpass Filter (TESA)'
             lo = getf(p,'lowCutoff',0); hi = getf(p,'highCutoff',0);
-            if lo > 0 && hi > 0
+            if ~isempty(lo) && ~isempty(hi) && lo > 0 && hi > 0
                 edges = sprintf('%g-%g Hz band-pass', lo, hi);
-            elseif lo > 0
+            elseif ~isempty(lo) && lo > 0
                 edges = sprintf('%g Hz high-pass', lo);
             else
                 edges = sprintf('%g Hz low-pass', hi);
             end
-            clause = sprintf(['data were filtered with the AARATEP modified ' ...
+            clause = sprintf(['data were filtered with a modified ' ...
                 'Butterworth filter (%s with autoregressive extrapolation to ' ...
                 'limit artifact spread)'], edges);
 

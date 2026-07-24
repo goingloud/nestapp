@@ -13,7 +13,7 @@ function EEG = markICClass(EEG, mask, label)
 %   even when the flags came from a custom classifier (AARATEP / ARTIST)
 %   rather than ICLabel. A later classifier wins for an IC flagged twice.
 %
-%   See also: aaratepMuscleClassifier, artistFlagDecayICs, recordICARound
+%   See also: aaratepMuscleClassifier, recordICARound
 
 mask  = logical(mask(:)');
 nComp = numel(mask);

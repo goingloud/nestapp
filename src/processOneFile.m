@@ -1200,30 +1200,6 @@ for si = 1:nSteps
                     'aggTrimPercent',                   10);
                 EEG = eeg_checkset( EEG );
 
-            case 'Flag ICA Components (AARATEP Muscle)'
-                vars = convertContainedStringsToChars(varin);
-                EEG = aaratepMuscleClassifier(EEG, vars{:});
-                EEG = eeg_checkset( EEG );
-
-            case 'Modified Bandpass Filter (AARATEP)'
-                ensureAaratepOnPath();
-                o = varinToStruct(varin);
-                artSpan = [o.artifactStartMs, o.artifactEndMs] * 1e-3 * o.artifactMultiplier;
-                lo = o.lowCutoff;  if lo == 0, lo = []; end
-                hi = o.highCutoff; if hi == 0, hi = []; end
-                % Clamp extrapolation length to available epoch room
-                % (upstream c_TMSEEG_Preprocess_AARATEPPipeline.m lines 192-193).
-                tExt = min(o.piecewiseTimeToExtend, min(abs([EEG.xmin, EEG.xmax] - artSpan)));
-                preDur = o.prePostExtrapMs * 1e-3;
-                EEG = c_TMSEEG_applyModifiedBandpassFilter(EEG, ...
-                    'lowCutoff',                     lo, ...
-                    'highCutoff',                    hi, ...
-                    'artifactTimespan',              artSpan, ...
-                    'doPiecewise',                   true, ...
-                    'piecewiseTimeToExtend',         tExt, ...
-                    'prePostExtrapolationDurations', [preDur, preDur]);
-                EEG = eeg_checkset( EEG );
-
             case 'Median Filter 1D'
                 vars = convertContainedStringsToChars(varin);
                 ind1 = find(strcmp(vars,'timeWin'));

@@ -381,7 +381,7 @@ r1 = initPipelineReport('a.set');
 r1.steps = {stepRecord('Remove Decay Artifact')};
 r1.channels.original = 64; r1.channels.nRejected = 2; r1.channels.final = 62;
 r2 = initPipelineReport('b.set');
-r2.steps = {stepRecord('Flag ICA Components (AARATEP Muscle)')};
+r2.steps = {stepRecord('Interpolate Missing Data (AR-Blend)')};
 r2.channels.original = 64; r2.channels.nRejected = 4; r2.channels.final = 60;
 txt = summarizeReports({r1, r2});
 testCase.verifyTrue(contains(txt, 'METHODS'), 'Summary must include a METHODS section');

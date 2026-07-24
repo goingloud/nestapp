@@ -77,6 +77,54 @@ switch name
                         '(threshold %g uV preserved); the step was de-registered ' ...
                         'but the function still runs'], thresh);
 
+    case 'Flag ICA Components (AARATEP Muscle)'
+        % Retired as a step: our port of an AARATEP muscle heuristic that
+        % overlaps TESA's own IC muscle detection (pop_tesa_compselect). De-
+        % registered so nestapp does not advertise a second, in-house muscle
+        % classifier - but, like the Peak flag, the function stays on the path
+        % and saved pipelines keep working by calling it directly. Window and
+        % threshold carry across so a pipeline runs what it asked for.
+        w1 = 11; w2 = 30; thr = 8;
+        if isfield(params,'winStartMs')      && ~isempty(params.winStartMs);      w1  = params.winStartMs;      end
+        if isfield(params,'winEndMs')        && ~isempty(params.winEndMs);        w2  = params.winEndMs;        end
+        if isfield(params,'muscleThreshold') && ~isempty(params.muscleThreshold); thr = params.muscleThreshold; end
+        name   = 'Manual Command';
+        params = struct( ...
+            'command', sprintf(['EEG = aaratepMuscleClassifier(EEG, ''winStartMs'', %g, ' ...
+                '''winEndMs'', %g, ''muscleThreshold'', %g);'], w1, w2, thr), ...
+            'description', sprintf('AARATEP muscle IC flag ([%g %g] ms, x%g) - was a step, now a direct call', w1, w2, thr));
+        note = sprintf(['Flag ICA Components (AARATEP Muscle) -> Manual Command ' ...
+                        '(window [%g %g] ms, threshold %g preserved); the step was ' ...
+                        'de-registered but the function still runs'], w1, w2, thr);
+
+    case 'Modified Bandpass Filter (AARATEP)'
+        % De-registered: TESA 1.2 ships tesa_modifiedbandpassfilter, a port of
+        % the same Cline function whose output is bit-identical for matched
+        % settings. Map onto the TESA step so pipelines run the maintained copy.
+        % The old step widened the artifact window by artifactMultiplier before
+        % filtering; the TESA step has no multiplier, so bake it into the window.
+        lo = 1; hi = []; aS = -2; aE = 12; mult = 3; ext = 0.5;
+        if isfield(params,'lowCutoff')             && ~isempty(params.lowCutoff);             lo   = params.lowCutoff;             end
+        if isfield(params,'highCutoff')            && ~isempty(params.highCutoff);            hi   = params.highCutoff;            end
+        if isfield(params,'artifactStartMs')       && ~isempty(params.artifactStartMs);       aS   = params.artifactStartMs;       end
+        if isfield(params,'artifactEndMs')         && ~isempty(params.artifactEndMs);         aE   = params.artifactEndMs;         end
+        if isfield(params,'artifactMultiplier')    && ~isempty(params.artifactMultiplier);    mult = params.artifactMultiplier;    end
+        if isfield(params,'piecewiseTimeToExtend') && ~isempty(params.piecewiseTimeToExtend); ext  = params.piecewiseTimeToExtend; end
+        if isequal(hi, 0); hi = []; end            % 0 meant "no low-pass"; TESA uses []
+        name   = 'Modified Bandpass Filter (TESA)';
+        params = struct( ...
+            'lowCutoff',       lo, ...
+            'highCutoff',      hi, ...
+            'filterMethod',    'butterworth', ...
+            'artifactStartMs', aS * mult, ...
+            'artifactEndMs',   aE * mult, ...
+            'extendMs',        ext * 1000, ...
+            'filtOrder',       4, ...
+            'filtType',        'auto');
+        note = sprintf(['Modified Bandpass Filter (AARATEP) -> (TESA); artifact ' ...
+                        'window x%g baked into [%g %g] ms, extend %g ms - same ' ...
+                        'output (TESA ports the same function)'], mult, aS*mult, aE*mult, ext*1000);
+
     case 'Run ICA'
         % 'Run ICA' chose its algorithm through an `icatype` parameter and
         % passed everything to pop_runica. It is now three steps, one per

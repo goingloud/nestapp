@@ -17,7 +17,7 @@ function [EEG, invalidLabels] = validateChannelCoords(EEG, policy)
 %   subset it appears in while itself never being flagged (its own reconstruction
 %   is always NaN). An empty/NaN coord is dropped from the spatial model and
 %   becomes an un-checked blind spot. Either way the channel escapes the RANSAC
-%   quality screen. See artistBadChannelsRansac and clean_rawdata/clean_channels.
+%   quality screen. See clean_rawdata/clean_channels.
 %
 %   POLICY (case-insensitive):
 %     'off'    no check (default; preserves legacy behaviour)

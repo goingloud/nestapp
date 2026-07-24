@@ -66,8 +66,7 @@ raw = {
    {'Frequency Filter',            {{'Frequency Filter','firfilt'}, ...
                                     {'Frequency Filter (TESA)','TESA'}, ...
                                     {'Frequency Filter (CleanLine)','CleanLine'}}}
-   {'Modified Bandpass Filter',    {{'Modified Bandpass Filter (TESA)','TESA'}, ...
-                                    {'Modified Bandpass Filter (AARATEP)','AARATEP'}}}
+   {'Modified Bandpass Filter',    {{'Modified Bandpass Filter (TESA)','TESA'}}}
    {'Median Filter 1D',            {{'Median Filter 1D','TESA'}}}
  }
  'Automatic Cleaning', {
@@ -87,8 +86,7 @@ raw = {
                                     {'Run ICA (Picard)','PICARD'}, ...
                                     {'Run TESA ICA','TESA'}}}
    {'Label ICA Components',        {{'Label ICA Components','ICLabel'}}}
-   {'Flag ICA Components',         {{'Flag ICA Components for Rejection','ICLabel'}, ...
-                                    {'Flag ICA Components (AARATEP Muscle)','nestapp'}}}
+   {'Flag ICA Components',         {{'Flag ICA Components for Rejection','ICLabel'}}}
    {'Remove Flagged ICA Components', {{'Remove Flagged ICA Components','EEGLAB'}}}
    {'Remove ICA Components',       {{'Remove ICA Components (TESA)','TESA'}}}
  }

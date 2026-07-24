@@ -46,8 +46,10 @@ function cases = characterizationCases()
 %                          not produce a meaningful projection.
 %     Detect Bad Channels  vendored AARATEP detectors; need a lead field and a
 %     (PREP/DDWiener)        realistic montage to behave.
-%     Modified Bandpass    superseded by the TESA 1.2 step; will be pinned
-%     Filter (AARATEP)       when that lands.
+%     Modified Bandpass    the AARATEP step is de-registered (migrated onto the
+%     Filter                 TESA step, whose output is bit-identical for matched
+%                            settings); the TESA step is not pinned here - its AR
+%                            extrapolation window overruns the short fixture epoch.
 
 cases = {
   'De-Trend Epoch',                    'epoched',       struct(),                              {}

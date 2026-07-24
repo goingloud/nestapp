@@ -111,5 +111,34 @@ classdef test_stepMigration < matlab.unittest.TestCase
         function non_char_input_is_tolerated(tc)
             tc.verifyEqual(canonicalStepName(42), 42);
         end
+
+        % --- retired AARATEP steps migrate rather than break --------------
+        function aaratep_muscle_migrates_to_manual_command(tc)
+            % Retired step -> Manual Command calling the kept helper, window
+            % and threshold carried across so the pipeline runs what it asked.
+            p = struct('winStartMs', 12, 'winEndMs', 28, 'muscleThreshold', 6);
+            [name, params, note] = canonicalStepName('Flag ICA Components (AARATEP Muscle)', p);
+            tc.verifyEqual(name, 'Manual Command');
+            tc.verifyTrue(contains(params.command, 'aaratepMuscleClassifier'));
+            tc.verifyTrue(contains(params.command, '''winStartMs'', 12'));
+            tc.verifyTrue(contains(params.command, '''muscleThreshold'', 6'));
+            tc.verifyNotEmpty(note);
+        end
+
+        function aaratep_bandpass_migrates_to_tesa_with_baked_window(tc)
+            % Retired AARATEP bandpass -> TESA step. The x3 artifact multiplier
+            % must be baked into the window (the TESA step has no multiplier),
+            % or the migrated pipeline would filter a 3x-narrower artifact span.
+            p = struct('lowCutoff', 1, 'highCutoff', 0, 'artifactStartMs', -2, ...
+                'artifactEndMs', 12, 'artifactMultiplier', 3, 'piecewiseTimeToExtend', 0.5);
+            [name, params, note] = canonicalStepName('Modified Bandpass Filter (AARATEP)', p);
+            tc.verifyEqual(name, 'Modified Bandpass Filter (TESA)');
+            tc.verifyEqual(params.artifactStartMs, -6);   % -2 x 3
+            tc.verifyEqual(params.artifactEndMs,   36);   % 12 x 3
+            tc.verifyEqual(params.extendMs, 500);         % 0.5 s -> ms
+            tc.verifyEmpty(params.highCutoff);            % 0 -> [] (no low-pass)
+            tc.verifyEqual(params.filterMethod, 'butterworth');
+            tc.verifyNotEmpty(note);
+        end
     end
 end

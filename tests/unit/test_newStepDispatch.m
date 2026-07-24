@@ -29,17 +29,15 @@ end
 % ── helper invocation: each new helper must accept the name-value pairs
 %    that paramsToVarin produces from its registry defaults ──────────────────
 
-function test_aaratepMuscleClassifier_acceptsDispatchedArgs(testCase)
+function test_aaratepMuscleClassifier_acceptsMigratedCall(testCase)
+% The muscle step was retired (see canonicalStepName), but the function stays
+% on the path and old pipelines reach it through a migrated Manual Command:
+%   aaratepMuscleClassifier(EEG, 'winStartMs', .., 'winEndMs', .., 'muscleThreshold', ..)
+% Pin that exact call so the migration keeps working.
 EEG = makeFakeEpochedEEGWithICA();
-vars = defaultsFor('Flag ICA Components (AARATEP Muscle)');
-fn = @() aaratepMuscleClassifier(EEG, vars{:});
+fn  = @() aaratepMuscleClassifier(EEG, 'winStartMs', 11, 'winEndMs', 30, 'muscleThreshold', 8);
 testCase.verifyWarningFree(fn, ...
-    'Helper must accept the name-value pairs produced by paramsToVarin.');
-end
-
-function test_dispatchPattern_aaratepMuscleClassifier(testCase)
-verifyDispatchPattern(testCase, 'Flag ICA Components (AARATEP Muscle)', ...
-    'aaratepMuscleClassifier', makeFakeEpochedEEGWithICA());
+    'Retired-but-kept helper must accept the migrated Manual Command call.');
 end
 
 % ── path hygiene: ensureAaratepOnPath must not shadow EEGLAB pop_* funcs ──
