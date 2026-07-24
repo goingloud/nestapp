@@ -253,6 +253,11 @@ classdef nestapp < matlab.apps.AppBase
             availNames = {steps.name};
             app.info   = containers.Map(availNames, {steps.info});
 
+            % uitree node styling (uistyle/addStyle on a tree) is R2023b+; the
+            % app's floor is R2023a, so probe once - the picker still builds on
+            % older releases, just without bold headers / muted operation rows.
+            canStyle = treeStylingSupported(app, app.StepsTree);
+
             TAX  = stepTaxonomy();
             OWN  = {'AARATEP', 'nestapp'};
             flag = stepFlagIcon();
@@ -277,13 +282,13 @@ classdef nestapp < matlab.apps.AppBase
                 nShown = sum(arrayfun(@(o) numel(o.variants), ops));
                 cNode = uitreenode(app.StepsTree, ...
                     'Text', sprintf('%s   (%d)', upper(cat.name), nShown), 'NodeData', '');
-                addStyle(app.StepsTree, sCat, 'node', cNode);
+                if canStyle; addStyle(app.StepsTree, sCat, 'node', cNode); end
                 for o = 1:numel(ops)
                     if numel(ops(o).variants) == 1
                         addStepLeaf(app, cNode, ops(o).variants(1), OWN, flag);
                     else
                         oNode = uitreenode(cNode, 'Text', ops(o).name, 'NodeData', '');
-                        addStyle(app.StepsTree, sOp, 'node', oNode);
+                        if canStyle; addStyle(app.StepsTree, sOp, 'node', oNode); end
                         for k = 1:numel(ops(o).variants)
                             addStepLeaf(app, oNode, ops(o).variants(k), OWN, flag);
                         end
@@ -297,7 +302,7 @@ classdef nestapp < matlab.apps.AppBase
             if ~isempty(orphan)
                 oNode = uitreenode(app.StepsTree, ...
                     'Text', sprintf('OTHER   (%d)', numel(orphan)), 'NodeData', '');
-                addStyle(app.StepsTree, sCat, 'node', oNode);
+                if canStyle; addStyle(app.StepsTree, sCat, 'node', oNode); end
                 for i = 1:numel(orphan)
                     uitreenode(oNode, 'Text', orphan{i}, 'NodeData', orphan{i});
                 end
@@ -309,11 +314,26 @@ classdef nestapp < matlab.apps.AppBase
         function addStepLeaf(~, parent, v, OWN, flagIcon)
         % ADDSTEPLEAF  One leaf whose NodeData is the registry step name; an
         % amber flag marks in-house / vendored (AARATEP / nestapp) providers.
+            node = uitreenode(parent, 'Text', v.step, 'NodeData', v.step);
             if any(strcmp(v.provider, OWN))
-                uitreenode(parent, 'Text', v.step, 'NodeData', v.step, 'Icon', flagIcon);
-            else
-                uitreenode(parent, 'Text', v.step, 'NodeData', v.step);
+                % Set the flag after creation and tolerate its absence: the leaf
+                % must always appear even on a release without node icons.
+                try, node.Icon = flagIcon; catch, end %#ok<CTCH>
             end
+        end
+
+        function tf = treeStylingSupported(~, tree)
+        % TREESTYLINGSUPPORTED  True when uistyle/addStyle work on a uitree node
+        % (R2023b+). Probed at runtime rather than gated on a version string, so
+        % the picker degrades gracefully without depending on release numbers.
+            probe = uitreenode(tree, 'Text', '', 'NodeData', '');
+            try
+                addStyle(tree, uistyle('FontWeight', 'bold'), 'node', probe);
+                tf = true;
+            catch
+                tf = false;
+            end
+            delete(probe);
         end
 
         function appendStep(app, stepName)
