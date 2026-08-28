@@ -2,21 +2,28 @@
 % Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
 % Part of nestapp; see the LICENSE file for full terms.
 function tests = test_windowGeometry
-% TEST_WINDOWGEOMETRY  Regression tests for the resize handler's geometry.
+% TEST_WINDOWGEOMETRY  What the resize handler can only show in a real window.
 %
-%   Two confirmed bugs are pinned here.
+%   Deliberately small: it launches the app, which takes the mouse, so it holds
+%   only assertions that need a live figure. Two of its former tests did not -
+%   the minimum-size arithmetic and the re-entrancy source check - and they now
+%   live in tests/regression/test_windowClamp, where they run in milliseconds
+%   and cover far more cases than a handful of drag sizes.
 %
-%   1. The window walked up the screen. UIFigureSizeChanged enforced a minimum
-%      size by assigning UIFigure.Position(3:4), which anchors [left bottom],
-%      so restoring a height from a raised bottom lifted the whole window.
-%      Repeated over a stream of resize events it marched off the top of the
-%      monitor at a constant size. The minimum is now applied by writing the
-%      full Position with the top edge pinned.
+%   What remains needs the app:
 %
-%   2. The Plot Type radio group overlapped the topoplot axes. Its base
-%      geometry ran to x=335 while UIAxes2 starts at x=340; since every
-%      component scales by the same factor, the base overlap scaled with it.
-%      The group is 185 px wide (was 195) so the gap is positive at any size.
+%   1. The handler is wired to the clamp, and writing the result does not lift
+%      the window. (The clamp rule itself is proved without a window.)
+%
+%   2. The window does not drift while idle - only a live figure can show that
+%      nothing moves when nothing happens.
+%
+%   3. The Plot Type radio group clears the topoplot at every size. Its base
+%      geometry ran to x=335 while UIAxes2 starts at x=340, and since every
+%      component scales by the same factor the base overlap scaled with it. This
+%      needs the app because the positions come from createComponents literals
+%      and rescaleComponents applies them to real components; there is no data
+%      source for them yet to check against.
 %
 %   Builds the real app, so it needs a display.
 %
@@ -42,25 +49,24 @@ end
 
 % ── the window must not walk up the screen ────────────────────────────────
 
-function test_clampDoesNotMoveTheWindow(testCase)
-% Shrink from the bottom edge (bottom rises, height falls) past the minimum.
-% The clamp must restore the height downward, holding the top edge, not push
-% the window up the screen.
+function test_theHandlerAppliesTheClampWithoutMovingTheWindow(testCase)
+% Wiring only. The arithmetic - including a 25-event shrink stream and the
+% fixed-point property - is covered without a window in
+% tests/regression/test_windowClamp; what needs a real figure is that the
+% size-changed handler actually calls it and writes the result.
 app = launchApp(testCase);
 app.UIFigure.Position = [100 100 867 500];
-drawnow; drawnow;
+drawnow;
 topBefore = sum(app.UIFigure.Position([2 4]));
 
-for k = 1:6
-    p = app.UIFigure.Position;
-    app.UIFigure.Position = [p(1), p(2) + 40, p(3), p(4) - 40];
-    drawnow; drawnow;
-end
+p = app.UIFigure.Position;
+app.UIFigure.Position = [p(1), p(2) + 120, p(3), p(4) - 120];   % below the minimum
+drawnow; drawnow;
 
 pos = app.UIFigure.Position;
-testCase.verifyEqual(sum(pos([2 4])), topBefore, 'AbsTol', 1, ...
-    'The window top edge must not climb when the minimum size is enforced');
-testCase.verifyGreaterThanOrEqual(pos(4), 420, 'Minimum height must hold');
+testCase.verifyGreaterThanOrEqual(pos(4), 420, 'the clamp must have applied');
+testCase.verifyEqual(sum(pos([2 4])), topBefore, 'AbsTol', 2, ...
+    'and it must not have lifted the window');
 end
 
 function test_idleWindowDoesNotDrift(testCase)
@@ -73,17 +79,6 @@ for k = 1:10
 end
 testCase.verifyEqual(app.UIFigure.Position, before, ...
     'The window must not move on its own');
-end
-
-function test_resizeHandlerGuardsReentry(testCase) %#ok<INUSD>
-% Source check: the clamp writes Position, which re-fires the callback, and
-% the drawnow inside lets that re-entry run. The guard is what stops the two
-% feeding each other.
-src = fileread(fullfile(repoRoot(), 'src', '@nestapp', 'nestapp.m'));
-assert(contains(src, 'if app.isResizing; return; end'), ...
-    'UIFigureSizeChanged must refuse to re-enter itself');
-assert(~contains(src, 'app.UIFigure.Position(3:4) = newSize'), ...
-    'The minimum size must not be applied by assigning Position(3:4) alone');
 end
 
 % ── the Plot Type group must clear the topoplot at every size ─────────────

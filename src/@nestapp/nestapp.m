@@ -2635,24 +2635,15 @@ classdef nestapp < matlab.apps.AppBase
 
         function newSize = enforceMinWindowSize(app)
         % Grow the window back to the minimum WITHOUT moving it on screen.
-        %
-        % Position is [left bottom width height] with bottom measured from the
-        % bottom of the screen, so assigning Position(3:4) alone anchors the
-        % bottom-left and grows the window upward. Shrinking from the bottom
-        % edge raises `bottom`; restoring the height from there lifts the whole
-        % window, and over a stream of resize events it ratchets off the top of
-        % the monitor at a constant size. Pin the top edge instead, and only
-        % write when the size is genuinely short so a normal resize never
-        % touches Position at all.
-            MIN_W = 650;
-            MIN_H = 420;
-            pos     = app.UIFigure.Position;
-            newSize = [max(pos(3), MIN_W), max(pos(4), MIN_H)];
-            if isequal(newSize, pos(3:4))
-                return
+        % clampWindowPosition owns the arithmetic - and the explanation of why
+        % the top edge has to be pinned - so it can be tested without launching
+        % the app. This method is the part that genuinely needs a figure.
+            MIN_SIZE = [650 420];
+            [newPos, changed] = clampWindowPosition(app.UIFigure.Position, MIN_SIZE);
+            newSize = newPos(3:4);
+            if changed
+                app.UIFigure.Position = newPos;
             end
-            topEdge = pos(2) + pos(4);
-            app.UIFigure.Position = [pos(1), topEdge - newSize(2), newSize];
         end
 
         % Cell edit callback: UITable
