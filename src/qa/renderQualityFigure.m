@@ -512,9 +512,6 @@ end
 s = strjoin(parts, ', ');
 end
 
-function s = plural(n)
-if n == 1, s = ''; else, s = 's'; end
-end
 
 function s = buildSuperTitle(EEG, opts, metrics)
 parts = {};

@@ -10,10 +10,10 @@ function drawDifferenceWave(ax, res, opts)
 %     .colors  n-by-3 (only the difference colour is used; default near-black)
 %     .xlim    time limits, default [-50 300]
 %
-%   The estimator lives in differenceInterval, not here: the window-bars view
-%   and the exported measures need the same numbers, and a statistic computed
-%   inside a plot function gets reimplemented the moment a second view wants
-%   it. This function only draws what that returns.
+%   The estimate arrives as res.contrast, computed by groupCurves at the run's
+%   confidence level, exactly as drawTEPOverlay renders res.est. Deriving it
+%   here instead put a statistic inside a drawing function and ignored the
+%   level the caller asked for.
 %
 %   A shaded band that excludes zero is not a significance test and is not
 %   labelled as one - the app reports estimates, not p-values. It is the
@@ -27,12 +27,13 @@ if numel(res.groups) ~= 2
           'A difference wave needs exactly two groups; got %d.', numel(res.groups));
 end
 
-if ~isfield(opts, 'xlim')   || isempty(opts.xlim);   opts.xlim   = [-50 300]; end
-if ~isfield(opts, 'colors') || isempty(opts.colors); opts.colors = groupColors(1); end
+opts = fillDefaults(opts, struct('xlim', [-50 300], 'colors', groupColors(1)));
 
-A   = res.groups(1);
-B   = res.groups(2);
-est = differenceInterval(A.curves, B.curves, res.design);
+A = res.groups(1);
+B = res.groups(2);
+% groupCurves computed this at the run's confidence level; deriving it here
+% would silently ignore that level, as this function used to.
+est = res.contrast;
 d   = est.mean;
 lo  = est.lo;
 hi  = est.hi;

@@ -37,7 +37,9 @@ bundleDir = '';
 if nargin < 2 || ~isfield(ctx, 'err') || isempty(ctx.err)
     return
 end
-ctx = withBundleDefaults(ctx);
+ctx = fillDefaults(ctx, struct( ...
+    'EEG', struct(), 'spec', struct('name', {}, 'params', {}), ...
+    'stepName', '', 'stepIndex', 0, 'fileName', '', 'pipelineName', ''));
 if isempty(targetDir); targetDir = tempdir; end
 
 stamp = char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'));
@@ -61,15 +63,6 @@ end
 end
 
 % ── helpers ───────────────────────────────────────────────────────────────────
-
-function ctx = withBundleDefaults(ctx)
-% Renamed off "fillDefaults": that is now a shared function in src/, and a
-% local of the same name silently shadows it for this file only - which works,
-% but leaves two different one- and two-argument contracts under one name.
-ctx = fillDefaults(ctx, struct( ...
-    'EEG', struct(), 'spec', struct('name', {}, 'params', {}), ...
-    'stepName', '', 'stepIndex', 0, 'fileName', '', 'pipelineName', ''));
-end
 
 function s = errorText(ctx)
 L = {};

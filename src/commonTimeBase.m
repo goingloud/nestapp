@@ -111,10 +111,9 @@ t    = ref(keep);
 % redraw that feels instant and one that does not.
 idx      = cell(1, n);
 nDropped = zeros(1, n);
-sameGrid = @(v) numel(v) == numel(t) && v(1) == t(1);
 for i = 1:n
     v = times{i}(:)';
-    if sameGrid(v)
+    if numel(v) == numel(t) && v(1) == t(1)
         idx{i} = 1:numel(t);          % the common case: nothing to map
     else
         k      = round((t - v(1)) / dt(1)) + 1;

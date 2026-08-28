@@ -7,14 +7,11 @@ function saveRoiPreset(name, labels)
 %   of that name.
 %
 %   SAVEROIPRESET(name, {}) deletes the saved preset called name. A built-in
-%   that was overridden reverts to its shipped definition, because roiPresets
-%   only overrides a built-in when a saved entry of the same name exists.
+%   that had been overridden reverts to its shipped definition, because
+%   roiPresets only overrides a built-in while a saved entry of that name
+%   exists.
 %
-%   Presets are per-user preferences rather than part of a session file: an ROI
-%   like the near-coil cluster is a habit of whoever is analysing, and should
-%   be there in a fresh session without loading anything.
-%
-%   See also: roiPresets, roiPicker
+%   See also: roiPresets, savedRoiPresets, roiPicker
 
 name = char(name);
 if isempty(strtrim(name))
@@ -22,22 +19,11 @@ if isempty(strtrim(name))
 end
 if ischar(labels) || isstring(labels); labels = cellstr(labels); end
 
-saved = getpref('nestapp', 'roiPresets', struct('name', {}, 'labels', {}));
-if isempty(saved) || ~isfield(saved, 'name')
-    saved = struct('name', {}, 'labels', {});
-end
-
-k = find(strcmp({saved.name}, name), 1);
+saved = savedRoiPresets();
 if isempty(labels)
-    if ~isempty(k); saved(k) = []; end
+    saved(strcmp({saved.name}, name)) = [];
 else
-    entry = struct('name', name, 'labels', {labels(:)'});
-    if isempty(k)
-        saved(end+1) = entry;
-    else
-        saved(k) = entry;
-    end
+    saved = upsertByName(saved, struct('name', name, 'labels', {labels(:)'}));
 end
-
 setpref('nestapp', 'roiPresets', saved);
 end

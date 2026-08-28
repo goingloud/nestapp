@@ -2,17 +2,24 @@
 % Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
 % Part of nestapp; see the LICENSE file for full terms.
 function tests = test_roiPicker
-% TEST_ROIPICKER  The ROI dialog's in/out contract.
+% TEST_ROIPICKER  What the ROI dialog can only be checked by opening.
 %
-%   roiPicker is modal and blocks on uiwait, so each test arms a timer that
-%   presses a button once the dialog is up. Fiddly, but the contract is worth
-%   pinning: the picker is now the only way an ROI gets chosen, and the
-%   distinction it has to keep is cancel (returns []) versus a deliberately
-%   empty selection (returns {}). Collapsing those would make cancelling look
-%   like "the user chose no electrodes" and silently clear a good ROI.
+%   Kept deliberately small. An earlier version drove the dialog for every rule
+%   it could reach, and wedged MATLAB: the picker is modal and blocks on uiwait,
+%   so an error anywhere in the driving code leaves the window open forever and
+%   the session has to be rescued by hand. Everything that is a rule about sets
+%   of labels now lives in tests/unit/test_roiSelectionState, which opens
+%   nothing.
 %
-%   Lives in tests/ui because it opens a window. The montage table and the
-%   presets are pure and tested in tests/unit/test_roiMontage.
+%   What is left is the one thing that genuinely needs the window: the return
+%   contract. Cancel yields [] and a deliberately emptied selection yields {},
+%   and collapsing those would make cancelling look like "the user chose no
+%   electrodes" and silently clear a good ROI. That distinction only exists on
+%   the way out of the dialog.
+%
+%   Every test drives it through driveModalDialog, which closes the dialog
+%   unconditionally - including when the driving code throws - so a failure here
+%   fails the test instead of stopping the machine.
 %
 %   Run: runtests('tests/ui/test_roiPicker')
 tests = functiontests(localfunctions);
@@ -24,9 +31,12 @@ function setupOnce(testCase)
 r = repoRoot();
 addpath(r);
 addpath(fullfile(r, 'src'));
-if ~usejava('desktop')
-    testCase.assumeFail('No display - skipping GUI test');
+addpath(fullfile(r, 'tests', 'helpers'));
+assumeDesktop(testCase);
 end
+
+function setup(testCase)
+isolateRoiPresets(testCase);
 end
 
 function r = repoRoot()
@@ -34,116 +44,89 @@ r = fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))));
 end
 
 function fig = pickerFigure()
-% The newest matching figure only. Returning the whole array would silently
-% aggregate across leaked windows, which is how the figure leak this file
-% found first showed up: 483 state buttons where there should be 69.
 fig = findall(0, 'Type', 'figure', 'Name', 'Select ROI electrodes');
-if numel(fig) > 1; fig = fig(1); end
+if numel(fig) > 1; fig = fig(1); end   % newest only; never aggregate
 end
 
 function pressLater(testCase, texts)
-% Press each named control, in order, once the dialog exists.
-t = timer('StartDelay', 0.75, 'ExecutionMode', 'singleShot', ...
-          'TimerFcn', @(~, ~) pressNow(texts));
-testCase.addTeardown(@() stopAndDelete(t));
-start(t);
+driveModalDialog(testCase, @pickerFigure, @() press(texts));
 end
 
-function stopAndDelete(t)
-if isvalid(t); stop(t); delete(t); end
-end
-
-function pressNow(texts)
+function press(texts)
 fig = pickerFigure();
-if isempty(fig); return; end
+h      = findall(fig, 'Type', 'uibutton', '-or', 'Type', 'uistatebutton');
+labels = get(h, 'Text');
 for k = 1:numel(texts)
-    h = findall(fig, 'Type', 'uibutton', '-or', 'Type', 'uistatebutton');
-    hit = h(strcmp(get(h, 'Text'), texts{k}));
-    if isempty(hit); continue; end
+    hit = h(strcmp(labels, texts{k}));
+    if isempty(hit)
+        error('test:controlNotFound', 'no control labelled "%s"', texts{k});
+    end
     hit = hit(1);
     if isa(hit, 'matlab.ui.control.StateButton')
         hit.Value = ~hit.Value;
-        notifyValueChanged(hit);
-    elseif ~isempty(hit.ButtonPushedFcn)
+        feval(hit.ValueChangedFcn, hit, []);
+    else
         feval(hit.ButtonPushedFcn, hit, []);
     end
 end
 end
 
-function notifyValueChanged(h)
-if ~isempty(h.ValueChangedFcn)
-    feval(h.ValueChangedFcn, h, []);
-end
+function checkNoDialogError(testCase)
+% driveModalDialog swallows errors so the dialog always closes; surface them.
+testCase.verifyEmpty(testCase.TestData.dialogError, ...
+    'the driving code threw - see the captured MException');
 end
 
-% ── the contract ──────────────────────────────────────────────────────────
+% ── the return contract ───────────────────────────────────────────────────
 
-function test_cancelReturnsEmptyNumericNotEmptyCell(testCase)
+function test_cancelReturnsEmptyNumeric(testCase)
 pressLater(testCase, {'Cancel'});
-sel = roiPicker({'CZ', 'PZ'});
+sel = roiPicker({'Cz', 'Pz'});
+checkNoDialogError(testCase);
 testCase.verifyTrue(isnumeric(sel) && isempty(sel), ...
     'cancel must be distinguishable from choosing no electrodes');
 end
 
-function test_acceptReturnsTheIncomingSelectionUnchanged(testCase)
+function test_acceptReturnsACellstrOfCanonicalNames(testCase)
 pressLater(testCase, {'Use these electrodes'});
-sel = roiPicker({'CZ', 'PZ'});
-testCase.verifyTrue(iscell(sel));
-testCase.verifyEqual(sort(sel), {'CZ', 'PZ'});
+sel = roiPicker({'cz', 'PZ'});
+checkNoDialogError(testCase);
+testCase.verifyEqual(sort(sel), {'Cz', 'Pz'});
 end
 
 function test_clearAllThenAcceptReturnsAnEmptyCell(testCase)
-% The other half of the contract: an empty ROI is a legal choice and must come
-% back as {}, not as the cancel value.
 pressLater(testCase, {'Clear all', 'Use these electrodes'});
-sel = roiPicker({'CZ'});
+sel = roiPicker({'Cz'});
+checkNoDialogError(testCase);
 testCase.verifyTrue(iscell(sel) && isempty(sel), ...
     'a deliberately emptied selection is {} - not []');
 end
 
-function test_togglingOneElectrodeIsReflected(testCase)
-pressLater(testCase, {'CZ', 'Use these electrodes'});
-sel = roiPicker({});
-testCase.verifyEqual(sel, {'CZ'});
+function test_closingTheWindowCountsAsCancel(testCase)
+% The X button and Cancel must agree; otherwise closing the dialog would look
+% like an empty ROI was chosen.
+driveModalDialog(testCase, @pickerFigure, @() closeIt());
+sel = roiPicker({'Cz'});
+checkNoDialogError(testCase);
+testCase.verifyTrue(isnumeric(sel) && isempty(sel));
 end
 
-function test_applyingAPresetReplacesTheSelection(testCase)
-pressLater(testCase, {'Apply preset', 'Use these electrodes'});
-sel = roiPicker({'OZ'});
-% The dropdown opens on the first preset, the default F3 cluster.
-testCase.verifyEqual(sort(sel), sort({'AF3', 'F1', 'F3', 'FC1', 'FC3'}));
-end
-
-function test_unavailableElectrodesCannotBeSelectedBySelectAll(testCase)
-% "Select all" means all AVAILABLE: an electrode missing from some file must
-% not enter the ROI, or it cannot be averaged across the cohort.
-pressLater(testCase, {'Select all available', 'Use these electrodes'});
-sel = roiPicker({}, {'CZ', 'PZ', 'F3'});
-testCase.verifyEqual(sort(sel), {'CZ', 'F3', 'PZ'});
-end
-
-function test_availabilityGreysOutTheRest(testCase)
-% Missing electrodes stay visible - their absence is information about the
-% data - but must not be clickable.
-t = timer('StartDelay', 0.75, 'ExecutionMode', 'singleShot', ...
-          'TimerFcn', @(~, ~) captureAndClose());
-testCase.addTeardown(@() stopAndDelete(t));
-start(t);
-roiPicker({}, {'CZ'});
-enabled = getappdata(groot, 'nestappRoiPickerEnabled');
-rmappdata(groot, 'nestappRoiPickerEnabled');
-testCase.assertNotEmpty(enabled);
-testCase.verifyEqual(enabled.nOn, 1, 'only CZ is available');
-testCase.verifyEqual(enabled.nTotal, 69, 'the rest stay on the diagram');
-end
-
-function captureAndClose()
+function closeIt()
 fig = pickerFigure();
-if isempty(fig); return; end
-h = findall(fig, 'Type', 'uistatebutton');
-setappdata(groot, 'nestappRoiPickerEnabled', ...
-    struct('nOn', sum(strcmp(get(h, 'Enable'), 'on')), 'nTotal', numel(h)));
-btn = findall(fig, 'Type', 'uibutton');
-hit = btn(strcmp(get(btn, 'Text'), 'Cancel'));
-if ~isempty(hit); feval(hit(1).ButtonPushedFcn, hit(1), []); end
+feval(fig.CloseRequestFcn, fig, []);
+end
+
+% ── the harness itself ────────────────────────────────────────────────────
+
+function test_aThrowingDriverStillClosesTheDialog(testCase)
+% The regression for the hang. If the driving code errors, the dialog must
+% still close and the error must be reported - not left blocking uiwait.
+driveModalDialog(testCase, @pickerFigure, @() error('test:boom', 'deliberate'));
+sel = roiPicker({'Cz'});
+testCase.verifyNotEmpty(testCase.TestData.dialogError, ...
+    'the error must be captured');
+testCase.verifyEqual(testCase.TestData.dialogError.identifier, 'test:boom');
+testCase.verifyTrue(isnumeric(sel) && isempty(sel), ...
+    'and the dialog must have closed, returning a cancel');
+testCase.verifyEmpty(pickerFigure(), 'no window may be left standing');
 end

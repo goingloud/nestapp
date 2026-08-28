@@ -23,6 +23,8 @@ function res = groupCurves(cache, entries, opts)
 %     .groups         1xG struct: .name .subjects .curves (nSubj x T)
 %                     .chanMeans (C x T, subject-averaged) .nFiles .nSubjects
 %     .est            1xG from curveInterval, aligned with .groups
+%     .contrast       differenceInterval for groups(2) minus groups(1) when
+%                     there are exactly two groups; struct([]) otherwise
 %     .design         the design actually used
 %     .complete       subjects present in every group
 %     .dropped        subjects excluded from a paired estimate, and why
@@ -53,12 +55,14 @@ function res = groupCurves(cache, entries, opts)
 %   See also: loadReducedSets, curveInterval, commonTimeBase, tepFieldCurve
 
 if nargin < 3; opts = struct(); end
-opts = withDefaults(opts);
+opts = fillDefaults(opts, struct('roi', {{}}, 'mode', 'TEP', ...
+    'design', 'unpaired', 'smoothWin', 5, 'level', 0.95));
 
 res = struct('time', [], 'channelLabels', {{}}, 'chanlocs', [], ...
              'groups', struct('name', {}, 'subjects', {}, 'curves', {}, ...
                               'chanMeans', {}, 'nFiles', {}, 'nSubjects', {}), ...
-             'est', struct([]), 'design', opts.design, 'complete', {{}}, ...
+             'est', struct([]), 'contrast', struct([]), ...
+             'design', opts.design, 'complete', {{}}, ...
              'dropped', {{}}, 'info', struct());
 
 use = usableEntries(cache, entries);
@@ -129,23 +133,28 @@ if strcmpi(opts.design, 'paired')
 end
 res.groups = groups;
 res.est    = curveInterval({groups.curves}, opts.design, opts.level);
+
+% The contrast is an estimate, so it belongs here with the others rather than
+% at draw time. drawDifferenceWave was deriving it with no level argument,
+% which drew a 95% difference band beside 99% group bands whenever the run's
+% level was changed.
+if numel(groups) == 2
+    res.contrast = differenceInterval(groups(1).curves, groups(2).curves, ...
+                                      opts.design, opts.level);
+end
 end
 
 % ── helpers ─────────────────────────────────────────────────────────────────
 
-function opts = withDefaults(opts)
-opts = fillDefaults(opts, struct('roi', {{}}, 'mode', 'TEP', ...
-    'design', 'unpaired', 'smoothWin', 5, 'level', 0.95));
-end
-
 function use = usableEntries(cache, entries)
 % Join entries to their cached data, keeping only grouped files that loaded.
 %
-% Holds a cache INDEX, not the cached arrays. Copying trialAvg in here put a
-% 63x2000 double - about 1 MB - into a struct array that grows once per file
-% and is then filtered again by montage, so those arrays were duplicated twice
-% per re-render for no gain. The cache already owns them and outlives this
-% call, so an index is enough.
+% Holds a cache INDEX, not the cached arrays. Copy-on-write means the previous
+% version never actually memcopied the 63x2000 trial averages - they were
+% shared - so the win is not avoided duplication but avoided REALLOCATION:
+% growing a struct array whose elements each carried those fields, once per
+% file, then filtering it again by montage. Measured 0.20 -> 0.09 ms at 12
+% files and 2.9 -> 1.4 ms at 200, on a path that re-runs on every ROI change.
 use = struct('ci', {}, 'subject', {}, 'group', {}, 'label', {}, ...
              'nTrials', {}, 'chanAvg', {}, 'curve', {});
 if isempty(entries) || isempty(cache); return; end

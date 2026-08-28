@@ -25,19 +25,12 @@ function setupOnce(testCase)
 r = repoRoot();
 addpath(r);
 addpath(genpath(fullfile(r, 'src')));
-if ~usejava('desktop')
-    testCase.assumeFail('No display - skipping GUI test');
-end
+addpath(fullfile(r, 'tests', 'helpers'));
+assumeDesktop(testCase);
 end
 
 function r = repoRoot()
 r = fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))));
-end
-
-function app = launchApp(testCase)
-app = nestapp;
-testCase.addTeardown(@() delete(app));
-drawnow;
 end
 
 % ── configuration ─────────────────────────────────────────────────────────

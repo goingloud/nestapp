@@ -4,11 +4,12 @@
 function tests = test_roiMontage
 % TEST_ROIMONTAGE  The montage table and the ROI presets.
 %
-%   roiMontageLayout replaced 637 lines of createComponents - 69 near-identical
-%   uibutton blocks - with a 69-row table. The risk in that move is a
-%   transcription error: an electrode dropped, renamed, or nudged off the head
-%   image. These tests pin the count, the names against the app's own
-%   electrode list, and the bounds.
+%   roiMontageLayout holds the positions the 69 uibutton blocks in
+%   createComponents encoded (they are still there; this is a staged
+%   replacement). The risk in extracting them is a transcription error: an
+%   electrode dropped, renamed, re-cased, or nudged off the head image. These
+%   tests pin the count, the exact spelling against electrodeList, and the
+%   bounds.
 %
 %   The picker itself launches a window, so it is exercised in tests/ui.
 %
@@ -22,26 +23,17 @@ function setupOnce(testCase) %#ok<INUSD>
 r = repoRoot();
 addpath(r);
 addpath(fullfile(r, 'src'));
+addpath(fullfile(r, 'tests', 'helpers'));
 end
 
 function r = repoRoot()
 r = fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))));
 end
 
-function restorePref(had, saved)
-if had
-    setpref('nestapp', 'roiPresets', saved);
-elseif ispref('nestapp', 'roiPresets')
-    rmpref('nestapp', 'roiPresets');
-end
-end
-
 function isolatePresets(testCase)
-% Presets are a live user preference; never leave a test's values behind.
-had   = ispref('nestapp', 'roiPresets');
-saved = getpref('nestapp', 'roiPresets', struct('name', {}, 'labels', {}));
-testCase.addTeardown(@() restorePref(had, saved));
-if had; rmpref('nestapp', 'roiPresets'); end
+% Shared with tests/ui/test_roiPicker - presets are a live user preference and
+% neither file may read or write the real ones.
+isolateRoiPresets(testCase);
 end
 
 % ── the montage table ─────────────────────────────────────────────────────
@@ -53,18 +45,25 @@ testCase.verifyNumElements(layout, 69, ...
 testCase.verifyEqual(numel(unique({layout.label})), 69, 'labels must be unique');
 end
 
-function test_labelsMatchTheAppsElectrodeList(testCase)
-% nestapp.elecList is what the rest of the app resolves ROI names against, so
-% a montage label absent from it could never be selected meaningfully.
-src  = fileread(fullfile(repoRoot(), 'src', '@nestapp', 'nestapp.m'));
-tok  = regexp(src, 'elecList\s*=\s*\{(.*?)\}\s*;', 'tokens', 'once', 'dotall');
-testCase.assertNotEmpty(tok, 'could not find elecList in nestapp.m');
-elecList = regexp(tok{1}, '''([^'']+)''', 'tokens');
-elecList = lower(cellfun(@(c) c{1}, elecList, 'UniformOutput', false));
-
+function test_labelsAreExactlyTheElectrodeList(testCase)
+% electrodeList is the single source of spelling. The comparison is EXACT, not
+% case-insensitive: the two lists disagreed on case for a long time (FPZ vs
+% FPz) precisely because every matcher in the app ignores case, so only an
+% exact test can catch the next drift.
 layout = roiMontageLayout();
-testCase.verifyEmpty(setdiff(lower({layout.label}), elecList), ...
-    'montage names an electrode the app does not know');
+testCase.verifyEqual(sort({layout.label}), sort(electrodeList()), ...
+    'the montage must name exactly the electrodes electrodeList declares');
+end
+
+function test_electrodeListStillAgreesWithTheAppsProperty(testCase)
+% nestapp.elecList is still its own literal until the Explore tab lands; this
+% keeps the two from drifting in the meantime.
+src = fileread(fullfile(repoRoot(), 'src', '@nestapp', 'nestapp.m'));
+tok = regexp(src, 'elecList\s*=\s*\{(.*?)\}\s*;', 'tokens', 'once', 'dotall');
+testCase.assertNotEmpty(tok, 'could not find elecList in nestapp.m');
+fromApp = regexp(tok{1}, '''([^'']+)''', 'tokens');
+fromApp = cellfun(@(c) c{1}, fromApp, 'UniformOutput', false);
+testCase.verifyEqual(sort(fromApp), sort(electrodeList()));
 end
 
 function test_positionsStayOnTheHeadImage(testCase)
@@ -123,11 +122,11 @@ end
 
 function test_savingAndDeletingAUserPreset(testCase)
 isolatePresets(testCase);
-saveRoiPreset('My ROI', {'CZ', 'PZ'});
+saveRoiPreset('My ROI', {'Cz', 'Pz'});
 p = roiPresets();
 k = find(strcmp({p.name}, 'My ROI'), 1);
 testCase.assertNotEmpty(k);
-testCase.verifyEqual(p(k).labels, {'CZ', 'PZ'});
+testCase.verifyEqual(p(k).labels, {'Cz', 'Pz'});
 
 saveRoiPreset('My ROI', {});
 testCase.verifyEmpty(find(strcmp({roiPresets().name}, 'My ROI'), 1)); %#ok<FNDSB>
@@ -135,10 +134,10 @@ end
 
 function test_userPresetOverridesABuiltinAndDeletingReverts(testCase)
 isolatePresets(testCase);
-saveRoiPreset('Near-coil (F3)', {'CZ'});
+saveRoiPreset('Near-coil (F3)', {'Cz'});
 p = roiPresets();
 k = find(strcmp({p.name}, 'Near-coil (F3)'), 1);
-testCase.verifyEqual(p(k).labels, {'CZ'}, 'a saved preset must win');
+testCase.verifyEqual(p(k).labels, {'Cz'}, 'a saved preset must win');
 testCase.verifyNumElements(p, 2, 'an override must not add a duplicate entry');
 
 saveRoiPreset('Near-coil (F3)', {});
@@ -148,15 +147,25 @@ testCase.verifyEqual(sort(p(k).labels), sort({'AF3', 'F5', 'F3', 'FC5', 'FC3'}),
     'deleting an override reverts to the shipped definition');
 end
 
-function test_builtinNamesAreReported(testCase)
+function test_provenanceIsReportedPerPreset(testCase)
+% The UI gates deletion on this, and answering it here is what keeps the view
+% from needing its own look at the preference store.
 isolatePresets(testCase);
-saveRoiPreset('Mine', {'CZ'});
-[~, builtins] = roiPresets();
-testCase.verifyEqual(builtins, {'F3 cluster (default)', 'Near-coil (F3)'}, ...
-    'the UI needs to know which presets are shipped to gate deletion');
+saveRoiPreset('Mine', {'Cz'});
+p = roiPresets();
+testCase.verifyFalse(p(strcmp({p.name}, 'F3 cluster (default)')).userDefined);
+testCase.verifyTrue(p(strcmp({p.name}, 'Mine')).userDefined);
+end
+
+function test_anOverriddenBuiltinIsMarkedUserDefined(testCase)
+isolatePresets(testCase);
+saveRoiPreset('Near-coil (F3)', {'Cz'});
+p = roiPresets();
+testCase.verifyTrue(p(strcmp({p.name}, 'Near-coil (F3)')).userDefined, ...
+    'an override is deletable, and deleting it reverts to the built-in');
 end
 
 function test_emptyPresetNameIsRejected(testCase)
 isolatePresets(testCase);
-testCase.verifyError(@() saveRoiPreset('  ', {'CZ'}), 'nestapp:emptyPresetName');
+testCase.verifyError(@() saveRoiPreset('  ', {'Cz'}), 'nestapp:emptyPresetName');
 end

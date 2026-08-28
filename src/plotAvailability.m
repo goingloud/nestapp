@@ -28,7 +28,8 @@ function [ok, reason] = plotAvailability(entry, ctx)
 %   See also: plotRegistry, availablePlots, stepAvailability
 
 if nargin < 2; ctx = struct(); end
-ctx = withDefaults(ctx);
+ctx = fillDefaults(ctx, ...
+    struct('nGroups', 0, 'hasWindows', false, 'hasChanlocs', false));
 
 req = entry.requires;
 
@@ -58,11 +59,6 @@ end
 end
 
 % ── helpers ─────────────────────────────────────────────────────────────────
-
-function ctx = withDefaults(ctx)
-ctx = fillDefaults(ctx, ...
-    struct('nGroups', 0, 'hasWindows', false, 'hasChanlocs', false));
-end
 
 function [ok, reason] = groupsSatisfied(rule, n)
 ok = true; reason = '';
@@ -94,12 +90,4 @@ switch kind
                              need, plural(need), isAre(n), n);
         end
 end
-end
-
-function s = plural(n)
-if n == 1; s = ''; else; s = 's'; end
-end
-
-function s = isAre(n)
-if n == 1; s = 'is'; else; s = 'are'; end
 end

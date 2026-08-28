@@ -56,7 +56,7 @@ if strcmpi(design, 'paired')
     n    = size(D, 1);
     mu   = mean(D, 1, 'omitnan');
     sem  = std(D, 0, 1, 'omitnan') / sqrt(n);
-    df   = repmat(n - 1, 1, numel(mu));
+    df   = n - 1;                        % scalar broadcasts through tCritical
     note = sprintf('paired, %g%% CI', level * 100);
 else
     n1 = size(A, 1);

@@ -20,7 +20,7 @@ function s = fillDefaults(s, defaults)
 %   Example
 %     opts = fillDefaults(opts, struct('mode', 'TEP', 'level', 0.95));
 %
-%   See also: groupCurves, plotAvailability, drawTEPOverlay, qualityGate
+%   See also: struct, isfield
 
 if nargin < 2 || isempty(defaults); return; end
 if isempty(s); s = struct(); end

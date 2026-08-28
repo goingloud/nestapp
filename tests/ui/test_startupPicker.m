@@ -24,9 +24,8 @@ function setupOnce(testCase)
 r = repoRoot();
 addpath(r);
 addpath(genpath(fullfile(r, 'src')));
-if ~usejava('desktop')
-    testCase.assumeFail('No display - skipping GUI test');
-end
+addpath(fullfile(r, 'tests', 'helpers'));
+assumeDesktop(testCase);
 end
 
 function r = repoRoot()
@@ -36,9 +35,7 @@ end
 % ── tests ─────────────────────────────────────────────────────────────────
 
 function test_launchedAppOffersItsInstalledPluginSteps(testCase)
-app = nestapp;   % setupOnce has already skipped this file if there is no display
-testCase.addTeardown(@() delete(app));
-drawnow;
+app = launchApp(testCase);
 
 global PLUGINLIST %#ok<GVMIS>
 testCase.verifyNotEmpty(PLUGINLIST, ...

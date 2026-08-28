@@ -40,7 +40,8 @@ function res = fakeRes(nGroups, design)
 time = -50:2:300;
 names = {'pre', 'post', 'sham', 'other'};
 res = struct('time', time, 'design', design, 'channelLabels', {{'F3'}}, ...
-             'chanlocs', [], 'complete', {{}}, 'dropped', {{}}, 'info', struct());
+             'chanlocs', [], 'complete', {{}}, 'dropped', {{}}, ...
+             'contrast', struct([]), 'info', struct());
 g = struct('name', {}, 'subjects', {}, 'curves', {}, 'chanMeans', {}, ...
            'nFiles', {}, 'nSubjects', {});
 for k = 1:nGroups
@@ -49,8 +50,14 @@ for k = 1:nGroups
                   'curves', curves, 'chanMeans', mean(curves, 1), ...
                   'nFiles', 4, 'nSubjects', 4);
 end
-res.groups = g;
-res.est    = curveInterval({g.curves}, design);
+res.groups   = g;
+res.est      = curveInterval({g.curves}, design);
+% groupCurves fills .contrast for exactly two groups, and drawDifferenceWave
+% renders it rather than deriving one - so the fixture must supply it too.
+res.contrast = struct([]);
+if nGroups == 2
+    res.contrast = differenceInterval(g(1).curves, g(2).curves, design);
+end
 end
 
 function n = nLines(ax)

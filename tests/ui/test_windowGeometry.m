@@ -30,6 +30,7 @@ function setupOnce(testCase)
 r = repoRoot();
 addpath(r);
 addpath(genpath(fullfile(r, 'src')));
+addpath(fullfile(r, 'tests', 'helpers'));
 if ~usejava('desktop')
     testCase.assumeFail('No display - skipping GUI geometry test');
 end
@@ -37,12 +38,6 @@ end
 
 function r = repoRoot()
 r = fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))));
-end
-
-function app = launchApp(testCase)
-app = nestapp;
-testCase.addTeardown(@() delete(app));
-drawnow;
 end
 
 % ── the window must not walk up the screen ────────────────────────────────
