@@ -127,28 +127,28 @@ function createComponents(app)
             app.MoveUpButton = uibutton(app.CleaningTab, 'push');
             app.MoveUpButton.ButtonPushedFcn = createCallbackFcn(app, @MoveUpButtonPushed, true);
             app.MoveUpButton.BackgroundColor = [0.8 0.8 0.8];
-            app.MoveUpButton.Position = [306 56 66 36];
-            app.MoveUpButton.Text = {'Move'; 'Up'};
+            app.MoveUpButton.Position = [340 56 105 36];
+            app.MoveUpButton.Text = 'Move Up';
 
             % Create MoveDownButton
             app.MoveDownButton = uibutton(app.CleaningTab, 'push');
             app.MoveDownButton.ButtonPushedFcn = createCallbackFcn(app, @MoveDownButtonPushed, true);
             app.MoveDownButton.BackgroundColor = [0.8 0.8 0.8];
-            app.MoveDownButton.Position = [305 12 66 36];
-            app.MoveDownButton.Text = {'Move'; 'Down'};
+            app.MoveDownButton.Position = [340 12 105 36];
+            app.MoveDownButton.Text = 'Move Down';
 
             % Create AddButton
             app.AddButton = uibutton(app.CleaningTab, 'push');
             app.AddButton.ButtonPushedFcn = createCallbackFcn(app, @AddButtonPushed, true);
             app.AddButton.BackgroundColor = [0.8 0.8 0.8];
-            app.AddButton.Position = [233 56 66 36];
+            app.AddButton.Position = [230 56 105 36];
             app.AddButton.Text = 'Add';
 
             % Create RemoveButton
             app.RemoveButton = uibutton(app.CleaningTab, 'push');
             app.RemoveButton.ButtonPushedFcn = createCallbackFcn(app, @RemoveButtonPushed, true);
             app.RemoveButton.BackgroundColor = [0.8 0.8 0.8];
-            app.RemoveButton.Position = [232 12 66 36];
+            app.RemoveButton.Position = [230 12 105 36];
             app.RemoveButton.Text = 'Remove';
 
             % Create SelectedListBoxLabel
@@ -346,6 +346,7 @@ function createComponents(app)
             % Create WindowsizefortimeaveragedTopoplotEditField
             app.WindowsizefortimeaveragedTopoplotEditField = uieditfield(app.VisualizingTab, 'numeric');
             app.WindowsizefortimeaveragedTopoplotEditField.ValueDisplayFormat = '%.0f';
+            app.WindowsizefortimeaveragedTopoplotEditField.ValueChangedFcn = createCallbackFcn(app, @TopoWindowSizeValueChanged, true);
             app.WindowsizefortimeaveragedTopoplotEditField.Position = [282 10 52 22];
 
             % Create TOPOPLOTButton
@@ -361,6 +362,22 @@ function createComponents(app)
             app.ExportTEPFigureButton.Enable = 'off';
             app.ExportTEPFigureButton.Position = [5 34 140 23];
             app.ExportTEPFigureButton.Text = 'Export TEP Figure';
+
+            % Create OpenTopoFigureButton
+            app.OpenTopoFigureButton = uibutton(app.VisualizingTab, 'push');
+            app.OpenTopoFigureButton.ButtonPushedFcn = createCallbackFcn(app, @OpenTopoFigureButtonPushed, true);
+            app.OpenTopoFigureButton.Enable = 'off';
+            app.OpenTopoFigureButton.Position = [5 120 140 20];
+            app.OpenTopoFigureButton.Text = 'Open Topo in Figure';
+            app.OpenTopoFigureButton.Tooltip = {'Open the topoplot in a standard MATLAB figure, where the plot editor and Property Inspector can edit it'};
+
+            % Create OpenTEPFigureButton
+            app.OpenTEPFigureButton = uibutton(app.VisualizingTab, 'push');
+            app.OpenTEPFigureButton.ButtonPushedFcn = createCallbackFcn(app, @OpenTEPFigureButtonPushed, true);
+            app.OpenTEPFigureButton.Enable = 'off';
+            app.OpenTEPFigureButton.Position = [5 142 140 20];
+            app.OpenTEPFigureButton.Text = 'Open TEP in Figure';
+            app.OpenTEPFigureButton.Tooltip = {'Open the TEP plot in a standard MATLAB figure, where the plot editor and Property Inspector can edit it'};
 
             % Create PlottingModeButtonGroup
             app.PlottingModeButtonGroup = uibuttongroup(app.VisualizingTab);
@@ -386,7 +403,12 @@ function createComponents(app)
             app.PlotTypeButtonGroup.BorderType = 'none';
             app.PlotTypeButtonGroup.Title = 'Plot Type';
             app.PlotTypeButtonGroup.SelectionChangedFcn = createCallbackFcn(app, @PlotTypeButtonGroupSelectionChanged, true);
-            app.PlotTypeButtonGroup.Position = [150 108 195 52];
+            % Width 185 (not 195) keeps the right edge at x=335, clear of
+            % UIAxes2 at x=340. Everything scales by the same factor, so that
+            % 5 px gap scales with it and the group can never reach the
+            % topoplot at any window size - which it did when the base
+            % geometry overlapped by 5 px to begin with.
+            app.PlotTypeButtonGroup.Position = [150 108 185 52];
 
             % Create PlotTypeTEPButton
             app.PlotTypeTEPButton = uiradiobutton(app.PlotTypeButtonGroup);
@@ -1215,11 +1237,13 @@ function createComponents(app)
             app.LoadReportsButton.Text = 'Load from Folder';
             app.LoadReportsButton.Tooltip = 'Load pipeline reports from a folder on disk';
 
-            app.RefreshReportsButton = uibutton(app.ReportsTab, 'push');
-            app.RefreshReportsButton.ButtonPushedFcn = createCallbackFcn(app, @RefreshReportsButtonPushed, true);
-            app.RefreshReportsButton.Position = [110 45 100 25];
-            app.RefreshReportsButton.Text = 'Refresh';
-            app.RefreshReportsButton.Tooltip = 'Reload reports from the current folder';
+            app.ClearReportsButton = uibutton(app.ReportsTab, 'push');
+            app.ClearReportsButton.ButtonPushedFcn = createCallbackFcn(app, @ClearReportsButtonPushed, true);
+            app.ClearReportsButton.Position = [110 45 100 25];
+            app.ClearReportsButton.Text = 'Clear List';
+            app.ClearReportsButton.Tooltip = ['Empty the report list - both this session''s runs and ' ...
+                'anything loaded from disk. Nothing on disk is deleted; Load from Folder brings ' ...
+                'saved reports back'];
 
             app.ReportsFolderLabel = uilabel(app.ReportsTab);
             app.ReportsFolderLabel.FontSize = 9;
@@ -1236,23 +1260,29 @@ function createComponents(app)
             % Reports tab - right column: report text + actions
             app.ExportReportsCSVButton = uibutton(app.ReportsTab, 'push');
             app.ExportReportsCSVButton.ButtonPushedFcn = createCallbackFcn(app, @ExportReportsCSVButtonPushed, true);
-            app.ExportReportsCSVButton.Position = [475 470 100 24];
-            app.ExportReportsCSVButton.Text = 'Export CSV';
-            app.ExportReportsCSVButton.Tooltip = 'Export a CSV summary of all loaded reports';
+            app.ExportReportsCSVButton.Position = [455 470 145 24];
+            app.ExportReportsCSVButton.Text = 'Export Metrics Table';
+            app.ExportReportsCSVButton.Tooltip = ['One row per file (channels and trials retained, ' ...
+                'ICA components removed, quality verdict) for every report listed here, including ' ...
+                'ones loaded from disk - so it can span several batch runs'];
             app.ExportReportsCSVButton.Enable = 'off';
 
             app.ExportPDFButton = uibutton(app.ReportsTab, 'push');
             app.ExportPDFButton.ButtonPushedFcn = createCallbackFcn(app, @ExportPDFButtonPushed, true);
-            app.ExportPDFButton.Position = [580 470 130 24];
-            app.ExportPDFButton.Text = 'Export PDF';
-            app.ExportPDFButton.Tooltip = 'Export the selected file''s report and QC images as a single PDF';
+            app.ExportPDFButton.Position = [605 470 110 24];
+            app.ExportPDFButton.Text = 'Export PDF...';
+            app.ExportPDFButton.Tooltip = ['Report text plus QC checkpoint images as a single PDF, ' ...
+                'for the selected file or for every listed report. Not needed when ' ...
+                'Auto-export PDF is on in Settings'];
             app.ExportPDFButton.Enable = 'off';
 
             app.CopyMethodsButton = uibutton(app.ReportsTab, 'push');
             app.CopyMethodsButton.ButtonPushedFcn = createCallbackFcn(app, @CopyMethodsButtonPushed, true);
-            app.CopyMethodsButton.Position = [715 470 147 24];
+            app.CopyMethodsButton.Position = [720 470 142 24];
             app.CopyMethodsButton.Text = 'Copy Methods Text';
-            app.CopyMethodsButton.Tooltip = 'Copy a methods paragraph for the selected report to the clipboard';
+            app.CopyMethodsButton.Tooltip = ['Copies the full parameterized methods paragraph for the ' ...
+                'selected file - longer than the one-sentence note shown in the report - or the ' ...
+                'cross-file aggregate when the Session Summary is selected'];
             app.CopyMethodsButton.Enable = 'off';
 
             app.ReportsTextArea = uitextarea(app.ReportsTab);

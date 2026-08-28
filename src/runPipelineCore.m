@@ -406,11 +406,11 @@ for k = 1:numel(failed)
     failed(k).path = filePaths{failed(k).fi};
 end
 
-% Re-run list: written whenever files failed and the run wasn't cancelled,
-% INCLUDING the all-failed case - that is exactly when the user most needs
-% a copy-paste list of what to re-run. Independent of writeBatchArtifacts
-% (which is gated on there being at least one successful report).
-if ~cancelled && ~isempty(failed)
+% Re-run list: written whenever files failed, INCLUDING the all-failed and
+% cancelled cases - that is exactly when the user most needs a copy-paste list
+% of what to re-run. Independent of writeBatchArtifacts (which is gated on
+% there being at least one successful report).
+if ~isempty(failed)
     try
         listPath = fullfile(outputPaths(batchCtx, 'batch'), 'failed_files.txt');
         writeFailedFilesList(listPath, failed);
@@ -420,15 +420,26 @@ if ~cancelled && ~isempty(failed)
     end
 end
 
-% Batch-level artifacts: spec snapshot, dashboard PNG, summary CSV.
-% Each wrapped in its own try so one failure can't take down the run.
-if ~cancelled && ~isempty(allReports)
-    writeBatchArtifacts(batchCtx, spec, opts.pipelineName, allReports, failed);
+% Batch-level artifacts: spec snapshot, session summary, dashboard PNG,
+% summary CSV. Each wrapped in its own try so one failure can't take down the
+% run. Written for a cancelled run too, clearly marked partial: the per-file
+% reports above are already on disk, so suppressing the run-level summary only
+% left the user with reports and no way to read them as a set.
+if ~isempty(allReports)
+    writeBatchArtifacts(batchCtx, spec, opts.pipelineName, allReports, failed, cancelled);
 end
 
 if cancelled
-    % Discard any partially-completed reports - a cancelled run is not a result.
-    error('nestapp:cancelled', 'Pipeline cancelled by user.');
+    % Two flavours of cancel, so the GUI can stay quiet for one and speak up
+    % for the other: backing out of a prompt before anything ran needs no
+    % dialog, but abandoning a run that already wrote artifacts does - the
+    % user needs to know they exist and where.
+    if isempty(allReports)
+        error('nestapp:cancelled', 'Pipeline cancelled by user.');
+    end
+    error('nestapp:cancelledPartial', ...
+        ['Run cancelled. Partial results for %d of %d file(s) were saved to:' ...
+         '\n%s'], numel(allReports), nFiles, batchCtx.batchRoot);
 end
 if isempty(allReports)
     mode = 'serial';
@@ -1051,10 +1062,14 @@ elseif isfield(dlg, 'fig') && ~isempty(dlg.fig) && isvalid(dlg.fig)
 end
 end
 
-function writeBatchArtifacts(batchCtx, spec, pipelineName, reports, failed)
+function writeBatchArtifacts(batchCtx, spec, pipelineName, reports, failed, cancelled)
 % Drop the run-level artifacts in <batchRoot>/batch (or _batch for
 % perInput layout). Every section is independently try/catched so a
 % rendering bug never costs the user their per-file outputs.
+%
+% cancelled marks the run as incomplete: the artifacts are still written (the
+% per-file reports already exist on disk) but the session summary says so up
+% front, so a partial run can never be mistaken for a finished one.
 batchDir = outputPaths(batchCtx, 'batch');
 
 % 1) Pipeline spec snapshot, so this run is reproducible from the
@@ -1077,11 +1092,16 @@ end
 % 2b) Session summary TEXT report (methods, citations, tallies) - the same
 %     aggregate the GUI shows. Saved WITH the per-file reports so users find
 %     it where they look for individual reports, not buried in batch/.
+%     Written for a single-file run too: the methods paragraph and citations
+%     are just as needed for one file as for twenty.
 try
-    if numel(reports) > 1
-        txtPath = fullfile(sessionSummaryDir(batchCtx), 'session_summary.txt');
-        writeTextReport(txtPath, summarizeReports(reports, failed));
+    txtPath = fullfile(sessionSummaryDir(batchCtx), 'session_summary.txt');
+    summaryText = summarizeReports(reports, failed);
+    if cancelled
+        summaryText = sprintf('*** RUN CANCELLED - PARTIAL RESULTS (%d file(s) completed) ***\n\n%s', ...
+            numel(reports), summaryText);
     end
+    writeTextReport(txtPath, summaryText);
 catch err
     nestLog('CFG', 'Could not write session_summary.txt: %s', err.message);
 end
@@ -1089,7 +1109,7 @@ end
 % 3) Dashboard PNG - only when at least one report carries a Quality
 %    Gate (otherwise the dashboard is empty and we save nothing).
 try
-    if anyReportHasGates(reports) || ~isempty(failed)
+    if any(cellfun(@reportHasGates, reports)) || ~isempty(failed)
         pngPath = fullfile(batchDir, 'dashboard.png');
         renderDashboardToFile(reports, failed, pngPath);
     end
@@ -1125,7 +1145,14 @@ function writeSessionSummaryCsv(csvPath, reports, failed)
 % One row per processed file. Failed files are pulled from the structured
 % failure log and carry the step + reason they died at, so the CSV is
 % self-diagnostic (you can decide what to re-run without opening the log).
-rows = cell(0, 8);
+%
+% Carries the retention counts (channels, trials, ICA removed) as well as the
+% operational ones, so a methods table never needs a separate export step.
+colNames = {'stem', 'status', 'n_steps', 'n_errors', 'duration_s', ...
+            'quality_verdict', 'fail_step', 'fail_reason', ...
+            'chans_original', 'chans_final', 'chans_interpolated', ...
+            'trials_original', 'trials_final', 'ica_removed'};
+rows = cell(0, numel(colNames));
 for k = 1:numel(reports)
     r = reports{k};
     [~, stem] = fileparts(r.inputFile);
@@ -1140,7 +1167,11 @@ for k = 1:numel(reports)
     if isfield(r, 'quality') && isfield(r.quality, 'worstVerdict')
         verdict = r.quality.worstVerdict;
     end
-    rows(end+1, :) = {stem, 'ok', nSteps, nErr, durS, verdict, '', ''}; %#ok<AGROW>
+    ch  = reportCounts(r, 'channels', {'original', 'final', 'nInterpolated'});
+    tr  = reportCounts(r, 'trials',   {'original', 'final'});
+    ica = reportCounts(r, 'ica',      {'nRejected'});
+    rows(end+1, :) = [{stem, 'ok', nSteps, nErr, durS, verdict, '', ''}, ...
+                      num2cell([ch, tr, ica])]; %#ok<AGROW>
 end
 for k = 1:numel(failed)
     f = failed(k);
@@ -1153,11 +1184,13 @@ for k = 1:numel(failed)
     if isfield(f, 'message') && ~isempty(f.message)
         failReason = regexprep(f.message, '\s*[\r\n]+\s*', ' ');
     end
-    rows(end+1, :) = {stem, kind, NaN, 1, NaN, '', failStep, failReason}; %#ok<AGROW>
+    % A file that did not complete has no retention numbers. NaN, not 0, so
+    % it can never be averaged in as though it were a real measurement.
+    nRetention = numel(colNames) - 8;
+    rows(end+1, :) = [{stem, kind, NaN, 1, NaN, '', failStep, failReason}, ...
+                      num2cell(nan(1, nRetention))]; %#ok<AGROW>
 end
-T = cell2table(rows, 'VariableNames', ...
-    {'stem','status','n_steps','n_errors','duration_s','quality_verdict', ...
-     'fail_step','fail_reason'});
+T = cell2table(rows, 'VariableNames', colNames);
 writetable(T, csvPath);
 end
 

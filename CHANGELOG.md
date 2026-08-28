@@ -8,18 +8,73 @@ The version here must match `src/nestappVersion.m` and the release git tag.
 
 ## [Unreleased]
 
-### Changed
-- CI now runs on free GitHub-hosted runners via `matlab-actions/setup-matlab`
-  (no self-hosted runner or license needed for the public repo). The fast
-  suite, lint, and docs build run in CI; the EEGLAB-dependent integration
-  suite is run locally.
-- AARATEP path setup (`ensureAaratepOnPath`) no longer lets the bundled
-  FastICA shadow the user's own (normally EEGLAB's) FastICA. The bundled
-  copy is used only as a fallback when no other FastICA is on the path, and
-  a one-time warning (`nestapp:aaratepFastICAMismatch`) is printed when the
-  user's FastICA version differs from the one AARATEP was tested with.
+### Fixed
+- **The application window walked up the screen.** `UIFigureSizeChanged`
+  enforced its minimum size by assigning `UIFigure.Position(3:4)`, which
+  anchors `[left bottom]` - so restoring a height from a raised bottom edge
+  lifted the whole window rather than holding the top edge the user set. That
+  write re-fired the same callback (and the `drawnow` inside let the re-entry
+  run), so over a stream of resize events the window marched off the top of
+  the monitor at a constant size. The minimum is now applied by writing the
+  full `Position` with the top edge pinned, only when the size is actually
+  short, and the handler refuses to re-enter itself.
+- `batch/session_summary.csv` now records the retention counts every run -
+  `chans_original`, `chans_final`, `chans_interpolated`, `trials_original`,
+  `trials_final`, `ica_removed` - alongside the existing operational columns.
+  Those numbers previously existed only inside the per-file reports, so a
+  methods table or a cross-file quality screen meant pressing a button in the
+  Reports tab. Counts a report does not carry are written as NaN, never 0, so
+  a missing value can never be averaged in as a real measurement (new
+  `reportCounts` helper).
+- **Export PDF** now asks whether to export the selected report or every
+  listed report, instead of silently doing one file at a time - which made a
+  whole batch tedious whenever Auto-export PDF was off, and it is off by
+  default. One report failing no longer abandons the rest; failures are
+  collected and reported together.
+- The session summary is now written for **every** run that produced at least
+  one report. It was gated on two or more successful files, so a single-file
+  batch got per-file reports and no overall report, in the Reports tab or on
+  disk. A cancelled run also writes its batch folder now (spec, CSV, dashboard
+  and a `session_summary.txt` headed `*** RUN CANCELLED - PARTIAL RESULTS ***`)
+  instead of leaving per-file reports with nothing to read them as a set, and
+  the app says where those partial results landed.
+- `batch/dashboard.png` was never written for a clean batch:
+  `runPipelineCore` passed raw report structs to `anyReportHasGates`, which
+  expects Reports-tab entries and so always returned false. The PNG only
+  appeared when a file had failed.
+- The Plot Type radio group no longer overlaps the topoplot axes. Its base
+  geometry ran to x=335 while `UIAxes2` starts at x=340, and since every
+  component scales by the same factor that base overlap scaled with the
+  window. The group is now 185 px wide (was 195), so the gap stays positive
+  at every window size.
+- The Cleaning tab's Add / Remove / Move Up / Move Down buttons now span the
+  full width of the Selected Steps column instead of huddling on its left.
+- Rendering the topoplot no longer disturbs other figures. It called `gcf`
+  (which *creates* a figure when none is open) and finished with a bare
+  `close`, shutting whatever figure happened to be current - possibly one of
+  the user's own plots or an EEGLAB window.
+- The topoplot time lookup used exact equality against the time vector, so any
+  latency not landing exactly on a sample yielded an empty index and errored.
+  It now takes the nearest sample.
+- The topoplot averaging-window ("Win") field had no callback and silently did
+  nothing until the time spinner or TOPOPLOT was touched.
+- **Export TEP Figure** no longer additionally saves the whole application
+  window as a `.fig` on every export. Choosing `.fig` now writes a real,
+  reopenable plot figure.
 
 ### Added
+- **Open TEP in Figure** and **Open Topo in Figure** buttons on the Visualizing
+  tab. Each copies the plot into a standard MATLAB figure with a classic axes,
+  so the plot editor, Property Inspector, Export Setup and `File > Save As` all
+  work - axes, limits, colours and labels can be edited by hand before export.
+  Backed by the new `popOutAxes` helper.
+- The topoplot now carries a **labelled uV colorbar** with symmetric colour
+  limits, so the map can actually be read. The limits topoplot computed were
+  previously discarded along with its scratch axes, leaving the destination
+  autoscaled. The colormap is now a diverging blue-white-red map
+  (`divergingColormap`) with white pinned at 0 uV, replacing the cyclic,
+  non-perceptual `hsv`. Drawing is shared by the in-app axes and the pop-out
+  via the new `drawScalpTopo` helper.
 - `nestappDoctor` — environment diagnostics that validate MATLAB/EEGLAB/
   toolbox versions, every plugin the step registry requires, and flag
   shadowed functions. Surfaced in the GUI via **Help → Copy Diagnostics to
@@ -33,6 +88,33 @@ The version here must match `src/nestappVersion.m` and the release git tag.
   the error, environment, pipeline, and EEG **metadata** (never recordings)
   to `<batch>/debug/`. **Help → Collect Support Bundle** produces the same
   on demand, and **Help → Check My Install** runs the fast test suite.
+
+### Changed
+- The Reports tab's **Refresh** button is now **Clear List**: it empties the
+  report list instead of re-reading the load folder. The list accumulates
+  across every run in a session (each run appends a Session Summary plus one
+  entry per file), so what it needed was a way to get back to empty, not a
+  reload. It clears session and disk-loaded reports alike, asks first because
+  there is no in-session undo, and deletes nothing on disk - Load from Folder
+  brings saved reports back. The Quality Dashboard's own Refresh button, which
+  re-renders that panel, is unaffected.
+- Reports tab buttons renamed and re-tooltipped so it is clear what each
+  produces: **Export CSV** is now **Export Metrics Table** (one row per file,
+  spanning every listed report including ones loaded from disk, so it can
+  cover several batch runs), and **Export PDF** is now **Export PDF...**.
+  The **Copy Methods Text** tooltip now says that it copies the *full*
+  parameterized paragraph for a single file - longer than the one-sentence
+  note shown in the report body - or the cross-file aggregate for the
+  Session Summary.
+- CI now runs on free GitHub-hosted runners via `matlab-actions/setup-matlab`
+  (no self-hosted runner or license needed for the public repo). The fast
+  suite, lint, and docs build run in CI; the EEGLAB-dependent integration
+  suite is run locally.
+- AARATEP path setup (`ensureAaratepOnPath`) no longer lets the bundled
+  FastICA shadow the user's own (normally EEGLAB's) FastICA. The bundled
+  copy is used only as a fallback when no other FastICA is on the path, and
+  a one-time warning (`nestapp:aaratepFastICAMismatch`) is printed when the
+  user's FastICA version differs from the one AARATEP was tested with.
 
 ## [1.0.0] - 2026-05-29
 

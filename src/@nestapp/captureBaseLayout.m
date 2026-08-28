@@ -22,8 +22,8 @@ function L = captureBaseLayout(app)
 
     % Excluded from rescale: the figure / tabs (managed by the TabGroup) and the
     % status bar / TabGroup, which rescaleComponents lays out explicitly.
-    exclude = {'UIFigure', 'TabGroup', 'StatusBar', ...
-               'CleaningTab', 'VisualizingTab', 'AnalysisTab', 'ReportsTab'};
+    exclude   = {'UIFigure', 'TabGroup', 'StatusBar', ...
+                 'CleaningTab', 'VisualizingTab', 'AnalysisTab', 'ReportsTab'};
     fontMap = fontScaledMap();
 
     L       = struct();

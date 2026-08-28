@@ -9,7 +9,8 @@ function summaryText = summarizeReports(reports, failed)
 %   summaryText = SUMMARIZEREPORTS(reports, failed)
 %
 %   reports - 1xN cell array of structs returned by initPipelineReport and
-%             populated by runPipelineCore. N must be >= 2.
+%             populated by runPipelineCore. N >= 1; a single-file run gets a
+%             summary too (fmtStat renders a lone value without a spread).
 %   failed  - optional struct array of files that did not complete (from
 %             runPipelineCore). When non-empty, a "FILES THAT DID NOT
 %             COMPLETE" section is listed up front so the failures are not

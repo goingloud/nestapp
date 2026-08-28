@@ -9,15 +9,15 @@ function tf = anyReportHasGates(entries)
 %   Returns true if at least one non-summary entry has a non-empty
 %   report.quality.gates cell. Used to decide whether the listbox
 %   should append a "Session Quality Dashboard" entry.
+%
+%   See also: reportHasGates
 tf = false;
 for k = 1:numel(entries)
     e = entries{k};
     if isfield(e, 'isSummary') && e.isSummary, continue, end
     if isfield(e, 'isDashboard') && e.isDashboard, continue, end
-    if ~isfield(e, 'report') || ~isstruct(e.report), continue, end
-    r = e.report;
-    if isfield(r, 'quality') && isfield(r.quality, 'gates') ...
-            && ~isempty(r.quality.gates)
+    if ~isfield(e, 'report'), continue, end
+    if reportHasGates(e.report)
         tf = true; return
     end
 end

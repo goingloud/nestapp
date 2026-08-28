@@ -124,6 +124,8 @@ classdef nestapp < matlab.apps.AppBase
         PlotTypeGMFPButton              matlab.ui.control.RadioButton
         PlotTypeLMFPButton              matlab.ui.control.RadioButton
         ExportTEPFigureButton           matlab.ui.control.Button
+        OpenTEPFigureButton             matlab.ui.control.Button
+        OpenTopoFigureButton            matlab.ui.control.Button
         TOPOPLOTButton                  matlab.ui.control.Button
         WindowsizefortimeaveragedTopoplotEditField  matlab.ui.control.NumericEditField
         WindowsizeforTopoplotLabel      matlab.ui.control.Label
@@ -147,7 +149,7 @@ classdef nestapp < matlab.apps.AppBase
         ReportsListBox                  matlab.ui.control.ListBox
         ReportsListBoxLabel             matlab.ui.control.Label
         LoadReportsButton               matlab.ui.control.Button
-        RefreshReportsButton            matlab.ui.control.Button
+        ClearReportsButton              matlab.ui.control.Button
         ReportsFolderLabel              matlab.ui.control.Label
         ReportsStatusLabel              matlab.ui.control.Label
         ReportsTextArea                 matlab.ui.control.TextArea
@@ -188,6 +190,7 @@ classdef nestapp < matlab.apps.AppBase
         currentParamKey  = ''  % param key selected in UITable (transient)
         currentParamType = ''  % type of selected param (transient)
         originalSize     % [w h] of UIFigure at creation - used by UIFigureSizeChanged
+        isResizing = false % guards UIFigureSizeChanged against its own clamp write
         baseLayout = []  % per-component base geometry captured at startup - drives rescaleComponents
         clickedItem = [];
         doubleClicked = 0;
@@ -215,7 +218,6 @@ classdef nestapp < matlab.apps.AppBase
         allPipelineReports = {}    % cell array of report entry structs from current session
         loadedReports      = {}    % cell array of report entry structs loaded from disk
         lastFailed         = struct([]) % failure records from the most recent run (for the dashboard + summary)
-        reportsLoadFolder  = ''    % folder the loaded reports were read from (for Refresh)
         preSelectedChanFile = ''   % channel location file selected once before a run
         ParallelCheckBox           % uicheckbox - enable parallel participant processing
 
@@ -1134,8 +1136,6 @@ classdef nestapp < matlab.apps.AppBase
                      'folder or its subfolders.'], 'No Reports Found');
                 return
             end
-            app.reportsLoadFolder = folder;
-
             loaded = 0;
             for k = 1:numel(matFiles)
                 fpath = fullfile(matFiles(k).folder, matFiles(k).name);
@@ -1162,29 +1162,33 @@ classdef nestapp < matlab.apps.AppBase
             end
         end
 
-        function RefreshReportsButtonPushed(app, ~)
-        % Reload the disk reports from the folder they were loaded from.
-            folder = app.reportsLoadFolder;
-            if isempty(folder) || ~isfolder(folder)
-                updateReportsTabImpl(app);   % nothing loaded from disk - just refresh
+        function ClearReportsButtonPushed(app, ~)
+        % Empty the report list, which otherwise accumulates across every run
+        % in a session. Discards only the in-memory list - the reports are all
+        % on disk - but there is no in-session undo, hence the confirm.
+            allEntries = [app.allPipelineReports, app.loadedReports];
+            if isempty(allEntries)
+                app.ReportsStatusLabel.Text = 'No reports to clear.';
                 return
             end
-            % Clear disk-loaded reports and reload
-            app.loadedReports = {};
-            matFiles = findReportMatFiles(app, folder);
-            for k = 1:numel(matFiles)
-                fpath = fullfile(matFiles(k).folder, matFiles(k).name);
-                try
-                    S = load(fpath, 'pipelineReport');
-                    if ~isfield(S, 'pipelineReport'); continue; end
-                    [txt, ~] = exportReport(S.pipelineReport, tempdir());
-                    entry.text   = txt;
-                    entry.report = S.pipelineReport;
-                    app.loadedReports{end+1} = entry;
-                catch
-                end
-            end
+
+            answer = uiconfirm(app.UIFigure, sprintf( ...
+                ['Remove all %d report(s) from the list?\n\n' ...
+                 'This only empties the list - nothing on disk is deleted, and ' ...
+                 '"Load from Folder" can bring saved reports back.'], numel(allEntries)), ...
+                'Clear Report List', ...
+                'Options', {'Clear', 'Cancel'}, ...
+                'DefaultOption', 2, 'CancelOption', 2);
+            if ~strcmp(answer, 'Clear'); return; end
+
+            app.allPipelineReports = {};
+            app.loadedReports      = {};
+            % Stale failures would otherwise keep the Quality Dashboard entry
+            % alive for reports that are no longer listed.
+            app.lastFailed         = struct([]);
+            app.ReportsFolderLabel.Text = '';
             updateReportsTabImpl(app);
+            app.ReportsStatusLabel.Text = 'Report list cleared.';
         end
 
         function matFiles = findReportMatFiles(~, folder)
@@ -1264,41 +1268,126 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         function ExportPDFButtonPushed(app, ~)
-        % Export the currently selected file's report + checkpoint PNGs
-        % as a single PDF. Synthetic Summary / Dashboard entries skip.
+        % Export report text + checkpoint PNGs as PDF, for the selected file
+        % or for every listed report. One file at a time used to be the only
+        % option, which made a whole batch tedious whenever Auto-export PDF
+        % was off - and it is off by default.
+            allEntries  = [app.allPipelineReports, app.loadedReports];
+            fileReports = renderableReports(app, allEntries);
+            if isempty(fileReports)
+                uialert(app.UIFigure, 'No file reports to export.', 'Export PDF');
+                return
+            end
+
+            selected = selectedFileReport(app, allEntries);
+            switch askPdfScope(app, selected, numel(fileReports))
+                case 'this'
+                    exportOnePDF(app, selected);
+                case 'all'
+                    exportAllPDFs(app, fileReports);
+            end
+        end
+
+        function reports = renderableReports(~, allEntries)
+        % The report structs that exportFileReportPDF can actually render.
+        % collectReportStructs already drops the synthetic Summary/Dashboard
+        % rows; inputFile is what names the output file.
+            reports = collectReportStructs(allEntries);
+            keep    = cellfun(@(r) isstruct(r) && isfield(r, 'inputFile'), reports);
+            reports = reports(keep);
+        end
+
+        function r = selectedFileReport(app, allEntries)
+        % The report struct behind the selected listbox row, or empty when the
+        % selection is a synthetic row (Session Summary / Quality Dashboard),
+        % which has nothing to render. Those rows sort after the real ones, so
+        % the plain bounds check rejects them.
+            r   = [];
             idx = app.ReportsListBox.Value;
-            if isempty(idx)
-                uialert(app.UIFigure, 'No report selected.', 'Export PDF');
+            if isempty(idx) || ~isnumeric(idx) || idx < 1 || idx > numel(allEntries)
                 return
             end
-            allEntries = [app.allPipelineReports, app.loadedReports];
-            if app.dashboardHasContent(allEntries)
-                allEntries{end+1} = struct('isDashboard', true, ...
-                    'text', '', 'report', struct());
-            end
-            if ~isnumeric(idx) || idx < 1 || idx > numel(allEntries)
-                uialert(app.UIFigure, 'No report selected.', 'Export PDF');
+            candidate = allEntries{idx};
+            if ~isfield(candidate, 'report') || ~isstruct(candidate.report) ...
+                    || ~isfield(candidate.report, 'inputFile')
                 return
             end
-            e = allEntries{idx};
-            if (isfield(e, 'isSummary') && e.isSummary) ...
-                    || (isfield(e, 'isDashboard') && e.isDashboard)
-                uialert(app.UIFigure, ...
-                    'Pick a single file report (not the Summary or Dashboard entry) before exporting PDF.', ...
-                    'Export PDF');
-                return
+            r = candidate.report;
+        end
+
+        function choice = askPdfScope(app, selected, nAll)
+        % Ask what to export. With no single report selected the only real
+        % option is "all", so do not offer a "this report" button that would
+        % have nothing to act on.
+            if isempty(selected)
+                msg = sprintf(['No single file report is selected - the Summary and ' ...
+                    'Dashboard rows cannot be rendered on their own.\n\n' ...
+                    'Export all %d file report(s)?'], nAll);
+                options = {'All reports', 'Cancel'};
+            else
+                [~, baseName] = fileparts(selected.inputFile);
+                msg = sprintf(['Export a PDF for "%s" only, or for all %d listed ' ...
+                    'file report(s)?'], baseName, nAll);
+                options = {'This report', 'All reports', 'Cancel'};
             end
-            [~, baseName] = fileparts(e.report.inputFile);
+            answer = uiconfirm(app.UIFigure, msg, 'Export PDF', ...
+                'Options', options, ...
+                'DefaultOption', 1, 'CancelOption', numel(options));
+            switch answer
+                case 'This report', choice = 'this';
+                case 'All reports', choice = 'all';
+                otherwise,          choice = 'cancel';
+            end
+        end
+
+        function exportOnePDF(app, report)
+        % One report, to a filename the user picks.
+            [~, baseName] = fileparts(report.inputFile);
             [fname, fpath] = uiputfile('*.pdf', 'Export Report as PDF', ...
                 [baseName, '_report.pdf']);
             if isequal(fname, 0); return; end
             try
-                exportFileReportPDF(e.report, fullfile(fpath, fname));
+                exportFileReportPDF(report, fullfile(fpath, fname));
                 app.ReportsStatusLabel.Text = sprintf('PDF saved: %s', fname);
             catch err
                 uialert(app.UIFigure, ...
                     sprintf('PDF export failed: %s', err.message), ...
                     'Export PDF', 'Icon', 'error');
+            end
+        end
+
+        function exportAllPDFs(app, reports)
+        % Every listed report into one folder, each named after its input
+        % file. One report failing must not cost the user the rest, so
+        % failures are collected and reported together at the end.
+            folder = uigetdir('', 'Choose a folder for the PDF reports');
+            if isequal(folder, 0); return; end
+
+            nOk         = 0;
+            failedNames = {};
+            dlg = uiprogressdlg(app.UIFigure, 'Title', 'Export PDF', ...
+                'Message', 'Rendering reports...', 'Indeterminate', 'off');
+            cleanup = onCleanup(@() delete(dlg));
+            for k = 1:numel(reports)
+                [~, baseName] = fileparts(reports{k}.inputFile);
+                dlg.Value   = k / numel(reports);
+                dlg.Message = sprintf('Rendering %d of %d: %s', ...
+                    k, numel(reports), baseName);
+                try
+                    exportFileReportPDF(reports{k}, ...
+                        fullfile(folder, [baseName, '_report.pdf']));
+                    nOk = nOk + 1;
+                catch err
+                    failedNames{end+1} = sprintf('%s (%s)', baseName, err.message); %#ok<AGROW>
+                end
+            end
+
+            app.ReportsStatusLabel.Text = sprintf('%d PDF(s) saved to %s', nOk, folder);
+            if ~isempty(failedNames)
+                uialert(app.UIFigure, sprintf( ...
+                    '%d report(s) could not be rendered:\n\n%s', ...
+                    numel(failedNames), strjoin(failedNames, newline)), ...
+                    'Export PDF', 'Icon', 'warning');
             end
         end
 
@@ -1618,9 +1707,17 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         function EEG_topoplot(app)
-            cla(app.UIAxes2)
-            TOPOPLOT_INTRAD = 0.55;   % EEGLAB default interpolation radius
-            SMOOTH_METHOD   = 'movmean';
+        % Render the scalp topography into the in-app axes. The computation
+        % (topoScalpData) and the drawing (drawScalpTopo) are split so the
+        % pop-out figure can reuse both without duplicating either.
+            [values, chanLocs] = topoScalpData(app);
+            drawScalpTopo(app.UIAxes2, values, chanLocs);
+        end
+
+        function [values, chanLocs] = topoScalpData(app)
+        % Time-window-averaged scalp values (uV) over the electrodes common to
+        % every selected file, plus their locations.
+            SMOOTH_METHOD = 'movmean';
             if ~app.EEG_SelectedTEPFiles_Loaded
                 LoadSelecEEGdata(app)
             end
@@ -1628,39 +1725,22 @@ classdef nestapp < matlab.apps.AppBase
             BIGEEG = zeros(numel(app.Common_Labels.Items), length(app.EEGtime),numel(app.EEGofAllSelectedFiles));
             for nfile = 1:numel(app.EEGofAllSelectedFiles)
                 EEGaux = app.EEGofAllSelectedFiles{1,nfile};
-                ChansLocs = EEGaux.chanlocs;
-                commonElectrodsInd = ismember(lower({ChansLocs.labels}),lower(app.Common_Labels.Items));
+                chanLocs = EEGaux.chanlocs;
+                commonElectrodsInd = ismember(lower({chanLocs.labels}),lower(app.Common_Labels.Items));
                 BIGEEG(:,:,nfile) = mean(EEGaux.data(commonElectrodsInd,:,:),3,"omitmissing");
-                
             end
-            ChansLocs(~commonElectrodsInd) = [];
+            chanLocs(~commonElectrodsInd) = [];
             yp = smoothdata(mean(BIGEEG,3,"omitmissing")',SMOOTH_METHOD,app.SMOOTH_WIN_PTS)'; % Smooth the EEGdata along subjects
+
+            % Averaging window around the requested latency. Nearest sample,
+            % not exact equality: any latency that is not exactly on a sample
+            % (a non-integer sampling interval, or an odd window width) used to
+            % yield an empty index and error out downstream.
+            halfWin   = app.WindowsizefortimeaveragedTopoplotEditField.Value / 2;
             timepoint = app.TopoplottimeSpinner.Value;
-            Topo_ind = [round(timepoint-app.WindowsizefortimeaveragedTopoplotEditField.Value/2),...
-                round(timepoint+app.WindowsizefortimeaveragedTopoplotEditField.Value/2)];
-            Topo_ind = [find(app.EEGtime==Topo_ind(1)), find(app.EEGtime==Topo_ind(2))];
-            Topo = mean(yp(:,Topo_ind),2,"omitmissing");
-            
-            oldFig = gcf;
-
-            % Create invisible figure to trick topoplot
-            invisibleFig = figure('Visible', 'off');
-            copyobj(app.UIAxes2, invisibleFig);  % clone axes
-            newAx = findobj(invisibleFig, 'Type', 'Axes');
-
-            % Plot into cloned axes
-            axes(newAx);  % set as current
-            topoplot(mean(Topo,2),ChansLocs,'electrodes','off',...
-                'numcontour',5,'intsquare','on','style','map','conv', 'on', 'intrad',TOPOPLOT_INTRAD);axis auto
-            colormap(app.UIAxes2,'hsv')
-            % Copy contents back to app UIAxes
-            cla(app.UIAxes2);
-            copyobj(allchild(newAx), app.UIAxes2);
-
-            % Clean up
-            close(invisibleFig);  % Close hidden fig
-            figure(oldFig);axis(app.UIAxes2,'auto')
-            close
+            [~, firstIdx] = min(abs(app.EEGtime - (timepoint - halfWin)));
+            [~, lastIdx]  = min(abs(app.EEGtime - (timepoint + halfWin)));
+            values    = mean(yp(:, min(firstIdx,lastIdx):max(firstIdx,lastIdx)), 2, "omitmissing");
         end
 
         
@@ -1810,7 +1890,9 @@ classdef nestapp < matlab.apps.AppBase
             app.RemoveWindowButton.Tooltip = 'Remove the selected window of interest';
             app.ResetWindowsButton.Tooltip = 'Restore the default TEP component windows (Beck et al. 2024)';
             app.TOPOPLOTButton.Tooltip        = 'Plot a scalp topographic map at the specified time point';
-            app.ExportTEPFigureButton.Tooltip = 'Export the current TEP plot as PNG or PDF';
+            app.ExportTEPFigureButton.Tooltip = 'Export the current TEP plot as PNG, PDF or MATLAB figure';
+            app.OpenTEPFigureButton.Tooltip   = 'Open the TEP plot in a standard MATLAB figure for hand editing';
+            app.OpenTopoFigureButton.Tooltip  = 'Open the topoplot in a standard MATLAB figure for hand editing';
             app.ReLoadAvailableElectrodesButton.Tooltip = ...
                 'Reload the electrode list from the currently selected files';
             app.SelectAllCheckBox.Tooltip   = 'Select all available files for TEP plotting';
@@ -2213,6 +2295,12 @@ classdef nestapp < matlab.apps.AppBase
                 [allReports, allSummaries, failed] = runPipelineCore(app.spec, filePaths, opts);
             catch err
                 if strcmp(err.identifier, 'nestapp:cancelled')
+                    return   % backed out before anything ran - nothing to say
+                end
+                if strcmp(err.identifier, 'nestapp:cancelledPartial')
+                    % The run got far enough to write per-file reports and a
+                    % partial session summary; the message names the folder.
+                    uialert(app.UIFigure, err.message, 'Run Cancelled', 'Icon', 'warning');
                     return
                 end
                 uialert(app.UIFigure, err.message, 'Pipeline Error', 'Icon', 'error');
@@ -2223,7 +2311,9 @@ classdef nestapp < matlab.apps.AppBase
             % them (they have no report of their own).
             app.lastFailed = failed;
 
-            if numel(allReports) > 1
+            % A single-file run gets a session summary too - the methods
+            % paragraph and citations are just as useful for one file.
+            if ~isempty(allReports)
                 summEntry.text      = summarizeReports(allReports, failed);
                 summEntry.report    = [];
                 summEntry.isSummary = true;
@@ -2337,18 +2427,46 @@ classdef nestapp < matlab.apps.AppBase
         % Size changed function: UIFigure
         function UIFigureSizeChanged(app, ~)
             if isempty(app.originalSize); return; end
+            % enforceMinWindowSize writes Position, which fires this callback
+            % again - and drawnow below lets that re-entry actually run. Left
+            % unguarded the two feed each other for as long as resize events
+            % keep arriving.
+            if app.isResizing; return; end
+            app.isResizing = true;
+            done = onCleanup(@() endResize(app));
+
             drawnow limitrate  % throttle: skip redraws that arrive faster than screen refresh
-            newSize = app.UIFigure.Position(3:4);
-            minW = 650; minH = 420;
-            if newSize(1) < minW || newSize(2) < minH
-                newSize(1) = max(newSize(1), minW);
-                newSize(2) = max(newSize(2), minH);
-                app.UIFigure.Position(3:4) = newSize;
-            end
+            newSize = enforceMinWindowSize(app);
             sX = newSize(1) / app.originalSize(1);
             sY = newSize(2) / app.originalSize(2);
             rescaleComponents(app, sX, sY);
             reRenderReportsOnResize(app);  % reflow the Quality Dashboard if it's showing
+        end
+
+        function endResize(app)
+            app.isResizing = false;
+        end
+
+        function newSize = enforceMinWindowSize(app)
+        % Grow the window back to the minimum WITHOUT moving it on screen.
+        %
+        % Position is [left bottom width height] with bottom measured from the
+        % bottom of the screen, so assigning Position(3:4) alone anchors the
+        % bottom-left and grows the window upward. Shrinking from the bottom
+        % edge raises `bottom`; restoring the height from there lifts the whole
+        % window, and over a stream of resize events it ratchets off the top of
+        % the monitor at a constant size. Pin the top edge instead, and only
+        % write when the size is genuinely short so a normal resize never
+        % touches Position at all.
+            MIN_W = 650;
+            MIN_H = 420;
+            pos     = app.UIFigure.Position;
+            newSize = [max(pos(3), MIN_W), max(pos(4), MIN_H)];
+            if isequal(newSize, pos(3:4))
+                return
+            end
+            topEdge = pos(2) + pos(4);
+            app.UIFigure.Position = [pos(1), topEdge - newSize(2), newSize];
         end
 
         % Cell edit callback: UITable
@@ -2450,6 +2568,8 @@ classdef nestapp < matlab.apps.AppBase
                 end
                 app.TOPOPLOTButton.Enable = 'on';
                 app.ExportTEPFigureButton.Enable = "on";
+                app.OpenTEPFigureButton.Enable = "on";
+                app.OpenTopoFigureButton.Enable = "on";
                 app.PLOTTEPButton.Enable = "on";
             else
                 warning('Try selecting files!')
@@ -2500,6 +2620,8 @@ classdef nestapp < matlab.apps.AppBase
 
             app.TOPOPLOTButton.Enable        = 'on';
             app.ExportTEPFigureButton.Enable = "on";
+            app.OpenTEPFigureButton.Enable   = "on";
+            app.OpenTopoFigureButton.Enable  = "on";
             app.PLOTTEPButton.Enable         = "on";
             app.PlotEEGdataButton.Enable     = 'on';
             app.EEGDatasetDropDown.Enable    = "on";
@@ -2592,15 +2714,65 @@ classdef nestapp < matlab.apps.AppBase
             if isequal(fname, 0)
                 return
             end
-            exportgraphics(app.UIAxes, fullfile(fpath, fname), 'Resolution', 300);
-            [~, nm, ~] = fileparts(fname);
-            savefig(ancestor(app.UIAxes, 'figure'), fullfile(fpath, [nm '.fig']));
+            outPath = fullfile(fpath, fname);
+            [~, ~, ext] = fileparts(fname);
+            if strcmpi(ext, '.fig')
+                % Save a real figure, not the uifigure. savefig on the app's
+                % own window produced a .fig that reopened as the entire
+                % application rather than as an editable plot.
+                fig = popOutAxes(app.UIAxes, struct( ...
+                    'name', 'nestapp TEP', 'visible', 'off'));
+                cleanup = onCleanup(@() delete(fig));
+                savefig(fig, outPath);
+            else
+                exportgraphics(app.UIAxes, outPath, 'Resolution', 300);
+            end
+        end
+
+        % Button pushed function: OpenTEPFigureButton
+        function OpenTEPFigureButtonPushed(app, ~)
+        % Hand the plotted curve to a standard MATLAB figure so it can be
+        % edited with the plot editor / Property Inspector and saved from
+        % there in any format.
+            if ~app.TEPCreated
+                uialert(app.UIFigure, 'Please plot a TEP first.', 'No figure');
+                return
+            end
+            popOutAxes(app.UIAxes, struct('name', 'nestapp TEP', 'style', 'curve'));
+        end
+
+        % Button pushed function: OpenTopoFigureButton
+        function OpenTopoFigureButtonPushed(app, ~)
+        % Same for the scalp map. This draws into a classic axes directly
+        % rather than copying out of UIAxes2, so the popped-out map is at full
+        % resolution and carries its own uV colorbar.
+            if ~isFileSelected(app)
+                uialert(app.UIFigure, 'Please select data first.', 'No data');
+                return
+            end
+            [values, chanLocs] = topoScalpData(app);
+            fig = figure('Name', 'nestapp Topoplot', 'NumberTitle', 'off', 'Color', 'w');
+            ax  = axes(fig);
+            drawScalpTopo(ax, values, chanLocs);
+            title(ax, sprintf('%g ms (+/-%g ms)', ...
+                app.TopoplottimeSpinner.Value, ...
+                app.WindowsizefortimeaveragedTopoplotEditField.Value / 2));
         end
 
         % Value changing function: TEPWindowSlider
         function TEPWindowSliderValueChanging(app, event)
             changingValue = event.Value;
             app.UIAxes.XLim = changingValue;
+        end
+
+        % Value changed function: WindowsizefortimeaveragedTopoplotEditField
+        function TopoWindowSizeValueChanged(app, ~)
+        % The averaging half-window is read at render time, so changing it
+        % only needs a re-render - without this the field silently did nothing
+        % until the time spinner or TOPOPLOT was touched.
+            if isFileSelected(app)
+                EEG_topoplot(app)
+            end
         end
 
         % Value changed function: TopoplottimeSpinner

@@ -135,6 +135,20 @@ testCase.verifyMatches(batchFolder, '^\d{8}_\d{6}_[a-z0-9_]+$', ...
 specPath = fullfile(batchRoot, 'batch', 'spec.mat');
 testCase.verifyTrue(exist(specPath, 'file') == 2, ...
     'Expected <batchRoot>/batch/spec.mat to be written.');
+
+% Regression: this is a ONE-file run. The session summary used to be gated
+% on numel(reports) > 1, so a single-file batch got no overall report at all.
+summaryPath = fullfile(batchRoot, 'reports', 'session_summary.txt');
+testCase.verifyTrue(exist(summaryPath, 'file') == 2, ...
+    'Expected <batchRoot>/reports/session_summary.txt for a single-file run.');
+
+% Regression: the dashboard guard was handed raw report structs while
+% anyReportHasGates expects Reports-tab entries, so it returned false every
+% time and the PNG was never written for a clean run. This pipeline ends in a
+% Quality Gate, so the dashboard must exist.
+dashPath = fullfile(batchRoot, 'batch', 'dashboard.png');
+testCase.verifyTrue(exist(dashPath, 'file') == 2, ...
+    'Expected <batchRoot>/batch/dashboard.png when a report carries gates.');
 end
 
 % -- helpers --------------------------------------------------------------
