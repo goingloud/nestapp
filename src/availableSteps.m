@@ -20,11 +20,13 @@ function [steps, hidden] = availableSteps(registry)
 %   unable to build a broken pipeline and being told why an existing one will
 %   not run are different problems, and both want answering.
 %
-%   Both places that populate the step list call this - createComponents at
-%   construction and startupFcn at launch - so the list cannot differ between
-%   them, which it could when each dumped stepRegistry() itself.
+%   Availability is probed live, so this must not be called before EEGLAB has
+%   initialised: until eeglab() runs its plugin scan, which() resolves none of
+%   the plugin functions the steps require and most of the registry is
+%   withheld as "unavailable". The app's startupFcn calls ensureEeglabReady
+%   first for exactly this reason.
 %
-%   See also: stepAvailability, tesaVersion, stepRegistry
+%   See also: stepAvailability, ensureEeglabReady, tesaVersion, stepRegistry
 
 if nargin < 1 || isempty(registry)
     registry = stepRegistry();

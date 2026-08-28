@@ -364,10 +364,18 @@ classdef nestapp < matlab.apps.AppBase
         % taxonomy forgot is collected under "Other" so nothing silently
         % vanishes from the picker.
             delete(app.StepsTree.Children);
-            reg        = stepRegistry();
-            steps      = availableSteps(reg);
-            availNames = {steps.name};
-            app.info   = containers.Map(availNames, {steps.info});
+            reg             = stepRegistry();
+            [steps, hidden] = availableSteps(reg);
+            availNames      = {steps.name};
+            % A withheld step leaves no trace in the tree, so "where did my
+            % steps go" has to be answerable somewhere. Nearly always a missing
+            % or too-old plugin - or EEGLAB not initialised, which used to hide
+            % most of the registry here (see startupFcn).
+            if ~isempty(hidden)
+                nestLog('CFG', 'Step picker: %d of %d steps not offered: %s', ...
+                    numel(hidden), numel(reg), strjoin({hidden.name}, ', '));
+            end
+            app.info        = containers.Map(availNames, {steps.info});
 
             % uitree node styling (uistyle/addStyle on a tree) is R2023b+; the
             % app's floor is R2023a, so probe once - the picker still builds on
@@ -1653,11 +1661,11 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         function LoadSelecEEGdata(app)
-            % Ensure EEGLAB functions are on the path.  eeglab('nogui') is
-            % normally called by runPipelineCore, but the Visualizing tab can be
-            % used independently, so initialise on demand if needed.
-            if ~exist('pop_loadset', 'file')
-                eeglab('nogui');
+            % The Visualizing tab can be used without ever running a pipeline,
+            % so do not assume anything upstream has initialised EEGLAB.
+            [ok, msg] = ensureEeglabReady();
+            if ~ok
+                error('nestapp:eeglabUnavailable', '%s', msg);
             end
             for nfile = 1:numel(app.SelectedFilesforTEP)
                 % SelectedFilesforTEP holds full paths; split for pop_loadset
@@ -2054,6 +2062,14 @@ classdef nestapp < matlab.apps.AppBase
         % Code that executes after component creation
         function startupFcn(app)
             clc
+            % Order matters. The picker asks which() what is installed, and
+            % nothing EEGLAB provides - including every plugin - resolves until
+            % eeglab() has run its path setup and plugin scan. So prefs (which
+            % is where the EEGLAB folder is recorded) and EEGLAB itself have to
+            % come up BEFORE the tree is built; otherwise a cold MATLAB hides
+            % most of the registry as "not installed". See ensureEeglabReady.
+            loadPrefs(app);
+            initEeglab(app);
             % Fill the stage-grouped step-picker tree and the name->info map it
             % reads on selection. Both are built from availableSteps, so what is
             % offered here is exactly what the pre-flight will accept.
@@ -2082,11 +2098,28 @@ classdef nestapp < matlab.apps.AppBase
                 'BusyMode',      'drop', ...
                 'Name',          'nestappStepsHover', ...
                 'TimerFcn',      @(~,~) showStepsTip(app));
-            loadPrefs(app);
             buildRecentFilesMenu(app);
             buildRecentPipelinesMenu(app);
             updateStatusBar(app);
             clc
+        end
+
+        function initEeglab(app)
+        % INITEEGLAB  Bring EEGLAB up at launch, with feedback and a verdict.
+        %   The plugin scan takes a couple of seconds and the window is already
+        %   on screen by now, so it gets a progress dialog rather than a
+        %   silent freeze. A failure is worth interrupting for: without EEGLAB
+        %   the picker can only offer the handful of steps that need nothing,
+        %   and the user would otherwise have to guess why.
+            dlg = uiprogressdlg(app.UIFigure, 'Title', 'Starting nestapp', ...
+                'Message', 'Initialising EEGLAB and its plugins...', ...
+                'Indeterminate', 'on');
+            closeDlg = onCleanup(@() close(dlg));
+            [ok, msg] = ensureEeglabReady();
+            if ~ok
+                clear closeDlg
+                uialert(app.UIFigure, msg, 'EEGLAB Not Ready', 'Icon', 'warning');
+            end
         end
 
         % Selection changed function: StepsTree
@@ -2382,18 +2415,13 @@ classdef nestapp < matlab.apps.AppBase
                 return
             end
 
-            % Silently initialise EEGLAB if its plugins aren't on the path yet.
-            global PLUGINLIST %#ok<GVMIS>
-            if isempty(PLUGINLIST)
-                try
-                    evalc('eeglab nogui');
-                catch ME
-                    uialert(app.UIFigure, ...
-                        ['EEGLAB could not be initialised: ' ME.message newline ...
-                         'Verify the EEGLAB path in Preferences.'], ...
-                        'EEGLAB Init Failed', 'Icon', 'error');
-                    return
-                end
+            % Normally a no-op - startupFcn has already done this - but the
+            % run is the point at which EEGLAB stops being optional, so check
+            % rather than assume the session still has it.
+            [ok, msg] = ensureEeglabReady();
+            if ~ok
+                uialert(app.UIFigure, msg, 'EEGLAB Init Failed', 'Icon', 'error');
+                return
             end
 
             % app.filePaths holds full paths and spans folders when the
