@@ -1312,11 +1312,11 @@ function createComponents(app)
             app.StepsTipPanel.AutoResizeChildren = 'off';
             % Tall enough for the wrapped legend at this width; the text is
             % fixed, so a fixed box that fits it is simpler than measuring.
-            app.StepsTipPanel.Position = [0 0 310 172];
+            app.StepsTipPanel.Position = [0 0 300 84];
             app.StepsTipPanel.Visible = 'off';
 
             app.StepsTipLabel = uilabel(app.StepsTipPanel);
-            app.StepsTipLabel.Position = [8 6 294 160];
+            app.StepsTipLabel.Position = [8 5 284 74];
             app.StepsTipLabel.VerticalAlignment = 'top';
             app.StepsTipLabel.WordWrap = 'on';
             app.StepsTipLabel.FontSize = 11;
