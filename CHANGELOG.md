@@ -112,6 +112,18 @@ The version here must match `src/nestappVersion.m` and the release git tag.
   rows.
 
 ### Changed
+- The step picker's amber dot now marks a step that **waits for you** rather
+  than its provenance. Provenance was true of every step once expanded, so a
+  colour for it would have marked all 51 rows and said nothing; the tree
+  already shows the provider structurally wherever there is a choice between
+  variants. Blocking is the exception (6 of 51) and was previously only
+  discoverable *after* building a pipeline and pressing Run Analysis, when the
+  parallel-processing warning fires. The set is derived from the registry via
+  the new `canStepBlock`, so an interactive step marks itself.
+- The Steps tree carries a tooltip explaining the dot. `uitreenode` has no
+  Tooltip property, so a per-node hover tip is not possible; the tree-level
+  tooltip is the key, and selecting a step now shows what the dot means for
+  it, plus which toolbox supplies it, in the Info panel above the description.
 - **Export Metrics Table** is now **Export Metrics CSV**, and its tooltip
   leads with "Write a CSV file". The previous name did not say what came out,
   and the other exports on that tab produce PDFs or MATLAB objects.

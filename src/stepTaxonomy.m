@@ -22,7 +22,7 @@ function TAX = stepTaxonomy()
 %   registry steps, so adding a registry step without placing it here fails the
 %   suite rather than silently dropping the step from the picker.
 %
-%   See also: availableSteps, stepRegistry, stepFlagIcon
+%   See also: availableSteps, stepRegistry, stepInteractiveIcon
 
 raw = {
  'Import & Session', {

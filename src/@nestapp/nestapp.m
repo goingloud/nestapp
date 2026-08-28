@@ -185,6 +185,8 @@ classdef nestapp < matlab.apps.AppBase
         % Tab Cleaning
         selectedItem % Selected Table Item Values
         info % containers.Map: step name -> info/description text (shown in InfoTextArea)
+        stepBlocks    % containers.Map: step name -> true if it ALWAYS waits for a human
+        stepProviders % containers.Map: step name -> provider (TESA, EEGLAB, ...)
         % Canonical pipeline state - single source of truth for steps and params.
         % appendStep/removeStep/moveStep/clearSteps/loadPipelineData all write here.
         currentParamKey  = ''  % param key selected in UITable (transient)
@@ -244,6 +246,48 @@ classdef nestapp < matlab.apps.AppBase
             if ischar(d) || isstring(d); name = char(d); end
         end
 
+        function txt = stepsTreeLegend(app)
+        % The Steps tree's tooltip. uitreenode has no Tooltip property, so a
+        % per-node hover tip is not possible - the tree-level tooltip carries
+        % the key for the dot instead, and the Info panel below names the
+        % provider and the exact wait behaviour for whichever step is selected.
+            n = 0;
+            if ~isempty(app.stepBlocks); n = app.stepBlocks.Count; end
+            txt = sprintf([ ...
+                'Steps you can add to the pipeline, grouped by stage.\n\n' ...
+                'An amber dot marks a step that stops and waits for you - it ' ...
+                'opens a window you must close before the run continues, and ' ...
+                'it cannot run with Parallel Processing on (%d of these).\n\n' ...
+                'Select a step to see what it does, who supplies it, and its ' ...
+                'settings.'], n);
+        end
+
+        function lines = stepInfoLines(app, name)
+        % What the Info panel shows for one step: its description, then the
+        % facts the tree can only hint at - who supplies it (every step has a
+        % provider, so that is text rather than a dot) and, for the few that
+        % carry the amber dot, what the dot means for this step.
+            lines = string.empty(0, 1);
+            % The dot's meaning goes first: the Info panel is small, and a
+            % note under a long description is a note nobody scrolls to.
+            if ~isempty(app.stepBlocks) && isKey(app.stepBlocks, name)
+                if app.stepBlocks(name)
+                    lines(end+1) = "* Waits for you - opens a window you must " + ...
+                        "close before the run continues.";
+                else
+                    lines(end+1) = "* Waits for you in some modes - opens a " + ...
+                        "window you must close when its review option is on.";
+                end
+                lines(end+1) = "  Cannot run with Parallel Processing on.";
+                lines(end+1) = "";
+            end
+            lines(end+1) = string(app.info(name));
+            if ~isempty(app.stepProviders) && isKey(app.stepProviders, name)
+                lines(end+1) = "";
+                lines(end+1) = "Provided by: " + string(app.stepProviders(name));
+            end
+        end
+
         function populateStepsTree(app)
         % POPULATESTEPSTREE  (Re)build the stage-grouped picker tree and the
         % name->info map from the steps this machine can run (availableSteps).
@@ -260,9 +304,21 @@ classdef nestapp < matlab.apps.AppBase
             % older releases, just without bold headers / muted operation rows.
             canStyle = treeStylingSupported(app, app.StepsTree);
 
-            TAX  = stepTaxonomy();
-            OWN  = {'AARATEP', 'nestapp'};
-            flag = stepFlagIcon();
+            TAX = stepTaxonomy();
+            % Steps that can stop and wait for a human get the amber dot. The
+            % set is derived from the registry via canStepBlock, so adding an
+            % interactive step marks itself - there is no second list here to
+            % fall out of sync.
+            reg = stepRegistry();
+            app.stepBlocks    = containers.Map('KeyType', 'char', 'ValueType', 'logical');
+            app.stepProviders = containers.Map('KeyType', 'char', 'ValueType', 'char');
+            for r = 1:numel(reg)
+                if ~ismember(reg(r).name, availNames); continue; end
+                [tf, always] = canStepBlock(reg(r));
+                if tf; app.stepBlocks(reg(r).name) = always; end
+            end
+            flag = stepInteractiveIcon();
+            app.StepsTree.Tooltip = stepsTreeLegend(app);
             sCat = uistyle('FontWeight', 'bold');
             sOp  = uistyle('FontColor', [0.42 0.47 0.53]);
 
@@ -287,13 +343,17 @@ classdef nestapp < matlab.apps.AppBase
                 if canStyle; addStyle(app.StepsTree, sCat, 'node', cNode); end
                 for o = 1:numel(ops)
                     if numel(ops(o).variants) == 1
-                        addStepLeaf(app, cNode, ops(o).variants(1), OWN, flag);
+                        addStepLeaf(app, cNode, ops(o).variants(1), flag);
                     else
                         oNode = uitreenode(cNode, 'Text', ops(o).name, 'NodeData', '');
                         if canStyle; addStyle(app.StepsTree, sOp, 'node', oNode); end
                         for k = 1:numel(ops(o).variants)
-                            addStepLeaf(app, oNode, ops(o).variants(k), OWN, flag);
+                            addStepLeaf(app, oNode, ops(o).variants(k), flag);
                         end
+                    end
+                    for vk = 1:numel(ops(o).variants)
+                        app.stepProviders(ops(o).variants(vk).step) = ...
+                            ops(o).variants(vk).provider;
                     end
                     placed = [placed, {ops(o).variants.step}]; %#ok<AGROW>
                 end
@@ -313,11 +373,11 @@ classdef nestapp < matlab.apps.AppBase
             expand(app.StepsTree);
         end
 
-        function addStepLeaf(~, parent, v, OWN, flagIcon)
+        function addStepLeaf(app, parent, v, flagIcon)
         % ADDSTEPLEAF  One leaf whose NodeData is the registry step name; an
-        % amber flag marks in-house / vendored (AARATEP / nestapp) providers.
+        % amber dot marks a step that can stop and wait for a human.
             node = uitreenode(parent, 'Text', v.step, 'NodeData', v.step);
-            if any(strcmp(v.provider, OWN))
+            if isKey(app.stepBlocks, v.step)
                 % Set the flag after creation and tolerate its absence: the leaf
                 % must always appear even on a release without node icons.
                 try, node.Icon = flagIcon; catch, end %#ok<CTCH>
@@ -1951,7 +2011,7 @@ classdef nestapp < matlab.apps.AppBase
             if isempty(name)
                 app.InfoTextArea.Value = '';
             elseif isKey(app.info, name)
-                app.InfoTextArea.Value = string(app.info(name));
+                app.InfoTextArea.Value = stepInfoLines(app, name);
             end
             app.selectedItem = [];
         end
