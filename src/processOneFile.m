@@ -39,6 +39,7 @@ if ~isfield(opts, 'logQueue'),       opts.logQueue       = []; end
 if ~isfield(opts, 'nWorkers'),      opts.nWorkers       = 1;  end
 if ~isfield(opts, 'batchCtx'),          opts.batchCtx          = []; end
 if ~isfield(opts, 'autoQualityReport'), opts.autoQualityReport = false; end
+if ~isfield(opts, 'aaratepKeepIntermediates'), opts.aaratepKeepIntermediates = true; end
 if ~isfield(opts, 'qcAttribute'),       opts.qcAttribute       = 'minmax_no_tms'; end
 if ~isfield(opts, 'qcTmsWindow'),       opts.qcTmsWindow       = [0 25];          end
 if ~isfield(opts, 'qcTmsAutoDetect'),   opts.qcTmsAutoDetect   = true;            end
@@ -311,6 +312,24 @@ for si = 1:nSteps
                     'plotTPOIs',                    o.plotTPOIs, ...
                     'plotChans',                    cellstr(o.plotChans));
                 EEG = eeg_checkset( EEG );
+
+                % The orchestrator hands back only the cleaned EEG - its
+                % provenance, QC images and intermediate datasets are files in
+                % o.outputDir. Fold them into the report, and drop its final
+                % .mat when a later Save New Set writes the same dataset as a
+                % .set, so the result exists once, in nestapp's own format.
+                hOpts                   = struct();
+                hOpts.keepIntermediates = opts.aaratepKeepIntermediates;
+                hOpts.dropFinalMat      = savesNewSetLater(spec, si);
+                hOpts.channelLabels     = channelLabelsOf(EEG);
+                [fileReport, hInfo] = aaratepHarvest( ...
+                    fileReport, o.outputDir, o.outputFilePrefix, hOpts);
+                mdTxt = 'NOT FOUND';
+                if hInfo.mdFound; mdTxt = 'read'; end
+                sendWorkerLog(opts.logQueue, wLabel, ...
+                    'AARATEP: metadata %s, %d QC image(s), %d file(s) removed (%.0f MB)', ...
+                    mdTxt, numel(hInfo.figures), numel(hInfo.removed), ...
+                    hInfo.bytesFreed / 1e6);
 
             case 'Manual Command'
                 cmd = step.params.command;
@@ -1806,6 +1825,26 @@ ib = find(strcmp(b, order));
 if isempty(ia), ia = 0; end
 if isempty(ib), ib = 0; end
 v = order{max(ia, ib)};
+end
+
+function tf = savesNewSetLater(spec, si)
+% True when a Save New Set step follows position si. AARATEP's final .mat and
+% that step's .set hold the same dataset, so exactly one of them should
+% survive - and only this tells us the .set is actually coming.
+tf = false;
+for k = si+1:numel(spec)
+    if strcmp(spec(k).name, 'Save New Set'); tf = true; return; end
+end
+end
+
+function labels = channelLabelsOf(EEG)
+% Channel labels of the current dataset, for resolving upstream's channel
+% indices to names. Empty when the montage has no labels.
+labels = {};
+if isstruct(EEG) && isfield(EEG, 'chanlocs') && ~isempty(EEG.chanlocs) ...
+        && isfield(EEG.chanlocs, 'labels')
+    labels = {EEG.chanlocs.labels};
+end
 end
 
 function sendWorkerLog(q, label, fmt, varargin)

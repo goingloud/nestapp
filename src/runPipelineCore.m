@@ -117,6 +117,12 @@ end
 
 % Per-file PDF report auto-export pref (Phase 4).
 autoExportPDF = getpref('nestapp', 'autoExportPDF', false);
+% Default on: the intermediates are what upstream saves "for some analyses",
+% so keeping them is the safe default even though they cost ~3x the result.
+aaratepKeepIntermediates = getpref('nestapp', 'aaratepKeepIntermediates', true);
+if ~aaratepKeepIntermediates
+    nestLog('CFG', 'aaratepKeepIntermediates = false (AARATEP _pre*.mat deleted after each file)');
+end
 if autoExportPDF
     nestLog('QC', 'autoExportPDF = true (one PDF per file alongside the .mat report)');
 end
@@ -241,7 +247,7 @@ if useParallel
     wOpts.progressQueue  = q;              % per-step progress + file-done sentinel
     wOpts.logQueue       = q;              % log msgs share the same queue
     wOpts.nWorkers       = pool.NumWorkers; % actual count for BLAS thread cap
-    wOpts = applyQCOpts(wOpts, batchCtx, autoQualityReport, qcAttribute, qcTmsWindow, skipOnQualityFail, qcTmsAutoDetect, autoExportPDF);
+    wOpts = applyQCOpts(wOpts, batchCtx, autoQualityReport, qcAttribute, qcTmsWindow, skipOnQualityFail, qcTmsAutoDetect, autoExportPDF, aaratepKeepIntermediates);
 
     nestLog('PAR', 'Submitting %d futures...', nFiles);
     for fi = 1:nFiles
@@ -325,7 +331,7 @@ else
         fOpts.onPickChanFile = @() pickChanFile(opts.uiFigure);
         fOpts.progressQueue  = [];   % serial uses progressFcn, not DataQueue
         fOpts.fileIndex      = fi;
-        fOpts = applyQCOpts(fOpts, batchCtx, autoQualityReport, qcAttribute, qcTmsWindow, skipOnQualityFail, qcTmsAutoDetect, autoExportPDF);
+        fOpts = applyQCOpts(fOpts, batchCtx, autoQualityReport, qcAttribute, qcTmsWindow, skipOnQualityFail, qcTmsAutoDetect, autoExportPDF, aaratepKeepIntermediates);
 
         try
             [reports{fi}, ~] = processOneFile(spec, filePaths{fi}, fOpts);
@@ -373,7 +379,8 @@ if ~cancelled && ~isempty(failed)
             'qcTmsWindow',       qcTmsWindow, ...
             'skipOnQualityFail', skipOnQualityFail, ...
             'qcTmsAutoDetect',   qcTmsAutoDetect, ...
-            'autoExportPDF',     autoExportPDF);
+            'autoExportPDF',     autoExportPDF, ...
+            'aaratepKeepIntermediates', aaratepKeepIntermediates);
         while ~isempty(failed)
             decision = promptFailureRecovery(opts.uiFigure, failed, nFiles);
             if strcmp(decision, 'Abandon Run')
@@ -691,7 +698,7 @@ end
 end
 
 function opts = applyQCOpts(opts, batchCtx, autoQualityReport, attribute, tmsWindow, ...
-        skipOnQualityFail, tmsAutoDetect, autoExportPDF)
+        skipOnQualityFail, tmsAutoDetect, autoExportPDF, aaratepKeepIntermediates)
 % Assign the QC opts onto a worker/serial options struct.
 opts.batchCtx          = batchCtx;
 opts.autoQualityReport = autoQualityReport;
@@ -700,6 +707,7 @@ opts.qcTmsWindow       = tmsWindow;
 opts.skipOnQualityFail = skipOnQualityFail;
 opts.qcTmsAutoDetect   = tmsAutoDetect;
 opts.autoExportPDF     = autoExportPDF;
+opts.aaratepKeepIntermediates = aaratepKeepIntermediates;
 end
 
 function parallelSkipMsg(statusBar, msg)
@@ -890,7 +898,8 @@ for j = 1:nRetry
     fOpts.fileIndex      = j;
     fOpts = applyQCOpts(fOpts, runCtx.batchCtx, runCtx.autoQualityReport, ...
         runCtx.qcAttribute, runCtx.qcTmsWindow, runCtx.skipOnQualityFail, ...
-        runCtx.qcTmsAutoDetect, runCtx.autoExportPDF);
+        runCtx.qcTmsAutoDetect, runCtx.autoExportPDF, ...
+        runCtx.aaratepKeepIntermediates);
 
     try
         [reports{fi}, ~] = processOneFile(spec, filePaths{fi}, fOpts);

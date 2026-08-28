@@ -9,6 +9,16 @@ The version here must match `src/nestappVersion.m` and the release git tag.
 ## [Unreleased]
 
 ### Fixed
+- **An AARATEP run reported almost nothing.** The orchestrator returns only
+  the cleaned EEG; its provenance, QC images and intermediates were files in
+  its own folder that nestapp never looked at. So the report showed 0 ICA
+  components (and `methodsNarrative`, which gates the ICA sentence on
+  `nComponents > 0`, left ICA out of the methods paragraph entirely, despite
+  two ICA passes having run), 0 bad channels (AARATEP interpolates them back,
+  so the count never moves), and no figures at all - the AARATEP template has
+  no Quality Gate, so nestapp rendered none either. The new `aaratepHarvest`
+  reads the metadata struct saved beside the result and registers the QC
+  images as report figures, so they reach the Reports tab and the PDF.
 - **Load from Folder was slow.** Three causes. The folder picker opened on
   `lastDataFolder`, which points at raw input data and is typically a network
   share, so the shell had to enumerate a remote path before the dialog could
@@ -77,6 +87,16 @@ The version here must match `src/nestappVersion.m` and the release git tag.
   reopenable plot figure.
 
 ### Added
+- Setting: **Keep AARATEP intermediate datasets**, on by default. AARATEP
+  saves the dataset before SOUND, before decay removal and before ICA
+  rejection as well as the result - four full datasets per file, roughly
+  325 MB at the template defaults, and those three saves are guarded by
+  `if true` upstream rather than by its debug flag. Untick to delete them
+  once the step finishes; the vendored code is not patched.
+- AARATEP's final `.mat` is now removed when a later Save New Set writes the
+  same dataset as a `.set`, so the result exists once, in nestapp's format.
+  Its metadata is read into the report first, and it is never deleted when
+  that read fails or when no Save New Set follows.
 - **Open TEP in Figure** and **Open Topo in Figure** buttons on the Visualizing
   tab. Each copies the plot into a standard MATLAB figure with a classic axes,
   so the plot editor, Property Inspector, Export Setup and `File > Save As` all
