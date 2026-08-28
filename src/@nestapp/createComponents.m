@@ -1321,6 +1321,140 @@ function createComponents(app)
             app.StepsTipLabel.WordWrap = 'on';
             app.StepsTipLabel.FontSize = 11;
 
+
+            %% ---- Explore tab -------------------------------------------
+            % The workspace that replaces Visualizing + Analysis: groups on the
+            % left, one plot from the registry in the middle, four ways out
+            % along the bottom. Built last for now so the existing two tabs are
+            % untouched while this is proven; they come out, and this moves into
+            % their place, once it carries their work.
+            app.ExploreTab = uitab(app.TabGroup);
+            app.ExploreTab.AutoResizeChildren = 'off';
+            app.ExploreTab.Title = 'Explore';
+
+            RAIL_X = 8;
+            RAIL_W = 197;
+            MAIN_X = 215;
+            MAIN_W = 645;
+
+            % -- groups --------------------------------------------------
+            app.ExploreGroupsLabel = uilabel(app.ExploreTab, ...
+                'Text', 'GROUPS', 'FontWeight', 'bold', 'FontSize', 10, ...
+                'Position', [RAIL_X 470 RAIL_W 18]);
+
+            app.ExploreGroupsListBox = uilistbox(app.ExploreTab);
+            app.ExploreGroupsListBox.Items = {};
+            app.ExploreGroupsListBox.ItemsData = {};
+            app.ExploreGroupsListBox.Position = [RAIL_X 362 RAIL_W 104];
+            app.ExploreGroupsListBox.Tooltip = {'Each group is a set of recordings compared as one condition. n counts SUBJECTS, not files.'};
+
+            app.ExploreAddGroupButton = uibutton(app.ExploreTab, 'push');
+            app.ExploreAddGroupButton.Text = 'Add group...';
+            app.ExploreAddGroupButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreAddGroupButtonPushed, true);
+            app.ExploreAddGroupButton.Position = [RAIL_X 332 96 26];
+
+            app.ExploreRemoveGroupButton = uibutton(app.ExploreTab, 'push');
+            app.ExploreRemoveGroupButton.Text = 'Remove';
+            app.ExploreRemoveGroupButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreRemoveGroupButtonPushed, true);
+            app.ExploreRemoveGroupButton.Enable = 'off';
+            app.ExploreRemoveGroupButton.Position = [RAIL_X + 101 332 96 26];
+
+            % -- region of interest --------------------------------------
+            app.ExploreRoiLabel = uilabel(app.ExploreTab, ...
+                'Text', 'REGION OF INTEREST', 'FontWeight', 'bold', ...
+                'FontSize', 10, 'Position', [RAIL_X 300 RAIL_W 18]);
+
+            app.ExploreRoiDropDown = uidropdown(app.ExploreTab);
+            app.ExploreRoiDropDown.Items = {};
+            app.ExploreRoiDropDown.ValueChangedFcn = createCallbackFcn(app, @ExploreRoiDropDownValueChanged, true);
+            app.ExploreRoiDropDown.Position = [RAIL_X 274 RAIL_W 24];
+
+            app.ExploreRoiEditButton = uibutton(app.ExploreTab, 'push');
+            app.ExploreRoiEditButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreRoiEditButtonPushed, true);
+            app.ExploreRoiEditButton.Text = 'Edit electrodes...';
+            app.ExploreRoiEditButton.Position = [RAIL_X 246 RAIL_W 24];
+
+            app.ExploreRoiSummaryLabel = uilabel(app.ExploreTab, ...
+                'Position', [RAIL_X 222 RAIL_W 22], 'FontSize', 11, ...
+                'FontColor', [0.35 0.38 0.43]);
+
+            % -- windows of interest -------------------------------------
+            app.ExploreWindowsLabel = uilabel(app.ExploreTab, ...
+                'Text', 'WINDOWS OF INTEREST', 'FontWeight', 'bold', ...
+                'FontSize', 10, 'Position', [RAIL_X 196 RAIL_W 18]);
+
+            app.ExploreWindowsTable = uitable(app.ExploreTab);
+            app.ExploreWindowsTable.ColumnName = {'Name'; 'T1'; 'T2'};
+            app.ExploreWindowsTable.ColumnWidth = {70, 55, 55};
+            app.ExploreWindowsTable.ColumnEditable = [true true true];
+            app.ExploreWindowsTable.CellEditCallback = createCallbackFcn(app, @ExploreWindowsTableCellEdit, true);
+            app.ExploreWindowsTable.RowName = {};
+            app.ExploreWindowsTable.Position = [RAIL_X 62 RAIL_W 132];
+            app.ExploreWindowsTable.Tooltip = {'Edited here, beside the plot they describe. The same windows place the TEP-topo maps and drive the exported measures.'};
+
+            app.ExploreWindowsResetButton = uibutton(app.ExploreTab, 'push');
+            app.ExploreWindowsResetButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreWindowsResetButtonPushed, true);
+            app.ExploreWindowsResetButton.Text = 'Reset windows';
+            app.ExploreWindowsResetButton.Position = [RAIL_X 34 RAIL_W 24];
+
+            % -- plot picker ---------------------------------------------
+            app.ExplorePlotLabel = uilabel(app.ExploreTab, ...
+                'Text', 'Plot', 'FontWeight', 'bold', ...
+                'Position', [MAIN_X 470 32 22]);
+
+            app.ExplorePlotDropDown = uidropdown(app.ExploreTab);
+            app.ExplorePlotDropDown.Items = {};
+            app.ExplorePlotDropDown.ValueChangedFcn = createCallbackFcn(app, @ExplorePlotDropDownValueChanged, true);
+            app.ExplorePlotDropDown.Position = [MAIN_X + 36 470 300 24];
+
+            app.ExplorePlotInfoLabel = uilabel(app.ExploreTab, ...
+                'Position', [MAIN_X + 344 466 MAIN_W - 344 28], ...
+                'FontSize', 11, 'WordWrap', 'on', ...
+                'VerticalAlignment', 'center', 'FontColor', [0.55 0.33 0.10]);
+
+            % -- canvas --------------------------------------------------
+            % A panel rather than a fixed axes: a topography draws one map per
+            % group and the bars one panel per window, so the number of axes is
+            % a property of the chosen plot. renderExplorePlot fills this.
+            app.ExploreCanvas = uipanel(app.ExploreTab);
+            app.ExploreCanvas.BorderType = 'none';
+            app.ExploreCanvas.AutoResizeChildren = 'off';
+            app.ExploreCanvas.Position = [MAIN_X 66 MAIN_W 396];
+
+            app.ExploreEmptyLabel = uilabel(app.ExploreCanvas, ...
+                'Position', [20 180 MAIN_W - 40 40], ...
+                'HorizontalAlignment', 'center', 'FontSize', 13, ...
+                'FontColor', [0.45 0.48 0.53], 'WordWrap', 'on', ...
+                'Text', 'Add a group to begin. A group is a set of recordings compared as one condition - pre and post, or one cohort against another.');
+
+            % -- the four ways out ---------------------------------------
+            EXIT_W = 155;
+            EXIT_GAP = 8;
+            app.ExploreFigureButton = uibutton(app.ExploreTab, 'push');
+            app.ExploreFigureButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreFigureButtonPushed, true);
+            app.ExploreFigureButton.Text = 'Figure...';
+            app.ExploreFigureButton.Enable = 'off';
+            app.ExploreFigureButton.Position = [MAIN_X 30 EXIT_W 26];
+            app.ExploreFigureButton.Tooltip = {'Open this plot in a standard MATLAB figure, for editing and saving at publication resolution'};
+
+            app.ExploreCsvButton = uibutton(app.ExploreTab, 'push');
+            app.ExploreCsvButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreCsvButtonPushed, true);
+            app.ExploreCsvButton.Text = 'Measures -> CSV...';
+            app.ExploreCsvButton.Enable = 'off';
+            app.ExploreCsvButton.Position = [MAIN_X + (EXIT_W + EXIT_GAP) 30 EXIT_W 26];
+            app.ExploreCsvButton.Tooltip = {'One row per group x subject x window - the small tabular form, for R, JASP or Prism'};
+
+            app.ExploreResultsButton = uibutton(app.ExploreTab, 'push');
+            app.ExploreResultsButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreResultsButtonPushed, true);
+            app.ExploreResultsButton.Text = 'Results -> MATLAB...';
+            app.ExploreResultsButton.Enable = 'off';
+            app.ExploreResultsButton.Position = [MAIN_X + 2*(EXIT_W + EXIT_GAP) 30 EXIT_W 26];
+            app.ExploreResultsButton.Tooltip = {'The whole result as a struct - curves at sampling rate, intervals, provenance - saved or sent to the workspace'};
+
+            app.ExploreStatusLabel = uilabel(app.ExploreTab, ...
+                'Position', [MAIN_X 6 MAIN_W 20], 'FontSize', 11, ...
+                'FontColor', [0.35 0.38 0.43], 'Text', 'Ready.');
+
             % Show the figure after all components are created
             app.UIFigure.Visible = 'on';
         end

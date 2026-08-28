@@ -202,6 +202,29 @@ classdef nestapp < matlab.apps.AppBase
         clickedItem = [];
         doubleClicked = 0;
 
+        % Tab Explore - the grouped-comparison workspace
+        ExploreTab                      matlab.ui.container.Tab
+        ExploreGroupsLabel              matlab.ui.control.Label
+        ExploreGroupsListBox            matlab.ui.control.ListBox
+        ExploreAddGroupButton           matlab.ui.control.Button
+        ExploreRemoveGroupButton        matlab.ui.control.Button
+        ExploreRoiLabel                 matlab.ui.control.Label
+        ExploreRoiDropDown              matlab.ui.control.DropDown
+        ExploreRoiEditButton            matlab.ui.control.Button
+        ExploreRoiSummaryLabel          matlab.ui.control.Label
+        ExploreWindowsLabel             matlab.ui.control.Label
+        ExploreWindowsTable             matlab.ui.control.Table
+        ExploreWindowsResetButton       matlab.ui.control.Button
+        ExplorePlotLabel                matlab.ui.control.Label
+        ExplorePlotDropDown             matlab.ui.control.DropDown
+        ExplorePlotInfoLabel            matlab.ui.control.Label
+        ExploreCanvas                   matlab.ui.container.Panel
+        ExploreEmptyLabel               matlab.ui.control.Label
+        ExploreFigureButton             matlab.ui.control.Button
+        ExploreCsvButton                matlab.ui.control.Button
+        ExploreResultsButton            matlab.ui.control.Button
+        ExploreStatusLabel              matlab.ui.control.Label
+
         % Tab Visualizing
         PathofSelectedFilesforTEP
         SelectedFilesforTEP % Selected files to plot the TEP
@@ -227,6 +250,19 @@ classdef nestapp < matlab.apps.AppBase
         lastFailed         = struct([]) % failure records from the most recent run (for the dashboard + summary)
         preSelectedChanFile = ''   % channel location file selected once before a run
         ParallelCheckBox           % uicheckbox - enable parallel participant processing
+
+        % Explore state. entries and cache are the dataset; everything else is
+        % derived on demand by groupCurves, which is cheap enough to re-run on
+        % every change (measured ~30 ms for 35 files), so nothing here caches a
+        % result that could go stale against the controls.
+        exploreEntries = struct('path', {}, 'subject', {}, 'group', {}, ...
+                                'subjectConfident', {})
+        exploreCache   = struct('path', {}, 'trialAvg', {}, 'labels', {}, ...
+                                'chanlocs', {}, 'time', {}, 'nTrials', {}, 'ok', {})
+        exploreRoi     = {}      % ROI electrode labels (canonical spelling)
+        exploreWindows = struct([])
+        exploreRes     = struct([])   % last groupCurves result, for the exits
+        exploreAvailablePlots = struct([])  % registry entries + availability
 
         % Tab Analysis
         AnalysisTab
@@ -2087,6 +2123,7 @@ classdef nestapp < matlab.apps.AppBase
             app.originalSize      = app.UIFigure.Position(3:4);
             app.tepComponentDefs  = defaultTEPComponentDefs();
             refreshAnalysisWindows(app);   % show the default windows up-front
+            initExploreTab(app);
             applyTooltips(app);
             % Dwell timer for the Steps tree legend. StartDelay is restarted by
             % every mouse move, so the tip appears only after the pointer has
@@ -2102,6 +2139,459 @@ classdef nestapp < matlab.apps.AppBase
             buildRecentPipelinesMenu(app);
             updateStatusBar(app);
             clc
+        end
+
+
+        % ── Explore tab ──────────────────────────────────────────────────
+        function initExploreTab(app)
+        % Fill the controls that do not depend on data: the plot catalogue, the
+        % ROI presets, and the default windows.
+            app.exploreWindows = defaultTEPComponentDefs();
+            app.exploreRoi     = firstRoiPreset();
+            refreshExploreRoi(app);
+            refreshExploreWindows(app);
+            refreshExplorePlots(app);
+            refreshExploreGroups(app);
+        end
+
+        function refreshExplorePlots(app)
+        % The picker is generated from the registry, so a new plot appears here
+        % without touching the tab. Unavailable entries are LISTED with their
+        % reason rather than hidden - the user is usually one group away from
+        % them, and a feature that vanishes looks like a feature that is missing.
+            ctx = struct('nGroups', numel(exploreGroupNames(app)), ...
+                         'hasWindows', ~isempty(app.exploreWindows), ...
+                         'hasChanlocs', exploreHasChanlocs(app));
+            [entries, cats] = availablePlots(ctx);
+            items = {}; data = {};
+            for c = 1:numel(cats)
+                for k = 1:numel(cats(c).entries)
+                    e = cats(c).entries(k);
+                    label = sprintf('%s  -  %s', cats(c).name, e.name);
+                    if ~e.available
+                        label = sprintf('%s   (%s)', label, e.reason);
+                    end
+                    items{end+1} = label; %#ok<AGROW>
+                    data{end+1}  = e.name; %#ok<AGROW>
+                end
+            end
+            keep = app.ExplorePlotDropDown.Value;
+            app.ExplorePlotDropDown.Items     = items;
+            app.ExplorePlotDropDown.ItemsData = data;
+            if ~isempty(data)
+                if ismember(keep, data)
+                    app.ExplorePlotDropDown.Value = keep;
+                else
+                    app.ExplorePlotDropDown.Value = data{1};
+                end
+            end
+            app.exploreAvailablePlots = entries;
+        end
+
+        function names = exploreGroupNames(app)
+            names = {};
+            if isempty(app.exploreEntries); return; end
+            g = {app.exploreEntries.group};
+            names = unique(g(~cellfun(@isempty, g)), 'stable');
+        end
+
+        function tf = exploreHasChanlocs(app)
+            tf = false;
+            ok = app.exploreCache;
+            if isempty(ok); return; end
+            for i = 1:numel(ok)
+                if ok(i).ok && ~isempty(ok(i).chanlocs) && ...
+                        isfield(ok(i).chanlocs, 'theta')
+                    tf = true; return
+                end
+            end
+        end
+
+        function refreshExploreGroups(app)
+            % datasetSummary returns the per-group array FIRST and the overall
+            % totals second; reading groups off the totals silently produced an
+            % empty list.
+            groups = datasetSummary(app.exploreEntries);
+            items = cell(1, numel(groups));
+            data  = cell(1, numel(groups));
+            for g = 1:numel(groups)
+                % Show the n the ESTIMATE rests on, not the n assigned. Files on
+                % a different cap are excluded by groupCurves, so the assigned
+                % count can be higher - and the rail showing 16 beside a legend
+                % showing 15 is how a user stops trusting either number.
+                used = usedSubjectCount(app, groups(g).name);
+                if isnan(used) || used == groups(g).nSubjects
+                    items{g} = sprintf('%s   (n=%d subj, %d files)', ...
+                        groups(g).name, groups(g).nSubjects, groups(g).nFiles);
+                else
+                    items{g} = sprintf('%s   (n=%d of %d subj, %d files)', ...
+                        groups(g).name, used, groups(g).nSubjects, groups(g).nFiles);
+                end
+                data{g}  = groups(g).name;
+            end
+            app.ExploreGroupsListBox.Items     = items;
+            app.ExploreGroupsListBox.ItemsData = data;
+            app.ExploreRemoveGroupButton.Enable = onOffState(~isempty(data));
+            hasData = ~isempty(data);
+            app.ExploreFigureButton.Enable  = onOffState(hasData);
+            app.ExploreCsvButton.Enable     = onOffState(hasData);
+            app.ExploreResultsButton.Enable = onOffState(hasData);
+            app.ExploreEmptyLabel.Visible   = onOffState(~hasData);
+        end
+
+        function n = usedSubjectCount(app, name)
+        % Subjects behind the drawn estimate for this group, or NaN when there
+        % is no result yet to ask.
+            n = NaN;
+            if isempty(app.exploreRes) || isempty(app.exploreRes.groups); return; end
+            k = find(strcmp({app.exploreRes.groups.name}, name), 1);
+            if ~isempty(k); n = app.exploreRes.est(k).n; end
+        end
+
+        function refreshExploreRoi(app)
+            p = roiPresets();
+            app.ExploreRoiDropDown.Items     = [{'(custom)'}, {p.name}];
+            app.ExploreRoiDropDown.ItemsData = [{''}, {p.name}];
+            match = '';
+            for i = 1:numel(p)
+                if isequal(sort(lower(p(i).labels)), sort(lower(app.exploreRoi)))
+                    match = p(i).name; break
+                end
+            end
+            app.ExploreRoiDropDown.Value = match;
+            n = numel(app.exploreRoi);
+            if n == 0
+                app.ExploreRoiSummaryLabel.Text = 'No electrodes selected';
+            else
+                app.ExploreRoiSummaryLabel.Text = sprintf('%d electrode%s: %s', ...
+                    n, plural(n), strjoin(app.exploreRoi, ' '));
+            end
+        end
+
+        function refreshExploreWindows(app)
+            w = app.exploreWindows;
+            data = cell(numel(w), 3);
+            for i = 1:numel(w)
+                data(i, :) = {w(i).name, w(i).winStart, w(i).winEnd};
+            end
+            app.ExploreWindowsTable.Data = data;
+        end
+
+        function recomputeExplore(app)
+        % One path from state to picture. Everything the rail changes lands
+        % here, and it re-runs groupCurves rather than patching a cached
+        % result - the whole point of caching trial averages is that this is
+        % arithmetic on a few MB, so there is no stale-state class of bug.
+            app.exploreRes = struct([]);
+            if isempty(exploreGroupNames(app))
+                refreshExploreGroups(app);
+                renderExplorePlot(app);
+                return
+            end
+            % Availability depends on the group count, so the catalogue has to
+            % be re-evaluated whenever the group set changes - otherwise every
+            % plot stays marked with the count it had when the tab was built and
+            % rendering refuses to draw.
+            refreshExplorePlots(app);
+            entry = currentPlotEntry(app);
+            mode = 'TEP';
+            if ~isempty(entry) && ~isempty(entry.mode); mode = entry.mode; end
+            try
+                app.exploreRes = groupCurves(app.exploreCache, app.exploreEntries, ...
+                    struct('roi', {app.exploreRoi}, 'mode', mode, ...
+                           'design', exploreDesign(app), 'level', 0.95));
+            catch ME
+                app.ExploreStatusLabel.Text = ME.message;
+                app.exploreRes = struct([]);
+            end
+            refreshExploreGroups(app);
+            renderExplorePlot(app);
+        end
+
+        function d = exploreDesign(app)
+        % Paired when every group holds the same subjects, unpaired otherwise.
+        % Inferred rather than asked: the answer is already in the data, and a
+        % control for it is a control the user can set wrongly.
+            d = 'unpaired';
+            [~, overall] = datasetSummary(app.exploreEntries);
+            names = exploreGroupNames(app);
+            if numel(names) >= 2 && overall.nComplete == overall.nSubjects ...
+                    && overall.nComplete > 0
+                d = 'paired';
+            end
+        end
+
+        function entry = currentPlotEntry(app)
+            entry = [];
+            if isempty(app.exploreAvailablePlots); return; end
+            k = find(strcmp({app.exploreAvailablePlots.name}, ...
+                            app.ExplorePlotDropDown.Value), 1);
+            if ~isempty(k); entry = app.exploreAvailablePlots(k); end
+        end
+
+        function renderExplorePlot(app)
+        % Clear the canvas and build exactly the axes the chosen plot needs.
+            delete(app.ExploreCanvas.Children);
+            app.ExploreEmptyLabel = uilabel(app.ExploreCanvas, ...
+                'Position', [20 180 app.ExploreCanvas.Position(3) - 40 40], ...
+                'HorizontalAlignment', 'center', 'FontSize', 13, ...
+                'FontColor', [0.45 0.48 0.53], 'WordWrap', 'on', ...
+                'Text', 'Add a group to begin. A group is a set of recordings compared as one condition - pre and post, or one cohort against another.', ...
+                'Visible', 'off');
+
+            entry = currentPlotEntry(app);
+            if isempty(entry); return; end
+            app.ExplorePlotInfoLabel.Text = '';
+
+            if ~entry.available
+                app.ExplorePlotInfoLabel.Text = entry.reason;
+                showExploreEmpty(app, entry.reason);
+                return
+            end
+            if isempty(app.exploreRes) || isempty(app.exploreRes.groups)
+                showExploreEmpty(app, '');
+                return
+            end
+
+            try
+                drawExploreInto(app, app.ExploreCanvas, entry);
+                app.ExploreStatusLabel.Text = exploreStatusText(app);
+            catch ME
+                showExploreEmpty(app, ME.message);
+                app.ExploreStatusLabel.Text = ME.message;
+            end
+        end
+
+        function drawExploreInto(app, parent, entry)
+        % Mint the axes the plot wants inside `parent`, then hand off to the
+        % registry's draw function. Shared by the in-app canvas and the
+        % popped-out figure, so what is exported is what was on screen.
+            res = app.exploreRes;
+            pos = parent.Position;
+            switch entry.draw
+                case 'drawGroupTopo'
+                    n = numel(res.groups);
+                    axList = gobjects(1, n);
+                    w = (pos(3) - 20) / max(n, 1);
+                    for k = 1:n
+                        axList(k) = uiaxes(parent, ...
+                            'Position', [10 + (k-1)*w, 30, w - 10, pos(4) - 60]);
+                    end
+                    win = exploreTopoWindow(app);
+                    drawGroupTopo(axList, res, struct('window', win));
+                otherwise
+                    ax = uiaxes(parent, 'Position', [45 45 pos(3) - 70 pos(4) - 70]);
+                    fn = str2func(entry.draw);
+                    fn(ax, res, struct('mode', entry.mode));
+            end
+        end
+
+        function win = exploreTopoWindow(app)
+        % The scalp map averages over the first window of interest, so the map
+        % and the measures describe the same interval by construction.
+            win = [app.exploreRes.time(1) app.exploreRes.time(end)];
+            if ~isempty(app.exploreWindows)
+                win = [app.exploreWindows(1).winStart app.exploreWindows(1).winEnd];
+            end
+        end
+
+        function showExploreEmpty(app, msg)
+            if ~isempty(msg)
+                app.ExploreEmptyLabel.Text = msg;
+            end
+            app.ExploreEmptyLabel.Visible = 'on';
+        end
+
+        function txt = exploreStatusText(app)
+            res = app.exploreRes;
+            bits = {};
+            for g = 1:numel(res.groups)
+                bits{end+1} = sprintf('%s n=%d', res.groups(g).name, ...
+                                      res.est(g).n); %#ok<AGROW>
+            end
+            txt = sprintf('%s  |  %s, 95%% CI  |  %d channels', ...
+                strjoin(bits, ', '), res.design, numel(res.channelLabels));
+            m = res.info.montage;
+            if ~isempty(m.excluded)
+                txt = sprintf('%s  |  %d file%s excluded (different cap)', ...
+                    txt, numel(m.excluded), plural(numel(m.excluded)));
+            end
+            if ~isempty(res.dropped)
+                txt = sprintf('%s  |  %d subject%s without a complete set', ...
+                    txt, numel(res.dropped), plural(numel(res.dropped)));
+            end
+        end
+
+        % -- callbacks ------------------------------------------------------
+        function ExploreAddGroupButtonPushed(app, ~)
+            startFolder = getpref('nestapp', 'lastDataFolder', '');
+            paths = selectDataTree(startFolder, {'*.set'});
+            if isempty(paths); return; end
+            if isvalid(app.UIFigure); figure(app.UIFigure); end
+
+            answer = inputdlg('Name for this group:', 'Add group', [1 40], ...
+                              {sprintf('group %d', numel(exploreGroupNames(app)) + 1)});
+            if isempty(answer) || isempty(strtrim(answer{1})); return; end
+            name = strtrim(answer{1});
+
+            dlg = uiprogressdlg(app.UIFigure, 'Title', 'Adding group', ...
+                'Message', sprintf('Loading %d file(s)...', numel(paths)), ...
+                'Indeterminate', 'on');
+            closeDlg = onCleanup(@() close(dlg));
+            try
+                added = exploreDataset(paths, {}, struct());
+                for i = 1:numel(added); added(i).group = name; end
+                [newCache, warns] = loadReducedSets(paths, struct( ...
+                    'progressFcn', @(i, n, ~) 0));
+                app.exploreEntries = [app.exploreEntries, added];
+                app.exploreCache   = [app.exploreCache, newCache];
+                if isempty(app.exploreRoi)
+                    app.exploreRoi = firstRoiPreset();
+                    refreshExploreRoi(app);
+                end
+                clear closeDlg
+                if ~isempty(warns)
+                    uialert(app.UIFigure, strjoin(warns, newline), ...
+                        'Some files could not be loaded', 'Icon', 'warning');
+                end
+            catch ME
+                clear closeDlg
+                uialert(app.UIFigure, ME.message, 'Could not add group', ...
+                        'Icon', 'error');
+                return
+            end
+            refreshExplorePlots(app);
+            recomputeExplore(app);
+        end
+
+        function ExploreRemoveGroupButtonPushed(app, ~)
+            name = app.ExploreGroupsListBox.Value;
+            if isempty(name); return; end
+            drop = strcmp({app.exploreEntries.group}, name);
+            gone = {app.exploreEntries(drop).path};
+            app.exploreEntries(drop) = [];
+            % Drop the cached datasets no remaining group refers to.
+            keepCache = ~ismember({app.exploreCache.path}, gone);
+            app.exploreCache = app.exploreCache(keepCache);
+            refreshExplorePlots(app);
+            recomputeExplore(app);
+        end
+
+        function ExploreRoiEditButtonPushed(app, ~)
+            picked = roiPicker(app.exploreRoi, exploreAvailableElectrodes(app), ...
+                struct('parent', app.UIFigure, ...
+                       'availableNote', 'not on the modal cap'));
+            if isempty(picked) && ~iscell(picked)
+                return          % cancelled - [] rather than {}
+            end
+            app.exploreRoi = picked;
+            refreshExploreRoi(app);
+            recomputeExplore(app);
+        end
+
+        function labels = exploreAvailableElectrodes(app)
+        % The modal montage of what is loaded, which is what groupCurves will
+        % actually compute on - so the picker greys exactly what cannot be used.
+            labels = {};
+            if isempty(app.exploreRes) || ~isfield(app.exploreRes, 'channelLabels')
+                ok = app.exploreCache([app.exploreCache.ok]);
+                if ~isempty(ok); labels = ok(1).labels; end
+                return
+            end
+            labels = app.exploreRes.channelLabels;
+        end
+
+        function ExploreRoiDropDownValueChanged(app, ~)
+            name = app.ExploreRoiDropDown.Value;
+            if isempty(name); return; end
+            p = roiPresets();
+            k = find(strcmp({p.name}, name), 1);
+            if isempty(k); return; end
+            app.exploreRoi = p(k).labels;
+            refreshExploreRoi(app);
+            recomputeExplore(app);
+        end
+
+        function ExplorePlotDropDownValueChanged(app, ~)
+            recomputeExplore(app);
+        end
+
+        function ExploreWindowsTableCellEdit(app, event)
+            r = event.Indices(1);
+            c = event.Indices(2);
+            if r > numel(app.exploreWindows); return; end
+            switch c
+                case 1, app.exploreWindows(r).name     = char(event.NewData);
+                case 2, app.exploreWindows(r).winStart = event.NewData;
+                case 3, app.exploreWindows(r).winEnd   = event.NewData;
+            end
+            refreshExploreWindows(app);
+            renderExplorePlot(app);
+        end
+
+        function ExploreWindowsResetButtonPushed(app, ~)
+            app.exploreWindows = defaultTEPComponentDefs();
+            refreshExploreWindows(app);
+            renderExplorePlot(app);
+        end
+
+        function ExploreFigureButtonPushed(app, ~)
+        % A real MATLAB figure, drawn fresh rather than copied: the in-app
+        % canvas is for looking, and a figure someone will edit and save wants
+        % its own axes at its own size.
+            if isempty(app.exploreRes); return; end
+            entry = currentPlotEntry(app);
+            if isempty(entry) || ~entry.available; return; end
+            fig = figure('Name', sprintf('nestapp - %s', entry.name), ...
+                         'NumberTitle', 'off', 'Color', 'w', ...
+                         'Position', [120 120 900 520]);
+            holder = uipanel(fig, 'Units', 'pixels', 'BorderType', 'none', ...
+                             'Position', [0 0 900 520]);
+            drawExploreInto(app, holder, entry);
+        end
+
+        function ExploreCsvButtonPushed(app, ~)
+            if isempty(app.exploreRes); return; end
+            T = exploreMeasures(withMode(app.exploreRes, currentMode(app)), ...
+                                app.exploreWindows);
+            if isempty(T) || height(T) == 0
+                uialert(app.UIFigure, 'No measures to export yet.', 'Nothing to save');
+                return
+            end
+            [f, p] = uiputfile({'*.csv', 'Comma-separated values'}, ...
+                               'Save measures', 'tep_measures.csv');
+            if isequal(f, 0); return; end
+            writetable(T, fullfile(p, f));
+            app.ExploreStatusLabel.Text = sprintf('Wrote %d rows to %s', height(T), f);
+        end
+
+        function ExploreResultsButtonPushed(app, ~)
+            if isempty(app.exploreRes); return; end
+            entry = currentPlotEntry(app);
+            plotName = '';
+            if ~isempty(entry); plotName = entry.name; end
+            out = exploreResults(app.exploreRes, app.exploreEntries, struct( ...
+                'roi', {app.exploreRoi}, 'windows', app.exploreWindows, ...
+                'mode', currentMode(app), 'plot', plotName));
+
+            choice = uiconfirm(app.UIFigure, ...
+                ['The full result - curves at sampling rate, intervals and ' ...
+                 'provenance. Save it as a .mat, or put it in the base ' ...
+                 'workspace to carry on in MATLAB?'], 'Results', ...
+                'Options', {'Save as .mat', 'To workspace', 'Cancel'}, ...
+                'DefaultOption', 1, 'CancelOption', 3);
+            switch choice
+                case 'Save as .mat'
+                    [f, p] = uiputfile({'*.mat', 'MATLAB data'}, ...
+                                       'Save results', 'tep_results.mat');
+                    if isequal(f, 0); return; end
+                    save(fullfile(p, f), 'out');
+                    app.ExploreStatusLabel.Text = sprintf('Saved results to %s', f);
+                case 'To workspace'
+                    assignin('base', 'tepResults', out);
+                    app.ExploreStatusLabel.Text = ...
+                        'Results assigned to "tepResults" in the base workspace.';
+            end
         end
 
         function initEeglab(app)
@@ -3240,4 +3730,18 @@ classdef nestapp < matlab.apps.AppBase
             delete(app.UIFigure)
         end
     end
+end
+
+function s = onOffState(tf)
+if tf; s = 'on'; else; s = 'off'; end
+end
+
+function labels = firstRoiPreset()
+p = roiPresets();
+labels = {};
+if ~isempty(p); labels = p(1).labels; end
+end
+
+function res = withMode(res, mode)
+res.mode = mode;
 end

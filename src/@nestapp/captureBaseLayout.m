@@ -20,10 +20,9 @@ function L = captureBaseLayout(app)
 %
 %   See also: rescaleComponents, UIFigureSizeChanged
 
-    % Excluded from rescale: the figure / tabs (managed by the TabGroup) and the
-    % status bar / TabGroup, which rescaleComponents lays out explicitly.
-    exclude   = {'UIFigure', 'TabGroup', 'StatusBar', ...
-                 'CleaningTab', 'VisualizingTab', 'AnalysisTab', 'ReportsTab'};
+    % Excluded from rescale: the status bar and TabGroup, which
+    % rescaleComponents lays out explicitly, and the figure itself.
+    exclude   = {'UIFigure', 'TabGroup', 'StatusBar'};
     fontMap = fontScaledMap();
 
     L       = struct();
@@ -44,6 +43,13 @@ function L = captureBaseLayout(app)
         % Require a real [x y w h] rectangle: this skips menus (scalar Position
         % = menu order) and any non-positional graphics.
         if ~(isscalar(h) && isgraphics(h) && isprop(h, 'Position') && numel(h.Position) == 4)
+            continue
+        end
+        % Tabs are sized by their TabGroup and their Position is READ-ONLY, so
+        % including one makes the next resize throw. Excluded by TYPE rather
+        % than by name: the previous version listed the four tabs that existed,
+        % and adding a fifth silently broke resizing until a resize was tried.
+        if isa(h, 'matlab.ui.container.Tab')
             continue
         end
         e = struct('pos', h.Position, 'fixedH', isFixedHeightControl(h), 'font', []);

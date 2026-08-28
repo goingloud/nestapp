@@ -130,6 +130,17 @@ assert(~contains(src, 'app.UIFigure.Position(3:4) = newSize'), ...
     'The minimum size must not be applied by assigning Position(3:4) alone');
 end
 
+function test_tabsAreExcludedFromRescaleByTypeNotByName(testCase) %#ok<INUSD>
+% A Tab's Position is read-only, so including one makes the next resize throw.
+% The exclusion used to be a hardcoded list of the four tabs that existed, and
+% adding a fifth broke resizing until someone dragged the window.
+src = fileread(fullfile(repoRoot(), 'src', '@nestapp', 'captureBaseLayout.m'));
+assert(contains(src, "isa(h, 'matlab.ui.container.Tab')"), ...
+    'tabs must be excluded from the rescale snapshot by type');
+assert(~contains(src, "'CleaningTab'"), ...
+    'the per-tab name list must be gone, or the next tab breaks resizing again');
+end
+
 function test_theAppDelegatesToTheClamp(testCase) %#ok<INUSD>
 % Cheap guard against the arithmetic being reinlined into the app, where it
 % would stop being testable without a window.
