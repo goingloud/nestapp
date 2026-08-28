@@ -119,19 +119,55 @@ expected = (30 * 1 + 90 * 5) / 120;      % = 4, not the unweighted 3
 testCase.verifyEqual(res.groups.curves(1,1), expected, 'AbsTol', 1e-12);
 end
 
-function test_channelsAreIntersectedAcrossAllGroups(testCase)
-% A channel missing from one group must not be used in another, or the two
-% conditions are averaged over different montages.
-time = 0:3;
-map = containers.Map( ...
-    {'a.set', 'b.set'}, ...
-    {fakeEEG({'F3','FC3','CZ'}, time, 10, 1), fakeEEG({'F3','CZ'}, time, 10, 1)});
-cache   = loadReducedSets({'a.set','b.set'}, struct('loadFcn', loaderFor(map)));
-entries = struct('path', {'a.set','b.set'}, 'subject', {'s1','s2'}, ...
-                 'group', {'pre','post'});
-res = groupCurves(cache, entries, optsTEP('roi', {'F3','CZ'}));
-testCase.verifyEqual(sort(res.channelLabels), {'CZ','F3'}, ...
-    'FC3 exists in only one group and must be excluded everywhere');
+function test_modalMontageWinsAndOddFilesAreExcluded(testCase)
+% The cohort has two cap configurations (32 files vs 3), not bad channels
+% awaiting interpolation. Intersecting would make the majority pay for the
+% minority and would move GMFP, which is an SD across channels. So the modal
+% montage is kept whole and the odd files out are dropped - and named.
+time  = 0:3;
+paths = {'a.set','b.set','c.set'};
+map   = containers.Map(paths, { ...
+    fakeEEG({'F3','FC3','CZ'}, time, 10, 1), ...
+    fakeEEG({'F3','FC3','CZ'}, time, 10, 2), ...
+    fakeEEG({'F3','CZ','OZ'},  time, 10, 3)});     % the odd one out
+cache   = loadReducedSets(paths, struct('loadFcn', loaderFor(map)));
+entries = struct('path', paths, 'subject', {'s1','s2','s3'}, ...
+                 'group', {'pre','pre','pre'});
+res = groupCurves(cache, entries, optsTEP('roi', {'F3','FC3'}));
+
+testCase.verifyEqual(sort(res.channelLabels), {'CZ','F3','FC3'}, ...
+    'the majority keeps its full montage, FC3 included');
+testCase.verifyEqual(res.info.montage.excluded, {'c.set'}, ...
+    'the excluded file must be named so it can be looked at');
+testCase.verifyFalse(res.info.montage.uniform);
+testCase.verifyEqual(res.groups.nSubjects, 2, ...
+    'the excluded file contributes no subject');
+end
+
+function test_uniformMontageIsReportedAsSuch(testCase)
+[cache, entries] = twoGroupFixture();
+res = groupCurves(cache, entries, optsTEP());
+testCase.verifyTrue(res.info.montage.uniform);
+testCase.verifyEmpty(res.info.montage.excluded);
+end
+
+function test_variantsNameWhatTheMinorityLacks(testCase)
+% The actionable detail: not just "different", but which electrodes are absent.
+time  = 0:3;
+paths = {'a.set','b.set','c.set'};
+map   = containers.Map(paths, { ...
+    fakeEEG({'F3','FC3','CZ'}, time, 10, 1), ...
+    fakeEEG({'F3','FC3','CZ'}, time, 10, 2), ...
+    fakeEEG({'F3','CZ'},       time, 10, 3)});
+cache   = loadReducedSets(paths, struct('loadFcn', loaderFor(map)));
+entries = struct('path', paths, 'subject', {'s1','s2','s3'}, 'group', {'g','g','g'});
+res = groupCurves(cache, entries, optsTEP('roi', {'F3'}));
+
+v = res.info.montage.variants;
+testCase.verifyNumElements(v, 2);
+odd = v([v.nFiles] == 1);
+testCase.verifyEqual(odd.missing, {'FC3'}, ...
+    'the report must say which electrode the odd montage lacks');
 end
 
 function test_roiChangeNeedsNoReloadAndMovesTheCurve(testCase)

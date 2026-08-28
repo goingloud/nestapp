@@ -26,7 +26,12 @@ function res = groupCurves(cache, entries, opts)
 %     .design         the design actually used
 %     .complete       subjects present in every group
 %     .dropped        subjects excluded from a paired estimate, and why
-%     .info           time-base info from commonTimeBase
+%     .info           time-base info from commonTimeBase, plus .montage:
+%                       .uniform    true when every file has the same channels
+%                       .nChannels  size of the modal montage
+%                       .excluded   files not on it, by name
+%                       .variants   each distinct montage with its files and
+%                                   what it lacks relative to the modal one
 %
 %   Three decisions here are the ones that were previously wrong or absent:
 %
@@ -36,9 +41,9 @@ function res = groupCurves(cache, entries, opts)
 %   divided by sqrt(nFiles), which on this cohort (8 people, 32 recordings)
 %   treats one person's four sessions as four independent observations.
 %
-%   Electrodes common to every group. The intersection is taken across the
-%   whole dataset, not within each group. Restricting it per group would let
-%   two conditions be measured over different montages and compared anyway.
+%   One montage for the whole dataset - the modal one. Files recorded on a
+%   different cap are excluded and named in res.info.montage.excluded rather
+%   than quietly shrinking everyone else's channel set; see modalMontage.
 %
 %   Complete cases for paired designs. A paired interval is only defined on
 %   subjects present in every group; the rest are dropped and NAMED in
@@ -59,13 +64,19 @@ res = struct('time', [], 'channelLabels', {{}}, 'chanlocs', [], ...
 use = usableEntries(cache, entries);
 if isempty(use); return; end
 
-% ── one time base and one montage for the whole dataset ──────────────────
-[res.time, timeIdx, res.info] = commonTimeBase({use.time}, {use.label});
-[res.channelLabels, chanIdx]  = commonChannels(use);
+% ── one montage, then one time base for the files that carry it ──────────
+% Montage first: files on a different cap are excluded outright, so they must
+% not get a say in the time base either.
+[res.channelLabels, conforms, chanIdx, montage] = modalMontage(use);
+use     = use(conforms);
+chanIdx = chanIdx(conforms);
 if isempty(res.channelLabels)
     error('nestapp:noCommonChannels', ...
-        'The selected files share no channel labels, so they cannot be compared.');
+        'The selected files have no channel labels, so they cannot be compared.');
 end
+
+[res.time, timeIdx, res.info] = commonTimeBase({use.time}, {use.label});
+res.info.montage = montage;
 res.chanlocs = use(1).chanlocs(chanIdx{1});
 
 % ── per file: crop to the common montage and time base, then reduce ──────
@@ -155,18 +166,49 @@ for i = 1:numel(entries)
 end
 end
 
-function [labels, idx] = commonChannels(use)
-% Labels present in EVERY file, in the first file's order, plus per-file row
-% indices onto that common set. Case-insensitive: montages disagree on case
-% (Fp1 vs FP1) far more often than they disagree on the electrode.
-labels = use(1).labels;
-for i = 2:numel(use)
-    keep   = ismember(lower(labels), lower(use(i).labels));
-    labels = labels(keep);
-end
+function [labels, conforms, idx, montage] = modalMontage(use)
+% The montage carried by the most files, and which files carry it.
+%
+% Not an intersection across every file. On this cohort 32 files carry
+% AFz/FCz/FT9/FT10 and three (rtmsct006, rtmsct016, rtmsct021) carry
+% CPz/FPz/Iz instead - two cap configurations, not bad channels awaiting
+% interpolation, which the pipeline does correctly. Intersecting would take the
+% 59 labels common to both and make 32 files pay for three, and it would move
+% GMFP without saying so, since GMFP is a standard deviation ACROSS CHANNELS
+% and 59 of them is not 63 of them.
+%
+% So the majority montage wins and the odd files out are excluded and NAMED.
+% That keeps the common case exact, keeps GMFP comparable, and turns a silent
+% degradation into a list of files to go and look at.
+%
+% Ties (two montages with equally many files) go to the one seen first, which
+% is stable for a given file order and reported either way.
+sigs = arrayfun(@(u) strjoin(sort(lower(u.labels)), ','), use, 'UniformOutput', false);
+[uniqSigs, ~, which] = unique(sigs, 'stable');
+
+counts = accumarray(which(:), 1);
+[~, winner] = max(counts);          % max takes the first on a tie
+conforms = (which(:)' == winner);
+labels   = use(find(conforms, 1)).labels;
+
 idx = cell(1, numel(use));
-for i = 1:numel(use)
+for i = find(conforms)
     [~, idx{i}] = ismember(lower(labels), lower(use(i).labels));
+end
+
+montage = struct();
+montage.uniform   = isscalar(uniqSigs);
+montage.nChannels = numel(labels);
+montage.excluded  = {use(~conforms).label};
+montage.variants = struct('nChannels', {}, 'nFiles', {}, 'files', {}, 'missing', {});
+for v = 1:numel(uniqSigs)
+    inV = (which(:)' == v);
+    vLabels = use(find(inV, 1)).labels;
+    montage.variants(v).nChannels = numel(vLabels);
+    montage.variants(v).nFiles    = sum(inV);
+    montage.variants(v).files     = {use(inV).label};
+    % What this variant lacks relative to the modal one - the actionable bit.
+    montage.variants(v).missing   = labels(~ismember(lower(labels), lower(vLabels)));
 end
 end
 
