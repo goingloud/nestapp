@@ -1125,11 +1125,12 @@ classdef nestapp < matlab.apps.AppBase
 
         function LoadReportsButtonPushed(app, ~)
         % Browse for a folder of pipeline report .mat files and load them.
-            folder = uigetdir(getpref('nestapp','lastDataFolder',''), ...
+            folder = uigetdir(reportsBrowseStart(app), ...
                 'Select Folder with Pipeline Reports');
             if isequal(folder, 0); return; end
+            setpref('nestapp', 'lastReportsFolder', folder);
 
-            matFiles = findReportMatFiles(app, folder);
+            matFiles = findReportMatFiles(folder);
             if isempty(matFiles)
                 uialert(app.UIFigure, ...
                     ['No report .mat files (*_report.mat) found in that ' ...
@@ -1142,7 +1143,10 @@ classdef nestapp < matlab.apps.AppBase
                 try
                     S = load(fpath, 'pipelineReport');
                     if ~isfield(S, 'pipelineReport'); continue; end
-                    [txt, ~] = exportReport(S.pipelineReport, tempdir());
+                    % buildReportText, not exportReport: the latter is that
+                    % plus a save() of the whole struct, so loading N reports
+                    % wrote N throwaway .mat files to tempdir.
+                    txt = buildReportText(S.pipelineReport);
                     entry.text   = txt;
                     entry.report = S.pipelineReport;
                     app.loadedReports{end+1} = entry;
@@ -1191,16 +1195,24 @@ classdef nestapp < matlab.apps.AppBase
             app.ReportsStatusLabel.Text = 'Report list cleared.';
         end
 
-        function matFiles = findReportMatFiles(~, folder)
-        % FINDREPORTMATFILES  Pipeline report .mat files under a folder.
-        %   Matches BOTH names reportArtifactName emits: "<base>_report.mat"
-        %   (overwriteReports on) and "<base>_report_<timestamp>.mat" (off) -
-        %   the old '*_report_*.mat' glob silently missed the first form. The
-        %   search recurses, so pointing at a batch folder, its reports/
-        %   subfolder, or a parent all find the reports.
-            matFiles = dir(fullfile(folder, '**', '*_report*.mat'));
-            if ~isempty(matFiles)
-                matFiles = matFiles(~[matFiles.isdir]);
+        function startFolder = reportsBrowseStart(~)
+        % Where the folder picker should open. Reports live under the output
+        % tree, so prefer the folder reports were last loaded from, then the
+        % output root - NOT lastDataFolder, which points at raw input data and
+        % is typically a network share. Handing uigetdir a remote or stale
+        % path makes the dialog stall while the shell enumerates it, so every
+        % candidate is checked with isfolder first.
+            candidates = { ...
+                getpref('nestapp', 'lastReportsFolder', ''), ...
+                getpref('nestapp', 'outputRoot',        ''), ...
+                getpref('nestapp', 'lastDataFolder',    '')};
+            startFolder = '';
+            for k = 1:numel(candidates)
+                c = candidates{k};
+                if ~isempty(c) && isfolder(c)
+                    startFolder = c;
+                    return
+                end
             end
         end
 

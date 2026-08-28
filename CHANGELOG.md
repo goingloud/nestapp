@@ -9,6 +9,20 @@ The version here must match `src/nestappVersion.m` and the release git tag.
 ## [Unreleased]
 
 ### Fixed
+- **Load from Folder was slow.** Three causes. The folder picker opened on
+  `lastDataFolder`, which points at raw input data and is typically a network
+  share, so the shell had to enumerate a remote path before the dialog could
+  paint; it now opens on the folder reports were last loaded from, falling
+  back to the output root, and every candidate is checked with `isfolder`
+  first so a stale path cannot stall it. Report discovery walked the entire
+  tree - a batch root also holds `data/` and `qc/`, so it stat'd hundreds of
+  large files to find the few that are reports; it now tries the folder and
+  its `reports/` subfolder first and only recurses if neither hits, which
+  still lets a parent of several runs work. And each loaded report was passed
+  through `exportReport`, which is the text builder *plus* a `save()` of the
+  whole struct, so loading N reports wrote N throwaway `.mat` files to
+  tempdir; it now calls `buildReportText` directly (4x faster on 34 reports,
+  before counting the network).
 - **The application window walked up the screen.** `UIFigureSizeChanged`
   enforced its minimum size by assigning `UIFigure.Position(3:4)`, which
   anchors `[left bottom]` - so restoring a height from a raised bottom edge
