@@ -41,7 +41,8 @@ raw = {
    {'Interpolate Channels',        {{'Interpolate Channels','EEGLAB'}}}
  }
  'TMS Artifact', {
-   {'Find TMS Pulses',             {{'Find TMS Pulses (TESA)','TESA'}}}
+   {'Find TMS Pulses',             {{'Find TMS Pulses (TESA)','TESA'}, ...
+                                    {'Find TMS Pulses (AARATEP)','AARATEP'}}}
    {'Remove TMS Artifacts',        {{'Remove TMS Artifacts (TESA)','TESA'}}}
    {'Fix TMS Pulse',               {{'Fix TMS Pulse (TESA)','TESA'}}}
    {'Interpolate Missing Data',    {{'Interpolate Missing Data (TESA)','TESA'}, ...

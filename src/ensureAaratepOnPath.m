@@ -1,7 +1,8 @@
 function ensureAaratepOnPath()
 % ENSUREAARATEPONPATH  Idempotent addpath for the vendored AARATEP tree.
 %   Adds third_party/aaratep and its Common subtree to the MATLAB path on
-%   first call. Subsequent calls are cheap no-ops.
+%   first call. Subsequent calls are cheap no-ops, but re-add the tree if
+%   something has removed it from the path since.
 %
 %   Two bundled-fork subtrees are kept OFF the path so they cannot shadow
 %   the user's own installs:
@@ -17,8 +18,12 @@ function ensureAaratepOnPath()
 %   Vendored from chriscline/AARATEPPipeline @ be75262 under MIT license.
 %   See THIRD_PARTY_NOTICES.md.
 
+% The flag alone is not enough: anything that rmpaths part of the tree - a
+% test using hideFromPath, a restoredefaultpath - would leave it true with the
+% functions gone, and every later AARATEP step in the session would then fail
+% with a bare "Undefined function". Verify a sentinel is still resolvable.
 persistent ready
-if ~isempty(ready) && ready
+if ~isempty(ready) && ready && exist('c_TMSEEG_Preprocess_AARATEPPipeline', 'file') == 2
     return
 end
 

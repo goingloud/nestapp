@@ -165,14 +165,17 @@ saveMat(reg, steps, ovs, 'Minimal ERP', fullfile(outDir, '3_minimal.mat'));
 % upstream and have no sensible default.
 steps = { ...
     'Load Data', 'Load Channel Location', ...
-    'Find TMS Pulses (TESA)', ...
+    'Find TMS Pulses (AARATEP)', ...
     'AARATEP Pipeline (whole)', ...
     'Save New Set'};
 ovs = emptyOvs(steps);
 
-% Pulse detection is nestapp's job here - the orchestrator matches events by
-% type, it does not detect them. Upstream labels them 'TMS'.
-ovs = setOv(ovs, steps, 'Find TMS Pulses (TESA)', 'tmslabel', 'TMS');
+% Detection is a separate step: the orchestrator matches events by type and
+% asserts they exist, it does not detect. Upstream ships its own detector for
+% exactly this, so the template uses it and keeps the whole pipeline within
+% one toolbox. Its event label is set to nestapp's 'TMS' rather than the
+% 'Pulse' upstream would write, so the orchestrator's pulseEvents matches.
+ovs = setOv(ovs, steps, 'Find TMS Pulses (AARATEP)', 'addEventsOfType', 'TMS');
 ovs = setOv(ovs, steps, 'AARATEP Pipeline (whole)', 'pulseEvents', {'TMS'});
 % Upstream's own epochTimespan default for this pipeline (line 211 of the
 % previous hand-traced template): [-1, 1.5] s.

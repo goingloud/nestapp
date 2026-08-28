@@ -9,6 +9,11 @@ The version here must match `src/nestappVersion.m` and the release git tag.
 ## [Unreleased]
 
 ### Fixed
+- `ensureAaratepOnPath` trusted a persistent flag, so anything that removed
+  the tree from the path after the first call - a test using `hideFromPath`,
+  a `restoredefaultpath` - left it believing the tree was still there, and
+  every later AARATEP step in that session failed with a bare "Undefined
+  function". It now verifies a sentinel resolves and re-adds if not.
 - **An AARATEP run reported almost nothing.** The orchestrator returns only
   the cleaned EEG; its provenance, QC images and intermediates were files in
   its own folder that nestapp never looked at. So the report showed 0 ICA
@@ -87,6 +92,14 @@ The version here must match `src/nestappVersion.m` and the release git tag.
   reopenable plot figure.
 
 ### Added
+- Step: **Find TMS Pulses (AARATEP)**, wrapping upstream's own
+  `c_TMSEEG_findTMSPulses`. It detects from the artifact across channels
+  (requiring more than a quarter to cross threshold together) rather than from
+  a single reference electrode, so no coil-adjacent channel has to be chosen.
+  It sits beside the TESA detector in the picker, and the AARATEP template now
+  uses it - keeping detection and cleaning within one toolbox. Its event label
+  defaults to `TMS`, not upstream's `Pulse`, so the orchestrator's
+  `pulseEvents` matches.
 - Setting: **Keep AARATEP intermediate datasets**, on by default. AARATEP
   saves the dataset before SOUND, before decay removal and before ICA
   rejection as well as the result - four full datasets per file, roughly

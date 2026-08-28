@@ -245,6 +245,37 @@ for si = 1:nSteps
                 EEG = eeg_checkset(EEG);
                 [ALLEEG, EEG, CURRENTSET] = pop_newset(ALLEEG, EEG, CURRENTSET,vars{:});
 
+            case 'Find TMS Pulses (AARATEP)'
+                ensureAaratepOnPath();
+                fp = varinToStruct(varin);
+                % Upstream asserts on this itself, but from here the message
+                % names the step and the fix.
+                if size(EEG.data, 3) > 1
+                    error('nestapp:aaratepFindPulsesNeedsContinuous', ...
+                        ['Find TMS Pulses (AARATEP) detects pulses in continuous ' ...
+                         'data. Run it before Epoching.']);
+                end
+                % Upstream builds its new events with
+                % c_struct_createEmptyCopy(EEG.event), which asserts isstruct.
+                % EEGLAB leaves EEG.event as [] when a recording carries no
+                % events - which is precisely the case this detector exists
+                % for - so seed the struct it expects. Cannot be fixed in the
+                % vendored copy, so it is prepared here.
+                if ~isstruct(EEG.event)
+                    EEG.event = struct('type', {}, 'latency', {}, ...
+                                       'duration', {}, 'urevent', {});
+                end
+                % minNumPulses is left at its default of 0 on purpose - see the
+                % registry entry; any other value can reach a `keyboard`.
+                EEG = c_TMSEEG_findTMSPulses(EEG, ...
+                    'addEventsOfType',    fp.addEventsOfType, ...
+                    'filterMethod',       fp.filterMethod, ...
+                    'maxPulseRate',       fp.maxPulseRate, ...
+                    'minPulseThreshold',  fp.minPulseThreshold, ...
+                    'maxPulseThreshold',  fp.maxPulseThreshold, ...
+                    'doRefineOnsetTimes', strcmpi(fp.doRefineOnsetTimes, 'on'));
+                EEG = eeg_checkset(EEG, 'eventconsistency');
+
             case 'AARATEP Pipeline (whole)'
                 ensureAaratepOnPath();
                 o = varinToStruct(varin);

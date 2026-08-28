@@ -161,13 +161,22 @@ function test_aaratepFindsPulsesBeforeHandingOver(testCase)
 % mismatch here would fail deep inside upstream on the first file.
 templates = loadTemplates(testCase);
 t = templates(contains({templates.name}, 'AARATEP'));
-findIdx = find(strcmp(t.steps, 'Find TMS Pulses (TESA)'), 1);
+% Either detector satisfies this - what matters is that one runs first and
+% writes the label the orchestrator looks for, not which toolbox supplies it.
+findIdx = find(startsWith(t.steps, 'Find TMS Pulses'), 1);
 orchIdx = find(strcmp(t.steps, 'AARATEP Pipeline (whole)'), 1);
 testCase.assertNotEmpty(findIdx, 'AARATEP must find pulses before handing over');
 testCase.assertNotEmpty(orchIdx);
 testCase.verifyLessThan(findIdx, orchIdx);
 
-label = t.spec(findIdx).params.tmslabel;
+% The two detectors name the parameter differently: TESA writes tmslabel,
+% AARATEP writes addEventsOfType.
+detector = t.spec(findIdx).params;
+if isfield(detector, 'tmslabel')
+    label = detector.tmslabel;
+else
+    label = detector.addEventsOfType;
+end
 events = cellstr(t.spec(orchIdx).params.pulseEvents);
 testCase.verifyTrue(ismember(label, events), sprintf( ...
     ['The event label written by Find TMS Pulses (%s) must be one the ' ...
