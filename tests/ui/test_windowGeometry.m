@@ -20,7 +20,7 @@ function tests = test_windowGeometry
 %
 %   Builds the real app, so it needs a display.
 %
-%   Run: runtests('tests/regression/test_windowGeometry')
+%   Run: runtests('tests/ui/test_windowGeometry')
 tests = functiontests(localfunctions);
 end
 

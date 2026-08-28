@@ -15,7 +15,7 @@ function tests = test_stepsHoverTip
 %   is left to manual checking; what is pinned here is everything that can
 %   break silently - the delay, the wiring, and the timer's lifetime.
 %
-%   Run: runtests('tests/regression/test_stepsHoverTip')
+%   Run: runtests('tests/ui/test_stepsHoverTip')
 tests = functiontests(localfunctions);
 end
 

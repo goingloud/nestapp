@@ -11,11 +11,14 @@ function tests = test_startupStepAvailability
 %   which even loadPrefs' addpath of the EEGLAB root does not accomplish. 32
 %   of 54 listed steps were withheld as "unavailable" on a stock install.
 %
-%   The order check below is the assertion that would have failed then. It is
+%   The order check here is the assertion that would have failed then. It is
 %   a source check because the fault is a sequence inside one method: by the
 %   time a launched app can be inspected, EEGLAB is up and the tree is right,
 %   and a suite running in a session that already has EEGLAB loaded cannot
-%   reproduce the cold start at all. The live checks pin the end state.
+%   reproduce the cold start at all.
+%
+%   The matching end-state check lives in tests/ui, because it launches the
+%   app and a launched app steals the mouse - see run_tests.
 %
 %   Run: runtests('tests/regression/test_startupStepAvailability')
 tests = functiontests(localfunctions);
@@ -31,12 +34,6 @@ end
 
 function r = repoRoot()
 r = fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))));
-end
-
-function requireDesktop(testCase)
-if ~usejava('desktop')
-    testCase.assumeFail('No display - skipping GUI test');
-end
 end
 
 % ── the ordering that broke ───────────────────────────────────────────────
@@ -72,51 +69,5 @@ if isempty(j)
     body = rest;
 else
     body = rest(1:j(1));
-end
-end
-
-% ── the end state ─────────────────────────────────────────────────────────
-
-function test_launchedAppOffersItsInstalledPluginSteps(testCase)
-requireDesktop(testCase);
-app = nestapp;
-testCase.addTeardown(@() delete(app));
-drawnow;
-
-global PLUGINLIST %#ok<GVMIS>
-testCase.verifyNotEmpty(PLUGINLIST, ...
-    'Launching the app must leave EEGLAB initialised');
-
-offered = app.info.keys;
-plugged = pluginBackedSteps();
-testCase.assumeNotEmpty(plugged, 'No EEGLAB plugin steps installed here');
-testCase.verifyEmpty(setdiff(plugged, offered), ...
-    'Every installed plugin-backed step must appear in the picker');
-end
-
-function names = pluginBackedSteps()
-% Registry steps whose requirements resolve into an EEGLAB plugins folder -
-% i.e. exactly the ones a missed eeglab() init would have hidden.
-marker = [filesep 'plugins' filesep];
-reg    = stepRegistry();
-names  = {};
-for i = 1:numel(reg)
-    if isfield(reg(i), 'listed') && ~isempty(reg(i).listed) && ~reg(i).listed
-        continue
-    end
-    if ~stepAvailability(reg(i)); continue; end
-    reqs = reg(i).requires;
-    for j = 1:numel(reqs)
-        % Format-specific loaders are not probed at list time, so a step
-        % gated on one is not necessarily offered - skip those requirements.
-        if isfield(reqs(j), 'fileExt') && ~isempty(reqs(j).fileExt)
-            continue
-        end
-        w = which(reqs(j).fn);
-        if ~isempty(w) && contains(w, marker)
-            names{end+1} = reg(i).name; %#ok<AGROW>
-            break
-        end
-    end
 end
 end

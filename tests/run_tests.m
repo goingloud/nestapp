@@ -1,12 +1,20 @@
 %% run_tests  Run the full nestapp test suite (or a subset).
 %
 %   USAGE
-%     run_tests            % unit + regression (no EEGLAB required)
-%     run_tests('all')     % everything, incl. characterization (EEGLAB required)
+%     run_tests            % unit + regression (no EEGLAB, no GUI)
+%     run_tests('all')     % everything, incl. ui and characterization
 %     run_tests('characterization') % golden-value step tests (EEGLAB required)
 %     run_tests('unit')    % unit tests only
 %     run_tests('regression') % regression tests only
 %     run_tests('integration') % integration tests only (EEGLAB required)
+%     run_tests('ui')      % tests that LAUNCH THE APP - see below
+%
+%   The 'ui' suite is deliberately excluded from the default. Its tests
+%   construct the real app, and a live uifigure takes the mouse for the
+%   ~20 s it runs, which makes the machine unusable and is intolerable when
+%   the default suite is run dozens of times a day. Run it when changing the
+%   UI. Everything else, including the layout and startup-order regressions
+%   that can be checked from source, stays in the default suite.
 %
 %   OUTPUT
 %     results  (optional) matlab.unittest.TestResult array. When called with
@@ -36,6 +44,8 @@ addpath(fullfile(testRoot, 'helpers'));
 switch lower(suite)
     case 'fast'
         suites = {fullfile(testRoot, 'unit'), fullfile(testRoot, 'regression')};
+    case 'ui'
+        suites = {fullfile(testRoot, 'ui')};
     case 'unit'
         suites = {fullfile(testRoot, 'unit')};
     case 'regression'
@@ -48,10 +58,11 @@ switch lower(suite)
         suites = {fullfile(testRoot, 'unit'), ...
                   fullfile(testRoot, 'regression'), ...
                   fullfile(testRoot, 'integration'), ...
+                  fullfile(testRoot, 'ui'), ...
                   fullfile(testRoot, 'characterization')};
     otherwise
         error(['run_tests: unknown suite "%s". Valid: fast, unit, regression, ' ...
-            'integration, characterization, all'], suite);
+            'integration, ui, characterization, all'], suite);
 end
 
 % Per-test progress: log every test's start/end to the console and a file, so

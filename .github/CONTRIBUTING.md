@@ -27,7 +27,8 @@ first — it maps what each module does and where to make common changes.
 5. **Run the tests** (from the repo root):
    ```matlab
    cd tests
-   run_tests              % fast: unit + regression, no EEGLAB needed
+   run_tests              % fast: unit + regression, no EEGLAB, no GUI
+   run_tests('ui')        % launches the app - takes the mouse for ~20 s
    run_tests('all')       % adds integration tests (EEGLAB + TESA required)
    ```
    `run_tests` prints a summary and errors on any failure. Integration tests

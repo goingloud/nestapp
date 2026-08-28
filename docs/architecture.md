@@ -81,7 +81,8 @@ button and headless callers like `batchWindowExtract` and the test suite.
 
 ## Tests
 
-`tests/run_tests.m` is the harness: `run_tests` (fast: unit + regression),
+`tests/run_tests.m` is the harness: `run_tests` (fast: unit + regression -
+no GUI), `run_tests('ui')` (launches the app; takes the mouse, so opt-in),
 `run_tests('all')` (adds integration, needs EEGLAB/TESA). Unit tests avoid
 EEGLAB; integration tests `assumeFail` (skip) when it's absent. See
 `tests/unit/test_newStepDispatch.m` for the conventions.
