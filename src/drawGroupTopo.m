@@ -60,8 +60,11 @@ else
     clim = [-m m];
 end
 
+% Only the last map keeps a bar: they all share one scale, so N bars repeat one
+% fact N times and take the width out of the heads.
 for g = 1:nG
-    drawScalpTopo(axList(g), vals{g}, res.chanlocs, struct('clim', clim));
+    drawScalpTopo(axList(g), vals{g}, res.chanlocs, ...
+                  struct('clim', clim, 'colorbar', g == nG));
     if isfield(opts, 'titles') && numel(opts.titles) >= g
         title(axList(g), opts.titles{g});
     else

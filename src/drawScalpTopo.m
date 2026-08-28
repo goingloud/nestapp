@@ -14,8 +14,12 @@ function cLim = drawScalpTopo(ax, values, chanlocs, opts)
 %   values   - one scalar per channel (the time-window-averaged voltage, uV).
 %   chanlocs - matching EEGLAB chanlocs struct array.
 %   opts     - optional struct:
-%                .clim  force these colour limits instead of deriving them
-%                       from this map alone.
+%                .clim      force these colour limits instead of deriving them
+%                           from this map alone.
+%                .colorbar  false to omit the colour bar. A grid of maps on one
+%                           shared scale needs ONE bar, not one per map: twelve
+%                           identical bars cost about 40% of the width and
+%                           shrink every head to pay for it.
 %
 %   Returns the symmetric colour limits actually applied, in uV.
 %
@@ -67,8 +71,17 @@ end
 
 ax.CLim = cLim;
 colormap(ax, divergingColormap());
-cb = colorbar(ax);
-cb.Label.String = CB_LABEL;
+if nargin < 4 || ~isstruct(opts) || ~isfield(opts, 'colorbar') || opts.colorbar
+    cb = colorbar(ax);
+    cb.Label.String = CB_LABEL;
+end
+% The hover toolbar is noise on a scalp map - there is nothing to zoom or pan -
+% and it is captured by exportapp, so it would end up in a saved figure.
+try
+    ax.Toolbar.Visible = 'off';
+    disableDefaultInteractivity(ax);
+catch
+end
 end
 
 % ── local helpers ─────────────────────────────────────────────────────────────

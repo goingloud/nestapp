@@ -102,6 +102,20 @@ p.info     = ['The scalp distribution averaged over a time window, one map ' ...
               'can be compared by eye.'];
 plots(end+1) = p;
 
+p = blankPlot();
+p.name     = 'TEP-topo';
+p.category = 'Topography';
+p.mode     = 'TEP';
+p.draw     = 'drawTEPTopo';
+p.requires.chanlocs = true;
+p.requires.windows  = true;
+p.info     = ['The waveforms with a grid of scalp maps above them: one column ' ...
+              'per window of interest, one row per group, on one shared ' ...
+              'microvolt scale. Each map averages over its window rather than ' ...
+              'sampling a latency, so a map and the measure beside it describe ' ...
+              'the same interval - move a window and both follow.'];
+plots(end+1) = p;
+
 cached = plots;
 end
 

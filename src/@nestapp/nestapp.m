@@ -2548,6 +2548,11 @@ classdef nestapp < matlab.apps.AppBase
             res = app.exploreRes;
             pos = parent.Position;
             switch entry.draw
+                case 'drawTEPTopo'
+                    % Owns its own layout - it decides how many axes it needs
+                    % from the group and window counts - so it takes the panel.
+                    drawTEPTopo(parent, res, struct( ...
+                        'windows', app.exploreWindows, 'mode', entry.mode));
                 case 'drawGroupTopo'
                     n = numel(res.groups);
                     axList = gobjects(1, n);
