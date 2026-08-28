@@ -2916,12 +2916,14 @@ classdef nestapp < matlab.apps.AppBase
             if ~isempty(entry); plotName = entry.name; end
             out = exploreResults(app.exploreRes, app.exploreEntries, struct( ...
                 'roi', {app.exploreRoi}, 'windows', app.exploreWindows, ...
-                'mode', currentMode(app), 'plot', plotName));
+                'mode', currentMode(app), 'plot', plotName, ...
+                'plotParams', app.explorePlotParams));
 
             choice = uiconfirm(app.UIFigure, ...
                 ['The full result - curves at sampling rate, intervals and ' ...
-                 'provenance. Save it as a .mat, or put it in the base ' ...
-                 'workspace to carry on in MATLAB?'], 'Results', ...
+                 'provenance - and everything needed to reopen this analysis ' ...
+                 'later with File > Load Analysis. Save it as a .mat, or put ' ...
+                 'it in the base workspace to carry on in MATLAB?'], 'Results', ...
                 'Options', {'Save as .mat', 'To workspace', 'Cancel'}, ...
                 'DefaultOption', 1, 'CancelOption', 3);
             switch choice
@@ -2935,6 +2937,95 @@ classdef nestapp < matlab.apps.AppBase
                     assignin('base', 'tepResults', out);
                     app.ExploreStatusLabel.Text = ...
                         'Results assigned to "tepResults" in the base workspace.';
+            end
+        end
+
+        function LoadAnalysisMenuSelected(app, ~)
+        % Reopen a saved analysis. The Results .mat is the session format - it
+        % already carried the files, ROI, windows, design and plot - so this is
+        % the read side of an export that existed, not a new artifact.
+            startFolder = getpref('nestapp', 'lastDataFolder', '');
+            [f, p] = uigetfile({'*.mat', 'nestapp analysis (.mat)'}, ...
+                               'Load analysis', startFolder);
+            if isequal(f, 0); return; end
+            applyExploreState(app, fullfile(p, f));
+        end
+
+        function applyExploreState(app, file)
+        % Restore the tab from a saved analysis, then recompute from the files.
+        %
+        % Recomputed, not restored from the stored curves: a saved result holds
+        % GROUP averages, which can redraw the figure and nothing else. Change
+        % the ROI or move one recording between groups and those averages are
+        % wrong. Resuming work means the per-file trial averages, so the files
+        % are reloaded and everything downstream follows as if the groups had
+        % just been assigned by hand.
+            try
+                loaded = load(file);
+            catch ME
+                uialert(app.UIFigure, ME.message, 'Could not read that file');
+                return
+            end
+            [state, report] = exploreStateFromResults(loaded);
+            if ~report.ok
+                uialert(app.UIFigure, strjoin(report.notes, ' '), 'Not an analysis');
+                return
+            end
+
+            paths = {state.entries.path};
+            if isempty(paths)
+                uialert(app.UIFigure, strjoin(report.notes, ' '), 'Nothing to load');
+                return
+            end
+
+            d = uiprogressdlg(app.UIFigure, 'Title', 'Loading analysis', ...
+                'Message', sprintf('Reading %d recording%s...', ...
+                                   numel(paths), plural(numel(paths))), ...
+                'Indeterminate', 'on');
+            closeDlg = onCleanup(@() delete(d));
+            try
+                cache = loadReducedSets(paths);
+            catch ME
+                uialert(app.UIFigure, ME.message, 'Could not load the recordings');
+                return
+            end
+
+            app.exploreEntries     = state.entries;
+            app.exploreCache       = cache;
+            app.exploreRoi         = state.roi;
+            app.exploreWindows     = state.windows;
+            app.explorePlotParams  = state.plotParams;
+
+            % Set the design before recomputing. refreshExploreDesign still has
+            % the last word - a restored 'paired' that the files no longer
+            % support flips back to unpaired rather than being taken on trust.
+            if strcmp(state.design, 'paired')
+                app.ExploreDesignGroup.SelectedObject = app.ExplorePairedButton;
+            else
+                app.ExploreDesignGroup.SelectedObject = app.ExploreUnpairedButton;
+            end
+
+            refreshExploreRoi(app);
+            refreshExploreWindows(app);
+            refreshExplorePlots(app);
+            if ~isempty(state.plot) && ismember(state.plot, app.ExplorePlotDropDown.ItemsData)
+                app.ExplorePlotDropDown.Value = state.plot;
+            end
+            recomputeExplore(app);
+
+            app.TabGroup.SelectedTab = app.ExploreTab;
+            [~, nm, ext] = fileparts(file);
+            nGroups = numel(exploreGroupNames(app));
+            msg = sprintf('Loaded %s - %d recording%s in %d group%s', [nm ext], ...
+                numel(app.exploreEntries), plural(numel(app.exploreEntries)), ...
+                nGroups, plural(nGroups));
+            if ~isempty(report.notes)
+                msg = [msg '  |  ' strjoin(report.notes, '  ')];
+            end
+            app.ExploreStatusLabel.Text = msg;
+            if ~isempty(report.missing)
+                uialert(app.UIFigure, strjoin(report.notes, newline), ...
+                        'Analysis loaded', 'Icon', 'warning');
             end
         end
 
@@ -4031,6 +4122,18 @@ classdef nestapp < matlab.apps.AppBase
         %   Delegates to the private implementation. Exposed as public so
         %   runPipelineCore.m can call it after each processing run.
             updateReportsTabImpl(app);
+        end
+
+        function loadAnalysis(app, file)
+        % LOADANALYSIS  Public entry point - reopen a saved analysis .mat.
+        %   loadAnalysis(app, file) is File > Load Analysis without the file
+        %   picker. Delegates to the private implementation, the same pattern
+        %   updateReportsTab follows.
+        %
+        %   Public because reopening an analysis is a scriptable operation, not
+        %   only a menu click: a batch that regenerates every figure for a
+        %   manuscript wants to load each saved .mat in turn without a dialog.
+            applyExploreState(app, file);
         end
 
     end

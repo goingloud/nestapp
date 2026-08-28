@@ -37,15 +37,22 @@ function out = exploreResults(res, entries, opts)
 %   opts:
 %     .roi      ROI electrode labels used
 %     .windows  windows of interest used
-%     .mode     'TEP' | 'GMFP' | 'LMFP'
-%     .plot     name of the plot the figure showed, if any
+%     .mode       'TEP' | 'GMFP' | 'LMFP'
+%     .plot       name of the plot the figure showed, if any
+%     .plotParams per-plot settings, name/params struct array
+%
+%   THIS FILE IS THE SESSION FORMAT. It carries the files table, the ROI, the
+%   windows, the design, the plot and its settings, which is everything the tab
+%   needs to come back - so File > Load Analysis reads it and there is no
+%   separate session artifact holding a second copy of the same state.
 %
 %   See also: groupCurves, exploreMeasures, exploreDataset, nestappVersion
 
 if nargin < 2; entries = struct('path', {}, 'subject', {}, 'group', {}); end
 if nargin < 3; opts = struct(); end
 opts = fillDefaults(opts, struct('roi', {{}}, 'windows', [], ...
-                                 'mode', 'TEP', 'plot', ''));
+                                 'mode', 'TEP', 'plot', '', ...
+                                 'plotParams', struct('name', {}, 'params', {})));
 if isempty(opts.windows); opts.windows = defaultTEPComponentDefs(); end
 
 out          = struct();
@@ -57,6 +64,10 @@ out.design   = res.design;
 out.roi      = opts.roi;
 out.windows  = opts.windows;
 out.mode     = opts.mode;
+% The per-plot settings, so reopening this file restores the picture and not
+% just the data behind it. Everything else the Explore tab holds was already
+% here; without these the file is one field short of being a session.
+out.plotParams = opts.plotParams;
 
 out.channels = struct('labels', {res.channelLabels}, 'chanlocs', res.chanlocs);
 
@@ -65,10 +76,16 @@ resForMeasures.mode = opts.mode;
 out.measures        = exploreMeasures(resForMeasures, opts.windows);
 
 if isempty(entries)
-    out.files = struct('path', {}, 'subject', {}, 'group', {});
+    out.files = struct('path', {}, 'subject', {}, 'group', {}, ...
+                       'subjectConfident', {});
 else
+    % subjectConfident travels too. It marks an id that was GUESSED from a
+    % filename rather than confirmed, which is what makes the files table
+    % highlight it for review - drop it and reopening an analysis quietly
+    % presents guesses as decisions.
     out.files = struct('path', {entries.path}, 'subject', {entries.subject}, ...
-                       'group', {entries.group});
+                       'group', {entries.group}, ...
+                       'subjectConfident', {entries.subjectConfident});
 end
 
 montage = struct();
