@@ -1261,10 +1261,10 @@ function createComponents(app)
             app.ExportReportsCSVButton = uibutton(app.ReportsTab, 'push');
             app.ExportReportsCSVButton.ButtonPushedFcn = createCallbackFcn(app, @ExportReportsCSVButtonPushed, true);
             app.ExportReportsCSVButton.Position = [455 470 145 24];
-            app.ExportReportsCSVButton.Text = 'Export Metrics Table';
-            app.ExportReportsCSVButton.Tooltip = ['One row per file (channels and trials retained, ' ...
-                'ICA components removed, quality verdict) for every report listed here, including ' ...
-                'ones loaded from disk - so it can span several batch runs'];
+            app.ExportReportsCSVButton.Text = 'Export Metrics CSV';
+            app.ExportReportsCSVButton.Tooltip = ['Write a CSV file: one row per file (channels and ' ...
+                'trials retained, ICA components removed, quality verdict) for every report listed ' ...
+                'here, including ones loaded from disk - so it can span several batch runs'];
             app.ExportReportsCSVButton.Enable = 'off';
 
             app.ExportPDFButton = uibutton(app.ReportsTab, 'push');

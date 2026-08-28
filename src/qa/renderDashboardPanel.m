@@ -7,6 +7,9 @@ function renderDashboardPanel(parent, reports, opts)
 %   RENDERDASHBOARDPANEL(parent, reports)
 %   RENDERDASHBOARDPANEL(parent, reports, opts)
 %
+%   Lays out a header, a full-width table of the files that failed or came
+%   back Marginal, and the per-metric distributions.
+%
 %   parent  : uipanel or uifigure that the dashboard renders into.
 %             Any existing children are deleted first so the same
 %             function can refresh the live view in place and also
@@ -42,7 +45,6 @@ verdicts = aggregateGateVerdicts(reports);
 metrics  = aggregateMetricDistributions(reports);
 
 drawHeader(parent, opts.title, verdicts, opts.failed);
-drawHeatmap(parent, verdicts);
 drawFailedTable(parent, reports, opts.failed, opts.onFailedRowClick);
 drawHistograms(parent, metrics);
 drawButtons(parent, opts.onRefresh, opts.onExport);
@@ -70,55 +72,18 @@ uilabel(parent, 'Text', sub, ...
     'FontColor', [0.4 0.4 0.4]);
 end
 
-% -- verdict heatmap -------------------------------------------------------
-
-function drawHeatmap(parent, v)
-W = parentWidth(parent);
-H = parentTop(parent);
-% Layout: left half, vertical band starting below header.
-pos = [10, round(H * 0.42), round(W * 0.48), round(H * 0.42)];
-ax = uiaxes(parent, 'Position', pos);
-% Filenames and gate labels contain underscores; default 'tex' interpreter
-% would render them as subscripts (e.g. rtmsct_214_1_SPL).
-ax.TickLabelInterpreter = 'none';
-title(ax, 'Verdict heatmap (files x gates)', 'Interpreter', 'none');
-
-if isempty(v.verdicts)
-    text(ax, 0.5, 0.5, 'No verdicts to plot', ...
-        'HorizontalAlignment', 'center', 'Units', 'normalized');
-    axis(ax, 'off');
-    return
-end
-
-imagesc(ax, v.verdicts);
-colormap(ax, verdictColormap());
-caxis(ax, [0 3]);
-
-ax.YTick = 1:numel(v.files);
-ax.YTickLabel = v.files;
-ax.XTick = 1:numel(v.gates);
-ax.XTickLabel = v.gates;
-ax.XTickLabelRotation = 30;
-ax.YDir = 'reverse';
-xlabel(ax, 'Gate');
-ylabel(ax, 'File');
-end
-
-function cmap = verdictColormap()
-% Index by code: 0 NotChecked, 1 Pass, 2 Marginal, 3 Fail.
-cmap = [ ...
-    0.85 0.85 0.85;   % 0 gray
-    0.20 0.70 0.30;   % 1 green
-    0.95 0.80 0.20;   % 2 yellow
-    0.85 0.20 0.20];  % 3 red
-end
-
 % -- failed-files table ----------------------------------------------------
 
 function drawFailedTable(parent, reports, failed, onRowClick)
+% Full width, and up to just under the header: this used to share the band
+% with a files x gates verdict heatmap, which was unreadable past ~10 files
+% and said nothing the table does not, one row per flagged file with the
+% actual reasons. Taking the whole band back buys visible rows.
+HEADER_H = 70;   % title + subtitle, per drawHeader
 W = parentWidth(parent);
 H = parentTop(parent);
-pos = [round(W * 0.50), round(H * 0.42), round(W * 0.48), round(H * 0.42)];
+yBot = round(H * 0.42);
+pos  = [10, yBot, W - 20, max(60, round(H - HEADER_H) - yBot)];
 
 % Two sources, one table: files that completed but tripped a gate
 % (collectFailures, derived from reports) and files that never produced a
@@ -133,7 +98,7 @@ uilabel(parent, 'Text', 'Failed / Marginal files', ...
 
 t = uitable(parent, 'Position', pos, ...
     'ColumnName', {'File', 'Gate', 'Verdict', 'Reasons'}, ...
-    'ColumnWidth', {120, 90, 70, 'auto'}, ...
+    'ColumnWidth', {220, 160, 80, 'auto'}, ...
     'Data', rows);
 
 if ~isempty(onRowClick)

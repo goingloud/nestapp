@@ -89,7 +89,18 @@ The version here must match `src/nestappVersion.m` and the release git tag.
   to `<batch>/debug/`. **Help → Collect Support Bundle** produces the same
   on demand, and **Help → Check My Install** runs the fast test suite.
 
+### Removed
+- The Session Quality Dashboard's files x gates **verdict heatmap**. It was
+  unreadable past roughly ten files and carried nothing the Failed / Marginal
+  table does not already say, one row per flagged file with its actual
+  reasons. The table takes the freed space: full width (so the Reasons column
+  is readable rather than truncated) and up to the header, which buys visible
+  rows.
+
 ### Changed
+- **Export Metrics Table** is now **Export Metrics CSV**, and its tooltip
+  leads with "Write a CSV file". The previous name did not say what came out,
+  and the other exports on that tab produce PDFs or MATLAB objects.
 - The Reports tab's **Refresh** button is now **Clear List**: it empties the
   report list instead of re-reading the load folder. The list accumulates
   across every run in a session (each run appends a Session Summary plus one
