@@ -43,15 +43,16 @@ function L = captureBaseLayout(app)
         % Require a real [x y w h] rectangle: this skips menus (scalar Position
         % = menu order) and any non-positional graphics.
         %
-        % isnumeric first, because isgraphics still honours old-style NUMERIC
-        % handles: a plain double property whose value happens to match a live
-        % figure number passes isgraphics AND isprop(h,'Position'), and then
-        % h.Position throws "dot indexing is not supported for double". Startup
-        % therefore failed only when a figure of that number was open - which
-        % is to say, at random, and never on a clean session. No property here
-        % ever stores a raw handle, so a numeric one is never a component.
-        if isnumeric(h) || ~(isscalar(h) && isgraphics(h) && ...
-                             isprop(h, 'Position') && numel(h.Position) == 4)
+        % isa, not isgraphics: isgraphics still honours old-style NUMERIC
+        % handles, so a plain double property (SMOOTH_WIN_PTS = 5, say) whose
+        % value happens to match a live figure number passed isgraphics AND
+        % isprop(h,'Position'), and then h.Position threw "dot indexing is not
+        % supported for double". Startup therefore failed only when a figure of
+        % that number was open - at random, and never on a clean session.
+        % Asking for the graphics superclass rejects numbers by construction
+        % rather than by listing the types that are not components.
+        if ~(isa(h, 'matlab.graphics.Graphics') && isscalar(h) && ...
+             isprop(h, 'Position') && numel(h.Position) == 4)
             continue
         end
         % Tabs are sized by their TabGroup and their Position is READ-ONLY, so

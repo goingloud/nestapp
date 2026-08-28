@@ -87,11 +87,22 @@ function w = oneWindow()
 w = struct('name', 'N100', 'winStart', 90, 'winEnd', 120);
 end
 
+function w = twoWindows()
+w = [oneWindow(), struct('name', 'P180', 'winStart', 150, 'winEnd', 240)];
+end
+
+function [fig, axesFcn] = classicParent(testCase)
+% The publication route's parent: a classic figure and a classic-axes maker.
+fig = figure('Visible', 'off', 'Position', [100 100 900 600]);
+testCase.addTeardown(@() delete(fig));
+axesFcn = @(p, pos) axes('Parent', p, 'Units', 'pixels', 'Position', pos);
+end
+
 % -- tests ----------------------------------------------------------------
 
 function test_theGridIsGroupsByWindowsPlusBarAndCurve(testCase)
 fig  = uiParent(testCase);
-w    = [oneWindow(), struct('name', 'P180', 'winStart', 150, 'winEnd', 240)];
+w    = twoWindows();
 info = drawTEPTopo(fig, twoGroupRes(1), struct('windows', w));
 % 2 groups x 2 windows of maps, one shared colour bar, one curve panel.
 testCase.verifyEqual(numel(info.axes), 2 * 2 + 2);
@@ -99,7 +110,7 @@ end
 
 function test_oneColourBarForTheWholeGrid(testCase)
 fig = uiParent(testCase);
-w   = [oneWindow(), struct('name', 'P180', 'winStart', 150, 'winEnd', 240)];
+w   = twoWindows();
 drawTEPTopo(fig, twoGroupRes(1), struct('windows', w));
 testCase.verifyEqual(numel(findall(fig, 'Type', 'ColorBar')), 1, ...
     'a bar per map repeats one fact and takes the width out of the heads');
@@ -121,7 +132,7 @@ end
 
 function test_theScaleIsSharedAndSymmetric(testCase)
 fig  = uiParent(testCase);
-w    = [oneWindow(), struct('name', 'P180', 'winStart', 150, 'winEnd', 240)];
+w    = twoWindows();
 info = drawTEPTopo(fig, twoGroupRes(1), struct('windows', w));
 testCase.verifyEqual(info.clim(1), -info.clim(2), 'AbsTol', 1e-12);
 for k = 1:numel(info.axes) - 1      % the curve panel keeps its own limits
@@ -152,11 +163,9 @@ function test_aClassicFigureIsAValidParent(testCase)
 % exportgraphics, print and saveas all silently drop UI components. A drawer
 % that reaches for uiaxes or uilabel breaks that route without failing here,
 % so the check is that NOTHING it created is a UI component.
-fig = figure('Visible', 'off', 'Position', [100 100 900 600]);
-testCase.addTeardown(@() delete(fig));
-w    = [oneWindow(), struct('name', 'P180', 'winStart', 150, 'winEnd', 240)];
-info = drawTEPTopo(fig, twoGroupRes(1), struct('windows', w, ...
-    'axesFcn', @(p, pos) axes('Parent', p, 'Units', 'pixels', 'Position', pos)));
+[fig, axesFcn] = classicParent(testCase);
+info = drawTEPTopo(fig, twoGroupRes(1), ...
+                   struct('windows', twoWindows(), 'axesFcn', axesFcn));
 
 testCase.verifyEqual(numel(info.axes), 2 * 2 + 2);
 testCase.verifyEmpty(findall(fig, 'Type', 'uilabel'), ...
@@ -170,18 +179,17 @@ function test_theGridStaysInsideThePanel(testCase)
 % topoplot calls axis equal, which moves and resizes the axes it is handed. Left
 % alone the maps grow out of their cells and overlap the curve below - which
 % looks like a layout choice rather than a bug, and only in the exported file.
-fig = figure('Visible', 'off', 'Position', [100 100 900 600]);
-testCase.addTeardown(@() delete(fig));
-info = drawTEPTopo(fig, twoGroupRes(1), struct('windows', oneWindow(), ...
-    'axesFcn', @(p, pos) axes('Parent', p, 'Units', 'pixels', 'Position', pos)));
+[fig, axesFcn] = classicParent(testCase);
+info = drawTEPTopo(fig, twoGroupRes(1), ...
+                   struct('windows', oneWindow(), 'axesFcn', axesFcn));
 
 for k = 1:numel(info.axes)
     pos = info.axes(k).Position;
     testCase.verifyGreaterThanOrEqual(pos(1), 0);
     testCase.verifyGreaterThanOrEqual(pos(2), 0);
-    testCase.verifyLessThanOrEqual(pos(1) + pos(3), 900, ...
+    testCase.verifyLessThanOrEqual(pos(1) + pos(3), fig.Position(3), ...
         'an axes ran off the right of the panel');
-    testCase.verifyLessThanOrEqual(pos(2) + pos(4), 600, ...
+    testCase.verifyLessThanOrEqual(pos(2) + pos(4), fig.Position(4), ...
         'an axes ran off the top of the panel');
 end
 end

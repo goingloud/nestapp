@@ -17,8 +17,15 @@ function cmap = divergingColormap(n)
 %
 %   See also: drawScalpTopo, topoplot
 
+% Memoized on n. It is called once per scalp map, and a grid of twelve maps
+% rebuilt the same 256x3 matrix twelve times a repaint for nothing.
+persistent cachedN cachedMap
 if nargin < 1 || isempty(n)
     n = 256;
+end
+if ~isempty(cachedN) && isequal(cachedN, n)
+    cmap = cachedMap;
+    return
 end
 validateattributes(n, {'numeric'}, {'scalar', 'integer', '>=', 2}, mfilename, 'n');
 
@@ -35,4 +42,7 @@ NEUTRAL = [1 1 1];          % white at t =  0
 
 endColor = COLD .* (t < 0) + WARM .* (t >= 0);
 cmap     = NEUTRAL .* (1 - w) + endColor .* w;
+
+cachedN   = n;
+cachedMap = cmap;
 end

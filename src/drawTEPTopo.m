@@ -47,17 +47,17 @@ function info = drawTEPTopo(parent, res, opts)
 
 if nargin < 3; opts = struct(); end
 nG = numel(res.groups);
-% Whether .windows was SUPPLIED is asked before the defaults are merged in,
-% because "not supplied" and "supplied empty" mean opposite things: no windows
+% "Not supplied" and "supplied empty" mean opposite things here: no windows
 % named means fall back to the standard components, but a caller who emptied
 % its windows table has said there are none, and reviving the defaults there
-% would show six windows the user just deleted.
-supplied = isfield(opts, 'windows');
+% would show six windows the user just deleted. So .windows is settled BEFORE
+% fillDefaults and left out of its defaults struct, which cannot then overwrite
+% a deliberate empty.
+if ~isfield(opts, 'windows'); opts.windows = defaultTEPComponentDefs(); end
 opts = fillDefaults(opts, struct( ...
-    'windows', [], 'mode', 'TEP', 'xlim', [-50 300], ...
+    'mode', 'TEP', 'xlim', [-50 300], ...
     'colors', groupColors(max(nG, 1)), 'showBands', true, ...
     'axesFcn', @(p, pos) uiaxes(p, 'Position', pos)));
-if ~supplied; opts.windows = defaultTEPComponentDefs(); end
 
 info = struct('clim', [0 0], 'axes', gobjects(0));
 if nG == 0 || isempty(res.time); return; end
@@ -66,7 +66,7 @@ w  = opts.windows;
 nW = numel(w);
 if nW == 0
     % No windows means no maps; the curve alone is still worth drawing.
-    ax = opts.axesFcn(parent, curveRect(parent, 0));
+    ax = opts.axesFcn(parent, curveRect(parent, 0));   % scale derived inside
     drawTEPOverlay(ax, res, opts);
     info.axes = ax;
     return
@@ -75,10 +75,12 @@ end
 % ── window means per group, all of them, before anything is drawn ────────
 % The shared scale can only be computed once every value is known.
 vals = cell(nG, nW);
-for g = 1:nG
-    for k = 1:nW
-        sel = res.time >= min(w(k).winStart, w(k).winEnd) & ...
-              res.time <= max(w(k).winStart, w(k).winEnd);
+for k = 1:nW
+    % The sample selection is a property of the WINDOW, so it is computed once
+    % per column rather than once per cell.
+    sel = res.time >= min(w(k).winStart, w(k).winEnd) & ...
+          res.time <= max(w(k).winStart, w(k).winEnd);
+    for g = 1:nG
         if ~any(sel)
             vals{g, k} = zeros(numel(res.channelLabels), 1);
         else
@@ -101,10 +103,14 @@ s = chromeScale(P);
 PAD     = max(4,  round(10 * s));
 TITLE_H = max(9,  round(18 * s));  % the column titles, above the first row
 LABEL_W = max(24, round(58 * s));  % room for the row (group) names
-% The floor covers the bar's TICK LABELS, not just the bar: 28 px left room for
-% the 12 px bar and nothing for the numbers beside it, which then ran off the
-% edge of the page.
-CBAR_W  = max(40, round(62 * s));  % one shared bar, at the right of the grid
+% The bar's reserved strip is built from the parts that are actually drawn -
+% gap, bar, tick labels - so widening the bar cannot silently overrun the space
+% set aside for it sixty lines away. The tick-label floor is what the earlier
+% flat 28 px missed: it left room for the bar and none for the numbers.
+BAR_GAP = max(6,  round(10 * s));
+BAR_W   = max(10, round(12 * s));
+TICK_W  = max(24, round(40 * s));
+CBAR_W  = BAR_GAP + BAR_W + TICK_W;
 availW  = P(3) - 2*PAD - LABEL_W - CBAR_W;
 availH  = P(4) * 0.55 - TITLE_H - PAD;
 side    = max(min(availW / nW, availH / nG), 40);
@@ -113,8 +119,8 @@ gridH   = side * nG + TITLE_H + PAD;
 x0      = PAD + LABEL_W + max((availW - gridW) / 2, 0);
 yTop    = P(4) - PAD - TITLE_H;
 
-axesMade = gobjects(0);
-axRow    = gobjects(1, nG);   % the first map of each row, which carries its label
+axesMade = gobjects(1, nG * nW + 2);   % maps, the shared bar, the curve panel
+nMade    = 0;
 
 % ── the map grid ────────────────────────────────────────────────────────
 for g = 1:nG
@@ -131,8 +137,9 @@ for g = 1:nG
         else
             title(ax, '');
         end
-        axesMade(end + 1) = ax; %#ok<AGROW>
-        if k == 1; axRow(g) = ax; end
+        nMade = nMade + 1;
+        axesMade(nMade) = ax;
+        if k == 1; firstInRow = ax; end
     end
     % Row label, in the group's own colour so it ties to the curve below.
     % A text object on the row's FIRST map, not a uilabel on the parent: a
@@ -141,37 +148,30 @@ for g = 1:nG
     % publication figure built that way would come out with no group names on
     % it and no warning that they were missing. Normalized units with clipping
     % off put it just outside the axes whatever the map's data limits are.
-    text(axRow(g), -0.06, 0.5, res.groups(g).name, 'Units', 'normalized', ...
+    text(firstInRow, -0.06, 0.5, res.groups(g).name, 'Units', 'normalized', ...
         'HorizontalAlignment', 'right', 'VerticalAlignment', 'middle', ...
         'FontWeight', 'bold', 'FontSize', 10, 'Clipping', 'off', ...
         'Color', opts.colors(min(g, size(opts.colors, 1)), :));
 end
 
-% Re-assert the scale on every map now the loop can no longer disturb it.
-% Drawing one map resets the colormap of the axes already drawn - the same
-% thing drawGroupTopo documents - so setting it per map inside the loop is not
-% enough. Left unfixed, an exported grid comes out in topoplot's own colours
-% with the polarity unreadable, which looks like a result rather than a
-% rendering fault.
-cmap = divergingColormap();
-for a = 1:numel(axesMade)
-    colormap(axesMade(a), cmap);
-    axesMade(a).CLim = info.clim;
-end
+applySharedScale(axesMade, info.clim);
 
 % One bar for the whole grid, since every map shares the scale.
 cbAx = sharedColorbar(parent, opts.axesFcn, ...
-    [x0 + gridW + 10, yTop - nG * side + 6, 12, side * nG - 16], info.clim);
-axesMade(end + 1) = cbAx;
+    [x0 + gridW + BAR_GAP, yTop - nG * side + 6, BAR_W, side * nG - 16], ...
+    info.clim);
+nMade = nMade + 1;
+axesMade(nMade) = cbAx;
 
 % ── the curve panel ─────────────────────────────────────────────────────
-cAx = opts.axesFcn(parent, curveRect(parent, gridH, s));
+% opts carries .showBands and .windows straight through, and drawTEPOverlay
+% owns the shading - calling shadeTimeWindows again here painted every band,
+% boundary and label twice, stacking the alpha and overprinting the names.
+cAx = opts.axesFcn(parent, curveRect(parent, gridH));
 drawTEPOverlay(cAx, res, opts);
-if opts.showBands
-    shadeTimeWindows(cAx, w);
-end
-axesMade(end + 1) = cAx;
-info.axes = axesMade;
+nMade = nMade + 1;
+axesMade(nMade) = cAx;
+info.axes = axesMade(1:nMade);
 end
 
 % ── helpers ─────────────────────────────────────────────────────────────────
@@ -181,12 +181,16 @@ p = parent.Position;
 r = [0 0 p(3) p(4)];
 end
 
-function r = curveRect(parent, gridH, s)
+function r = curveRect(parent, gridH)
 % The axis labels need room, and how much depends on how big the type is - which
 % scales with the panel. Fixed margins tuned for a 900 px panel take 20% of an
 % 89 mm one and push the curve up into the maps.
-if nargin < 3; s = 1; end
+%
+% The scale is derived here rather than passed in: as a parameter it had to be
+% kept in step by every caller, and the no-windows path above had already
+% forgotten it and was laying out an 89 mm figure with 900 px margins.
 P    = parentRect(parent);
+s    = chromeScale(P);
 % Floors, because tick labels and an axis label do not shrink below legibility:
 % a proportional bottom margin alone left "Time (ms)" sitting on the footer.
 PAD  = max(4,  round(10 * s));

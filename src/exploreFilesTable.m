@@ -214,14 +214,3 @@ else
     s = ['.../' strjoin(seg(end-2:end), '/')];
 end
 end
-
-function pos = centreOn(parent, w, h)
-if ~isempty(parent) && isvalid(parent)
-    p = parent.Position;
-    pos = [p(1) + (p(3) - w)/2, p(2) + (p(4) - h)/2, w, h];
-else
-    s = get(groot, 'ScreenSize');
-    pos = [(s(3) - w)/2, (s(4) - h)/2, w, h];
-end
-pos(1:2) = max(pos(1:2), 1);
-end

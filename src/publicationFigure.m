@@ -63,6 +63,8 @@ opts = fillDefaults(opts, struct('width', 'double', 'height', [], ...
     'provenance', struct()));
 
 widthMm = opts.width;
+if isempty(widthMm); widthMm = 'double'; end
+if isempty(opts.dpi); opts.dpi = 600; end
 if ischar(widthMm) || isstring(widthMm)
     switch lower(char(widthMm))
         case 'single', widthMm = SINGLE_MM;
@@ -83,15 +85,15 @@ end
 ppi = get(groot, 'ScreenPixelsPerInch');
 px  = round([widthMm heightMm] / 25.4 * ppi);
 
-footerPx  = 0;
+% Scaled with the type: a fixed 11 px strip is 2% of a double-column figure and
+% 16% of a single-column one, where it would crowd out the plot it is supposed
+% to be captioning. One blank line plus one per line of text.
 footerPts = max(5, opts.fontSize - 1);
+lineH     = ceil(footerPts * 1.6);
 lines     = provenanceLines(opts.provenance);
+footerPx  = 0;
 if ~isempty(lines)
-    % Scaled with the type: a fixed 11 px strip is 2% of a double-column figure
-    % and 16% of a single-column one, where it would crowd out the plot it is
-    % supposed to be captioning.
-    lineH    = ceil(footerPts * 1.6);
-    footerPx = lineH + lineH * numel(lines);
+    footerPx = lineH * (numel(lines) + 1);
 end
 
 % The figure IS the drawing parent - no uipanel holder. R2026a's print rejects
@@ -118,7 +120,6 @@ if footerPx > 0
     % annotation, not uilabel: a uilabel is a UI component and would be dropped
     % by every export path, taking the provenance with it - the one thing on the
     % page that most has to survive the trip.
-    lineH = ceil(footerPts * 1.6);
     for k = 1:numel(lines)
         annotation(fig, 'textbox', ...
             [8 / px(1), (footerPx - lineH * k) / px(2), 1 - 16 / px(1), lineH / px(2)], ...

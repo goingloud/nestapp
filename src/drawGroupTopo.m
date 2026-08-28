@@ -11,9 +11,11 @@ function clim = drawGroupTopo(axList, res, opts)
 %   this works the same into a uifigure panel and into a publication figure.
 %
 %   opts:
-%     .window  [t1 t2] in ms to average over (default the whole epoch)
-%     .clim    force colour limits; default symmetric across ALL groups
-%     .titles  cellstr overriding the per-map titles
+%     .window   [t1 t2] in ms to average over (default the whole epoch)
+%     .clim     force colour limits; default symmetric across ALL groups
+%     .titles   cellstr overriding the per-map titles
+%     .colorbar false when the caller draws its own shared bar (see
+%               sharedColorbar); default true, putting one on the last map
 %
 %   The shared scale is the point. Each map drawn with its own limits would
 %   make two groups look alike whatever their amplitudes - a 1 uV map and a
@@ -60,11 +62,15 @@ else
     clim = [-m m];
 end
 
-% Only the last map keeps a bar: they all share one scale, so N bars repeat one
-% fact N times and take the width out of the heads.
+% No bars on the maps. A bar shrinks the axes it attaches to, so putting one on
+% the last map alone left that group's head smaller than its siblings - in a
+% figure whose whole purpose is that the maps are comparable by eye. The caller
+% mints the axes, so the caller reserves a strip and hangs one sharedColorbar
+% there; opts.colorbar exists for a caller that has nowhere to put one.
+showBar = ~isfield(opts, 'colorbar') || opts.colorbar;
 for g = 1:nG
     drawScalpTopo(axList(g), vals{g}, res.chanlocs, ...
-                  struct('clim', clim, 'colorbar', g == nG));
+                  struct('clim', clim, 'colorbar', showBar && g == nG));
     if isfield(opts, 'titles') && numel(opts.titles) >= g
         title(axList(g), opts.titles{g});
     else
@@ -73,17 +79,5 @@ for g = 1:nG
     end
 end
 
-% Re-assert the scale on every axes, after all of them are drawn.
-% Observed: drawing the second map into a sibling axes resets the colormap of
-% the ones already drawn - the first map came out in topoplot's own colours
-% while the last came out diverging, which is exactly the misreading the shared
-% scale exists to prevent, and it looks like a data difference rather than a
-% rendering artefact. Setting it per map inside the loop is therefore not
-% enough; the invariant is "all maps share one scale", so it is enforced here,
-% once the loop can no longer disturb it.
-cmap = divergingColormap();
-for g = 1:nG
-    colormap(axList(g), cmap);
-    axList(g).CLim = clim;
-end
+applySharedScale(axList(1:nG), clim);
 end

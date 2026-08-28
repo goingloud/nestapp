@@ -78,20 +78,7 @@ end
     function refresh()
         tbl.Data = buildParamTableData(struct('name', entry.name, ...
                                               'params', params), entry);
-        greyPlaceholders();
-    end
-
-    function greyPlaceholders()
-        % Same convention as the step table: a value starting with '(' is a
-        % placeholder, not a value, so it reads as inactive.
-        removeStyle(tbl);
-        grey = uistyle('FontColor', [0.6 0.6 0.6], 'FontAngle', 'italic');
-        for r = 1:size(tbl.Data, 1)
-            v = tbl.Data{r, 2};
-            if (ischar(v) || isstring(v)) && startsWith(string(v), '(')
-                addStyle(tbl, grey, 'cell', [r 2]);
-            end
-        end
+        greyPlaceholderCells(tbl);
     end
 
     function onEdit(~, ev)
@@ -127,16 +114,4 @@ end
         accepted = true;
         delete(fig);
     end
-end
-
-% ── helpers ─────────────────────────────────────────────────────────────────
-
-function pos = centreOn(anchor, w, h)
-if ~isempty(anchor) && isvalid(anchor)
-    a = anchor.Position;
-    pos = [a(1) + (a(3) - w) / 2, a(2) + (a(4) - h) / 2, w, h];
-else
-    s   = get(groot, 'ScreenSize');
-    pos = [(s(3) - w) / 2, (s(4) - h) / 2, w, h];
-end
 end

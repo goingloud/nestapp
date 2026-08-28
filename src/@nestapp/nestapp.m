@@ -279,6 +279,7 @@ classdef nestapp < matlab.apps.AppBase
         % the draw function's own defaults.
         explorePlotParams = struct('name', {}, 'params', {})
         exploreFigureOpts = struct()   % remembered publicationFigure settings
+        exploreResizeTimer             % coalesces a resize drag into one repaint
         exploreAvailablePlots = struct([])  % registry entries + availability
 
         % Tab Analysis
@@ -1661,35 +1662,11 @@ classdef nestapp < matlab.apps.AppBase
         rescaleComponents(app, sX, sY)
 
         function styleParamTable(app)
-        % Grey out UITable rows whose Value is a placeholder or literal '[]'.
-        % Placeholders start with '(' by convention (e.g. '(all channels)').
-        % Works with both cell array data (new format) and table (legacy).
-            removeStyle(app.UITable);
-            T = app.UITable.Data;
-            if isempty(T); return; end
-            grey = uistyle('FontColor', [0.6 0.6 0.6], 'FontAngle', 'italic');
-            if iscell(T)
-                nRows = size(T, 1);
-                for row = 1:nRows
-                    v = T{row, 2};
-                    if isscalar(v) && (isstring(v) || ischar(v))
-                        sv = string(v);
-                        if (strlength(sv) > 0 && startsWith(sv, '(')) || strcmp(sv, '[]')
-                            addStyle(app.UITable, grey, 'cell', [row, 2]);
-                        end
-                    end
-                end
-            elseif istable(T)
-                for row = 1:height(T)
-                    v = T.val{row};
-                    if isscalar(v) && (isstring(v) || ischar(v))
-                        sv = string(v);
-                        if (strlength(sv) > 0 && startsWith(sv, '(')) || strcmp(sv, '[]')
-                            addStyle(app.UITable, grey, 'cell', [row, 2]);
-                        end
-                    end
-                end
-            end
+        % Grey the value cells that hold a placeholder rather than a value.
+        % The rule itself lives in greyPlaceholderCells, so the step table, the
+        % plot options dialog and the figure dialog cannot drift apart on what
+        % counts as "not set" - they already had, over the literal '[]'.
+            greyPlaceholderCells(app.UITable);
         end
 
         function s = formatParamForDisplay(~, val, paramMeta)
@@ -2551,17 +2528,31 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         function reRenderExploreOnResize(app)
-        % Repaint the Explore plot after a resize. rescaleComponents moves the
-        % canvas panel - it is a class property - but the axes inside it are
-        % created by renderExplorePlot and are not, so they keep their old
-        % pixel positions and the plot stops filling the panel. Same situation
-        % as the Quality Dashboard, same fix.
+        % Coalesce a drag into ONE repaint. A resize event arrives per pixel of
+        % a drag, and a TEP-topo grid is twelve topoplots - close to a second
+        % of work each time. Redrawing per event queues that up and the window
+        % stops following the mouse.
         %
+        % Same restart-a-timer pattern the steps-tree hover tip already uses:
+        % every event pushes the repaint further out, so it happens once the
+        % drag stops. The re-entrancy guard alone could not do this - it drops
+        % events that arrive DURING a repaint, not the ones queued behind it.
+            if isempty(app.exploreResizeTimer) || ~isvalid(app.exploreResizeTimer)
+                app.exploreResizeTimer = timer( ...
+                    'StartDelay', 0.20, 'ExecutionMode', 'singleShot', ...
+                    'Name', 'nestappExploreResize', ...
+                    'TimerFcn', @(~, ~) repaintExploreNow(app));
+            end
+            stop(app.exploreResizeTimer);
+            start(app.exploreResizeTimer);
+        end
+
+        function repaintExploreNow(app)
         % No-op unless Explore is the selected tab: repainting a hidden panel
-        % during a drag is work nobody sees, and a resize event arrives for
-        % every pixel of the drag.
-            if isempty(app.ExploreCanvas) || ~isvalid(app.ExploreCanvas); return; end
-            if ~isequal(app.TabGroup.SelectedTab, app.ExploreTab); return; end
+        % is work nobody sees.
+            if ~isvalid(app) || ~isvalid(app.UIFigure); return; end
+            if app.TabGroup.SelectedTab ~= app.ExploreTab; return; end
+            if isempty(app.exploreRes); return; end
             renderExplorePlot(app);
         end
 
@@ -2581,44 +2572,59 @@ classdef nestapp < matlab.apps.AppBase
             end
             res = app.exploreRes;
             pos = parent.Position;
+            fn  = str2func(entry.draw);
+
             % The user's settings go in FIRST and the tab's context fills what
             % is left, so a param the user set always wins and one they never
             % touched is simply absent - leaving the draw function's own
-            % default to apply.
-            opts = explorePlotOpts(app, entry);
-            switch entry.draw
-                case 'drawTEPTopo'
-                    % Owns its own layout - it decides how many axes it needs
-                    % from the group and window counts - so it takes the panel.
-                    opts = fillDefaults(opts, struct( ...
-                        'windows', app.exploreWindows, 'mode', entry.mode, ...
-                        'axesFcn', axesFcn));
-                    drawTEPTopo(parent, res, opts);
-                case 'drawGroupTopo'
-                    n = numel(res.groups);
+            % default to apply. Every drawer ignores the context fields it does
+            % not declare, so the fill is uniform and each branch below states
+            % only how many axes to mint.
+            opts = fillDefaults( ...
+                plotDrawOpts(entry, explorePlotParamsFor(app, entry.name)), ...
+                struct( ...
+                'mode',    entry.mode, ...
+                'windows', app.exploreWindows, ...
+                'window',  exploreTopoWindow(app), ...
+                'axesFcn', axesFcn));
+
+            switch exploreLayoutOf(app, entry)
+                case 'panel'
+                    % Owns the canvas: it decides how many axes it needs from
+                    % the group and window counts, so it mints them itself.
+                    fn(parent, res, opts);
+
+                case 'per-group'
+                    n      = numel(res.groups);
                     axList = gobjects(1, n);
-                    w = (pos(3) - 20) / max(n, 1);
+                    BAR_W  = 62;    % the strip the shared colour bar sits in
+                    w      = (pos(3) - 20 - BAR_W) / max(n, 1);
                     for k = 1:n
                         axList(k) = axesFcn(parent, ...
                             [10 + (k-1)*w, 30, w - 10, pos(4) - 60]);
                     end
-                    opts = fillDefaults(opts, ...
-                        struct('window', exploreTopoWindow(app)));
-                    drawGroupTopo(axList, res, opts);
-                otherwise
+                    % One bar for the row, hung beside it rather than on the
+                    % last map - attaching one shrinks its host axes, which
+                    % would leave that group's head smaller than its siblings
+                    % in a figure whose point is that they are comparable.
+                    clim = fn(axList, res, ...
+                              fillDefaults(struct('colorbar', false), opts));
+                    sharedColorbar(parent, axesFcn, ...
+                        [pos(3) - BAR_W + 8, 40, 12, pos(4) - 80], clim);
+
+                otherwise   % 'single'
                     ax = axesFcn(parent, [45 45 pos(3) - 70 pos(4) - 70]);
-                    fn = str2func(entry.draw);
-                    opts = fillDefaults(opts, struct('mode', entry.mode, ...
-                        'windows', app.exploreWindows));
                     fn(ax, res, opts);
             end
         end
 
-        function opts = explorePlotOpts(app, entry)
-        % The settings the user has set for this plot, typed the way the draw
-        % function wants them. plotDrawOpts does the work so the same
-        % conversion serves a headless caller and a saved session.
-            opts = plotDrawOpts(entry, explorePlotParamsFor(app, entry.name));
+        function layout = exploreLayoutOf(~, entry)
+        % Registry entries predating the .layout field, and the literal structs
+        % the tests build, default to a single axes.
+            layout = 'single';
+            if isfield(entry, 'layout') && ~isempty(entry.layout)
+                layout = entry.layout;
+            end
         end
 
         function params = explorePlotParamsFor(app, name)
@@ -2646,13 +2652,9 @@ classdef nestapp < matlab.apps.AppBase
 
         function txt = exploreStatusText(app)
             res = app.exploreRes;
-            bits = {};
-            for g = 1:numel(res.groups)
-                bits{end+1} = sprintf('%s n=%d', res.groups(g).name, ...
-                                      res.est(g).n); %#ok<AGROW>
-            end
-            txt = sprintf('%s  |  %s, 95%% CI  |  %d channels', ...
-                strjoin(bits, ', '), res.design, numel(res.channelLabels));
+            [groups, design] = exploreCohortText(app);
+            txt = sprintf('%s  |  %s  |  %d channels', ...
+                groups, design, numel(res.channelLabels));
             m = res.info.montage;
             if ~isempty(m.excluded)
                 txt = sprintf('%s  |  %d file%s excluded (different cap)', ...
@@ -2865,18 +2867,31 @@ classdef nestapp < matlab.apps.AppBase
         % What the footer of an exported figure states. Enough to identify the
         % analysis six months later from the image alone: which plot, which
         % groups and how many subjects, which design, which electrodes.
+        %
+        % The group and design strings come from the same place the status bar
+        % reads, so the line under the plot and the line stamped into a
+        % published figure cannot disagree about n.
+            [groups, design] = exploreCohortText(app);
+            p = struct( ...
+                'plot',      entry.name, ...
+                'groups',    groups, ...
+                'design',    design, ...
+                'ROI',       strjoin(app.exploreRoi, ' '), ...
+                'nestapp',   nestappVersion(), ...
+                'exported',  char(datetime('now', 'Format', 'yyyy-MM-dd')));
+        end
+
+        function [groups, design] = exploreCohortText(app)
+        % "odd n=5, even n=5" and "unpaired, 95% CI" - the two facts that say
+        % what a picture is of. Written once because they appear both on screen
+        % and in every exported figure's footer.
             res  = app.exploreRes;
             bits = cell(1, numel(res.groups));
             for g = 1:numel(res.groups)
                 bits{g} = sprintf('%s n=%d', res.groups(g).name, res.est(g).n);
             end
-            p = struct( ...
-                'plot',      entry.name, ...
-                'groups',    strjoin(bits, ', '), ...
-                'design',    sprintf('%s, 95%% CI', res.design), ...
-                'ROI',       strjoin(app.exploreRoi, ' '), ...
-                'nestapp',   nestappVersion(), ...
-                'exported',  char(datetime('now', 'Format', 'yyyy-MM-dd')));
+            groups = strjoin(bits, ', ');
+            design = sprintf('%s, 95%% CI', res.design);
         end
 
         function ExploreCsvButtonPushed(app, ~)
@@ -4054,11 +4069,11 @@ classdef nestapp < matlab.apps.AppBase
 
         % Code that executes before app deletion
         function delete(app)
-            % Stop the hover timer first: a pending callback would otherwise
-            % fire against a half-deleted app.
-            if ~isempty(app.hoverTimer) && isvalid(app.hoverTimer)
-                stop(app.hoverTimer);
-                delete(app.hoverTimer);
+            % Stop the timers first: a pending callback would otherwise fire
+            % against a half-deleted app, and an undeleted timer outlives the
+            % app in the MATLAB session, firing into nothing forever.
+            for t = [app.hoverTimer, app.exploreResizeTimer]
+                if isvalid(t); stop(t); delete(t); end
             end
 
             % Delete UIFigure when app is deleted

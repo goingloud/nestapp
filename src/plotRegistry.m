@@ -15,6 +15,15 @@ function plots = plotRegistry()
 %                stepAvailability checks a plugin function.
 %     .mode      curve mode passed to groupCurves ('TEP'|'GMFP'|'LMFP'), or ''
 %                for plots that do not reduce to a single ROI curve
+%     .layout    how the plot wants its axes minted:
+%                  'single'    one axes filling the canvas (the default)
+%                  'per-group' one axes per group, side by side, plus a shared
+%                              colour bar
+%                  'panel'     the plot owns the whole canvas and mints its own
+%                A CLOSED set of three, deliberately: the tab switches on this
+%                rather than on the draw function's NAME, so adding a plot never
+%                means adding a case to the tab. That is what makes the promise
+%                below - "nothing in the tab needs to change" - actually true.
 %     .requires  what must be true before this can render:
 %                  .groups   'any' (>=1) | 1 | 2 | '2+'
 %                  .windows  true when windows of interest are needed
@@ -54,7 +63,7 @@ if ~isempty(cached)
 end
 
 plots = struct('name', {}, 'category', {}, 'info', {}, 'draw', {}, ...
-               'mode', {}, 'requires', {}, 'params', {});
+               'mode', {}, 'layout', {}, 'requires', {}, 'params', {});
 
 %% ---- Waveform --------------------------------------------------------
 p = blankPlot();
@@ -113,6 +122,7 @@ p.name     = 'Scalp map';
 p.category = 'Topography';
 p.mode     = 'TEP';
 p.draw     = 'drawGroupTopo';
+p.layout   = 'per-group';
 p.requires.chanlocs = true;
 p.info     = ['The scalp distribution averaged over a time window, one map ' ...
               'per group on a shared symmetric microvolt scale so the groups ' ...
@@ -129,6 +139,7 @@ p.name     = 'TEP-topo';
 p.category = 'Topography';
 p.mode     = 'TEP';
 p.draw     = 'drawTEPTopo';
+p.layout   = 'panel';
 p.requires.chanlocs = true;
 p.requires.windows  = true;
 p.info     = ['The waveforms with a grid of scalp maps above them: one column ' ...
@@ -150,6 +161,7 @@ function p = blankPlot()
 % Each block above then states only what makes it special, so a new entry
 % cannot silently inherit a requirement it does not have.
 p = struct('name', '', 'category', '', 'info', '', 'draw', '', 'mode', '', ...
+           'layout', 'single', ...
            'requires', struct('groups', 'any', 'windows', false, 'chanlocs', false), ...
            'params', emptyParams());
 end

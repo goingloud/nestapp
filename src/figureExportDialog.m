@@ -30,8 +30,15 @@ function [opts, action] = figureExportDialog(defaults, anchor)
 if nargin < 1 || isempty(defaults); defaults = struct(); end
 if nargin < 2; anchor = []; end
 
-opts   = fillDefaults(defaults, struct('width', 'double', 'height', [], ...
-                                       'dpi', 600, 'fontSize', 8, 'file', ''));
+% Seeded EMPTY, not with real values. publicationFigure owns these defaults and
+% derives some of them from each other - the font size follows the column width
+% and floors at 5 pt for a single column. Seeding 8 here made that branch
+% unreachable from the only caller, so single-column figures printed at 8 pt
+% with exactly the collision the derivation exists to prevent. Same rule the
+% plot params follow: the placeholder names the default, the value stays unset,
+% and the function that applies it stays the one place it is written down.
+opts   = fillDefaults(defaults, struct('width', [], 'height', [], ...
+                                       'dpi', [], 'fontSize', [], 'file', ''));
 action = 'cancel';
 meta   = exportParams();
 entry  = struct('name', 'Figure', 'params', meta);
@@ -64,21 +71,11 @@ refresh();
 waitfor(fig);
 
     function refresh()
-        shown = opts;
-        % 'height' left empty means "follow the width"; showing the derived
-        % number would look like a value the user had chosen.
-        if isempty(shown.height); shown = rmfield(shown, 'height'); end
-        if isempty(shown.file);   shown = rmfield(shown, 'file');   end
+        % No pruning of empty fields first: buildParamTableData already renders
+        % any empty value as the param's placeholder.
         tbl.Data = buildParamTableData(struct('name', 'Figure', ...
-                                              'params', shown), entry);
-        removeStyle(tbl);
-        grey = uistyle('FontColor', [0.6 0.6 0.6], 'FontAngle', 'italic');
-        for r = 1:size(tbl.Data, 1)
-            v = tbl.Data{r, 2};
-            if (ischar(v) || isstring(v)) && startsWith(string(v), '(')
-                addStyle(tbl, grey, 'cell', [r 2]);
-            end
-        end
+                                              'params', opts), entry);
+        greyPlaceholderCells(tbl);
     end
 
     function onEdit(~, ev)
@@ -131,14 +128,4 @@ p = [ ...
          'throughout. Most journals set a floor between 5 and 7 pt at final ' ...
          'size.'], ...
         'type', 'scalar', 'placeholder', '(8)')];
-end
-
-function pos = centreOn(anchor, w, h)
-if ~isempty(anchor) && isvalid(anchor)
-    a = anchor.Position;
-    pos = [a(1) + (a(3) - w) / 2, a(2) + (a(4) - h) / 2, w, h];
-else
-    s   = get(groot, 'ScreenSize');
-    pos = [(s(3) - w) / 2, (s(4) - h) / 2, w, h];
-end
 end

@@ -84,13 +84,7 @@ if nargin < 4 || ~isstruct(opts) || ~isfield(opts, 'colorbar') || opts.colorbar
     cb = colorbar(ax);
     cb.Label.String = CB_LABEL;
 end
-% The hover toolbar is noise on a scalp map - there is nothing to zoom or pan -
-% and it is captured by exportapp, so it would end up in a saved figure.
-try
-    ax.Toolbar.Visible = 'off';
-    disableDefaultInteractivity(ax);
-catch
-end
+quietAxes(ax);
 end
 
 % ── local helpers ─────────────────────────────────────────────────────────────
@@ -98,6 +92,16 @@ end
 function cLim = drawViaHiddenFigure(uiAx, values, chanlocs, topoArgs)
 % topoplot needs a classic axes (it calls axes/gca/clim/axis internally), so
 % draw into an offscreen one and copy the graphics across.
+%
+% A fresh figure per call, deliberately, even though it costs about 8.5 ms and
+% a TEP-topo grid pays it twelve times a repaint. Keeping one scratch figure
+% for the session was tried: topoplot resolves its target through gca, which
+% SKIPS handle-invisible figures, so a hidden-handle scratch figure silently
+% received nothing and the maps came out blank. Making it handle-visible works
+% but leaves a stray figure in the user's session for close all and any figure
+% enumeration to trip over, which this function promises not to do. The repaint
+% cost is addressed where it actually hurt - the resize handler coalesces a
+% drag into one repaint rather than one per pixel.
 hiddenFig = figure('Visible', 'off');
 closeFig  = onCleanup(@() delete(hiddenFig));
 
