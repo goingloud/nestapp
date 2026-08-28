@@ -2,9 +2,10 @@
 % SPDX-License-Identifier: GPL-3.0-or-later
 % Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
 % Part of nestapp; see the LICENSE file for full terms.
-function cLim = drawScalpTopo(ax, values, chanlocs)
+function cLim = drawScalpTopo(ax, values, chanlocs, opts)
 % DRAWSCALPTOPO  Render an EEGLAB scalp topography into any axes, with a scale.
 %   cLim = DRAWSCALPTOPO(ax, values, chanlocs)
+%   cLim = DRAWSCALPTOPO(ax, values, chanlocs, opts)
 %
 %   ax       - destination axes. A classic axes is drawn into directly; a
 %              uiaxes goes through a hidden figure (topoplot calls gca/clim/
@@ -12,8 +13,17 @@ function cLim = drawScalpTopo(ax, values, chanlocs)
 %              back.
 %   values   - one scalar per channel (the time-window-averaged voltage, uV).
 %   chanlocs - matching EEGLAB chanlocs struct array.
+%   opts     - optional struct:
+%                .clim  force these colour limits instead of deriving them
+%                       from this map alone.
 %
 %   Returns the symmetric colour limits actually applied, in uV.
+%
+%   opts.clim exists for comparing maps. Limits derived per map make any two
+%   maps look alike whatever their amplitudes - a 1 uV map and a 10 uV map both
+%   render as a full-range dipole - so a caller drawing one map per group
+%   computes the limits once across all of them and passes them in. Without an
+%   override the behaviour is unchanged: symmetric absmax from this map.
 %
 %   The colour scale is plain linear microvolts: topoplot's default maplimits
 %   is 'absmax', so the limits are symmetric about zero and recomputed for
@@ -47,6 +57,12 @@ else
     axes(ax);
     topoplot(values, chanlocs, topoArgs{:});
     cLim = symmetricLimits(ax);
+end
+
+% A caller comparing several maps supplies one scale for all of them; it wins
+% over the per-map limits derived above.
+if nargin >= 4 && isstruct(opts) && isfield(opts, 'clim') && ~isempty(opts.clim)
+    cLim = opts.clim(:)';
 end
 
 ax.CLim = cLim;
