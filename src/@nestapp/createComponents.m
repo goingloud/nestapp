@@ -26,7 +26,7 @@ function createComponents(app)
             app.UIFigure.AutoResizeChildren = 'off';
             app.UIFigure.SizeChangedFcn    = createCallbackFcn(app, @UIFigureSizeChanged, true);
             app.UIFigure.CloseRequestFcn   = createCallbackFcn(app, @UIFigureCloseRequest, true);
-            % Drives the dwell-delayed step legend (see onPointerMoved).
+            % Drives the dwell-delayed step legend (see stepsTreeLegend).
             app.UIFigure.WindowButtonMotionFcn = createCallbackFcn(app, @UIFigureMouseMoved, true);
 
             % Create menu bar
@@ -1304,8 +1304,8 @@ function createComponents(app)
 
             % Floating hover tip for the Steps tree. Parented to the figure
             % rather than a tab so it is never clipped, and created last so it
-            % paints over the TabGroup. Shown by a dwell timer, not by the
-            % native Tooltip - see onPointerMoved.
+            % paints over the TabGroup. See stepsTreeLegend for why this is not
+            % the native Tooltip.
             app.StepsTipPanel = uipanel(app.UIFigure);
             app.StepsTipPanel.BorderType = 'line';
             app.StepsTipPanel.BackgroundColor = [1 1 0.88];

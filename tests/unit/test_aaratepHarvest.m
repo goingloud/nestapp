@@ -27,20 +27,16 @@ function r = repoRoot()
 r = fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))));
 end
 
-function [dir_, prefix] = fakeRun(testCase, varargin)
+function [dir_, prefix] = fakeRun(testCase)
 % An output folder shaped like a real AARATEP run: result + md, the three
 % unconditional intermediates, and its QC images.
-p = inputParser;
-p.addParameter('md', defaultMd());
-p.parse(varargin{:});
-
 prefix = 'PreprocessedResults';
 dir_ = fullfile(tempdir, ['nestapp_aaratep_', char(matlab.lang.internal.uuid())]);
 mkdir(dir_);
 testCase.addTeardown(@() rmdir(dir_, 's'));
 
 EEG = struct('data', single(zeros(4, 10)), 'nbchan', 4); %#ok<NASGU>
-md  = p.Results.md;                                      %#ok<NASGU>
+md  = defaultMd();                                       %#ok<NASGU>
 save(fullfile(dir_, [prefix '.mat']), 'EEG', 'md');
 for suffix = {'_preSOUND', '_preDecayRemoval', '_preICARejection'}
     save(fullfile(dir_, [prefix suffix{1} '.mat']), 'EEG', 'md');
@@ -163,29 +159,35 @@ testCase.verifyEqual(exist(fullfile(d, [pfx '.mat']), 'file'), 2, ...
     'The result itself must survive');
 end
 
-function test_finalMatDroppedOnlyWhenAskedAndMetadataRead(testCase)
+function test_finalMatIsReportedButNeverDeletedHere(testCase)
+% The result is the caller's to drop, and only once the .set that replaces it
+% exists - a step between here and Save New Set can still abort the file. This
+% function reports the path and leaves it alone.
 [d, pfx] = fakeRun(testCase);
-opts = struct('dropFinalMat', true);
-[report, info] = aaratepHarvest(blankReport(), d, pfx, opts);
+[report, info] = aaratepHarvest(blankReport(), d, pfx);
 
-testCase.verifyEqual(exist(fullfile(d, [pfx '.mat']), 'file'), 0, ...
-    'The .mat goes once a Save New Set is writing the same data as .set');
-testCase.verifyTrue(ismember(fullfile(d, [pfx '.mat']), info.removed));
+testCase.verifyEqual(info.droppableFinalMat, fullfile(d, [pfx '.mat']), ...
+    'The droppable path must be reported to the caller');
+testCase.verifyEqual(exist(fullfile(d, [pfx '.mat']), 'file'), 2, ...
+    'and the file must still be there');
+testCase.verifyFalse(ismember(fullfile(d, [pfx '.mat']), info.removed));
 testCase.verifyEqual(report.ica.nComponents, 60, ...
-    'Its metadata must be read into the report BEFORE it is deleted');
+    'Its metadata is read before the caller can drop it');
 end
 
-function test_finalMatKeptWhenThereIsNoMetadataToRescue(testCase)
-% No md means nothing was harvested, so deleting would lose the only copy.
+function test_nothingIsDroppableWithoutMetadata(testCase)
+% No md means nothing was harvested from it, so it is not safe to drop -
+% deleting would lose the only copy of the result.
 d = fullfile(tempdir, ['nestapp_aaratep_', char(matlab.lang.internal.uuid())]);
 mkdir(d);
 testCase.addTeardown(@() rmdir(d, 's'));
 EEG = struct('data', 1); %#ok<NASGU>
 save(fullfile(d, 'PreprocessedResults.mat'), 'EEG');
 
-opts = struct('dropFinalMat', true);
-[~, info] = aaratepHarvest(blankReport(), d, 'PreprocessedResults', opts);
-testCase.verifyEmpty(info.removed, 'Never delete the only copy of the result');
+[~, info] = aaratepHarvest(blankReport(), d, 'PreprocessedResults');
+testCase.verifyEmpty(info.droppableFinalMat, ...
+    'Without metadata the result must not be offered up for deletion');
+testCase.verifyEmpty(info.removed);
 testCase.verifyEqual(exist(fullfile(d, 'PreprocessedResults.mat'), 'file'), 2);
 end
 

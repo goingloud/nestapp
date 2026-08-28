@@ -255,10 +255,8 @@ classdef nestapp < matlab.apps.AppBase
         % Any pointer movement hides the tip and restarts its clock, so it
         % only ever appears once the pointer has been still on the tree for
         % HOVER_DELAY seconds - and gets out of the way the instant you move.
-            onPointerMoved(app);
-        end
-
-        function onPointerMoved(app)
+        % Fires on every mouse move over the window, so it stays cheap: no
+        % graphics write unless the tip is actually up.
             if isempty(app.hoverTimer) || ~isvalid(app.hoverTimer); return; end
             stop(app.hoverTimer);
             hideStepsTip(app);
@@ -304,16 +302,23 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         function hideStepsTip(app)
-            if ~isempty(app.StepsTipPanel) && isvalid(app.StepsTipPanel)
+        % Guarded on the current state: this runs on every mouse move, and
+        % re-asserting 'off' on an already-hidden panel is a graphics write
+        % for nothing.
+            if ~isempty(app.StepsTipPanel) && isvalid(app.StepsTipPanel) ...
+                    && app.StepsTipPanel.Visible
                 app.StepsTipPanel.Visible = 'off';
             end
         end
 
         function txt = stepsTreeLegend(app)
-        % The text of the tree's hover tip. uitreenode has no Tooltip property,
-        % so a per-node hover tip is not possible - this tree-level key carries
-        % the dot's meaning instead, and the Info panel below names the provider
-        % and the exact wait behaviour for whichever step is selected.
+        % The text of the tree's hover tip, and the one place the design is
+        % explained.
+        %
+        % uitreenode has no Tooltip property, so a per-node hover tip is not
+        % possible - this tree-level key carries the dot's meaning instead, and
+        % the Info panel below names the provider and the exact wait behaviour
+        % for whichever step is selected.
         %
         % It is shown by a dwell timer rather than the native Tooltip: the
         % native one fires on MATLAB's own schedule and cannot be delayed, and
@@ -359,7 +364,8 @@ classdef nestapp < matlab.apps.AppBase
         % taxonomy forgot is collected under "Other" so nothing silently
         % vanishes from the picker.
             delete(app.StepsTree.Children);
-            steps      = availableSteps();
+            reg        = stepRegistry();
+            steps      = availableSteps(reg);
             availNames = {steps.name};
             app.info   = containers.Map(availNames, {steps.info});
 
@@ -371,9 +377,10 @@ classdef nestapp < matlab.apps.AppBase
             TAX = stepTaxonomy();
             % Steps that can stop and wait for a human get the amber dot. The
             % set is derived from the registry via canStepBlock, so adding an
-            % interactive step marks itself - there is no second list here to
-            % fall out of sync.
-            reg = stepRegistry();
+            % interactive step marks itself in the picker.
+            % TODO: runPipelineCore's local findInteractiveSteps is still a
+            % hardcoded name list and does not agree with the registry - it is
+            % what actually gates the parallel-processing warning.
             app.stepBlocks    = containers.Map('KeyType', 'char', 'ValueType', 'logical');
             app.stepProviders = containers.Map('KeyType', 'char', 'ValueType', 'char');
             for r = 1:numel(reg)
@@ -414,10 +421,6 @@ classdef nestapp < matlab.apps.AppBase
                             addStepLeaf(app, oNode, ops(o).variants(k), flag);
                         end
                     end
-                    for vk = 1:numel(ops(o).variants)
-                        app.stepProviders(ops(o).variants(vk).step) = ...
-                            ops(o).variants(vk).provider;
-                    end
                     placed = [placed, {ops(o).variants.step}]; %#ok<AGROW>
                 end
             end
@@ -441,6 +444,7 @@ classdef nestapp < matlab.apps.AppBase
         % ADDSTEPLEAF  One leaf whose NodeData is the registry step name; an
         % amber dot marks a step that can stop and wait for a human.
             node = uitreenode(parent, 'Text', v.step, 'NodeData', v.step);
+            app.stepProviders(v.step) = v.provider;
             if isKey(app.stepBlocks, v.step)
                 % Set the flag after creation and tolerate its absence: the leaf
                 % must always appear even on a release without node icons.

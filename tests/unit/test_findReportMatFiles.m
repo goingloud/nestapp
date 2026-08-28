@@ -30,11 +30,10 @@ end
 function root = makeTree(testCase, nReports)
 % A batch root shaped like the real thing: reports/ plus the bulky data/ and
 % qc/ folders the recursive walk used to trawl through.
-root = fullfile(tempdir, ['nestapp_find_', char(matlab.lang.internal.uuid())]);
+root = tmpDir(testCase);
 mkdir(fullfile(root, 'reports'));
 mkdir(fullfile(root, 'data'));
 mkdir(fullfile(root, 'qc', 'subj01'));
-testCase.addTeardown(@() rmdir(root, 's'));
 
 pipelineReport = struct('inputFile', 'x.set'); %#ok<NASGU>
 for k = 1:nReports
@@ -66,9 +65,7 @@ end
 
 function test_findsReportsFromAParentOfSeveralRuns(testCase)
 % Falls through to the recursive walk, which is what makes a parent work.
-parent = fullfile(tempdir, ['nestapp_parent_', char(matlab.lang.internal.uuid())]);
-mkdir(parent);
-testCase.addTeardown(@() rmdir(parent, 's'));
+parent = tmpDir(testCase);
 pipelineReport = struct('inputFile', 'x.set'); %#ok<NASGU>
 for run = 1:2
     d = fullfile(parent, sprintf('20260101_00000%d_pipeline', run), 'reports');
@@ -83,9 +80,7 @@ end
 function test_matchesBothArtifactNameForms(testCase)
 % reportArtifactName emits "<base>_report.mat" when overwriteReports is on
 % and "<base>_report_<timestamp>.mat" when it is off.
-root = fullfile(tempdir, ['nestapp_names_', char(matlab.lang.internal.uuid())]);
-mkdir(root);
-testCase.addTeardown(@() rmdir(root, 's'));
+root = tmpDir(testCase);
 pipelineReport = struct('inputFile', 'x.set'); %#ok<NASGU>
 save(fullfile(root, 'subj01_report.mat'), 'pipelineReport');
 save(fullfile(root, 'subj02_report_20260417_155758.mat'), 'pipelineReport');
@@ -95,16 +90,21 @@ testCase.verifyNumElements(findReportMatFiles(root), 2, ...
 end
 
 function test_emptyWhenNothingToFind(testCase)
-root = fullfile(tempdir, ['nestapp_none_', char(matlab.lang.internal.uuid())]);
+root = tmpDir(testCase);
 mkdir(fullfile(root, 'data'));
-testCase.addTeardown(@() rmdir(root, 's'));
 testCase.verifyEmpty(findReportMatFiles(root));
 end
 
 function test_doesNotReturnDirectories(testCase)
 % A folder literally named "*_report*.mat" must not be returned as a file.
-root = fullfile(tempdir, ['nestapp_dir_', char(matlab.lang.internal.uuid())]);
+root = tmpDir(testCase);
 mkdir(fullfile(root, 'bogus_report.mat'));
-testCase.addTeardown(@() rmdir(root, 's'));
 testCase.verifyEmpty(findReportMatFiles(root));
+end
+
+function d = tmpDir(testCase)
+% A scratch folder that cleans itself up. Four tests wanted this.
+d = fullfile(tempdir, ['nestapp_find_', char(matlab.lang.internal.uuid())]);
+mkdir(d);
+testCase.addTeardown(@() rmdir(d, 's'));
 end

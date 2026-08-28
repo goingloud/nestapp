@@ -20,22 +20,23 @@ function [report, info] = aaratepHarvest(report, outputDir, prefix, opts)
 %   prefix    - its outputFilePrefix, which names every file it wrote.
 %   opts      - optional struct:
 %     .keepIntermediates  keep the _pre*.mat datasets (default true)
-%     .dropFinalMat       delete the final <prefix>.mat, for when a Save New
-%                         Set step is writing the same dataset as a .set
-%                         (default false - never drop the only copy)
 %     .channelLabels      cellstr of the returned EEG's channel labels, used
 %                         to resolve upstream's channel INDICES to names
 %
-%   info - what happened, for logging: .mdFound, .figures, .removed, .bytesFreed
+%   info - what happened: .mdFound, .figures, .removed, .bytesFreed, and
+%          .droppableFinalMat, the path of the final .mat once its metadata is
+%          safely in the report. This function never deletes that file: the
+%          caller may only drop it once the .set that replaces it actually
+%          exists, and at this point the run could still abort before then.
 %
 %   See also: aaratepOutputDir, processOneFile, initPipelineReport
 
 if nargin < 4 || ~isstruct(opts), opts = struct(); end
 if ~isfield(opts, 'keepIntermediates'), opts.keepIntermediates = true;  end
-if ~isfield(opts, 'dropFinalMat'),      opts.dropFinalMat      = false; end
 if ~isfield(opts, 'channelLabels'),     opts.channelLabels     = {};    end
 
-info = struct('mdFound', false, 'figures', {{}}, 'removed', {{}}, 'bytesFreed', 0);
+info = struct('mdFound', false, 'figures', {{}}, 'removed', {{}}, ...
+              'bytesFreed', 0, 'droppableFinalMat', '');
 if isempty(outputDir) || ~isfolder(outputDir)
     return
 end
@@ -68,10 +69,9 @@ if ~opts.keepIntermediates
     doomed = cellfun(@(sfx) fullfile(outputDir, [prefix sfx '.mat']), ...
                      suffixes, 'UniformOutput', false);
 end
-% Only ever drop the final .mat once its metadata is safely in the report and
-% the caller has confirmed the same dataset is being written as a .set.
-if opts.dropFinalMat && info.mdFound
-    doomed{end+1} = finalMat;
+% The result itself is the caller's call, not ours - see the docstring.
+if info.mdFound
+    info.droppableFinalMat = finalMat;
 end
 
 for k = 1:numel(doomed)
@@ -123,10 +123,12 @@ end
 if isfield(md, 'earlyRejectedChannels') && ~isempty(md.earlyRejectedChannels)
     names = channelNames(labels, md.earlyRejectedChannels);
     if ~isempty(names)
-        report.channels.badChannelNames = unique([ ...
-            asCellstr(getfielddef(report.channels, 'badChannelNames', {})), names], 'stable');
-        report.channels.interpolatedNames = unique([ ...
-            asCellstr(getfielddef(report.channels, 'interpolatedNames', {})), names], 'stable');
+        % initPipelineReport seeds both as {}, and this only ever runs on an
+        % in-progress report, so no defensive read is needed.
+        report.channels.badChannelNames = unique( ...
+            [report.channels.badChannelNames, names], 'stable');
+        report.channels.interpolatedNames = unique( ...
+            [report.channels.interpolatedNames, names], 'stable');
         report.channels.nInterpolated = numel(report.channels.interpolatedNames);
     end
 end
@@ -156,10 +158,8 @@ function files = listImages(outputDir, prefix)
 files = {};
 for pat = {'_QC_*.png', '_Plot_*.png', '_Debug_*.png'}
     d = dir(fullfile(outputDir, [prefix pat{1}]));
-    for k = 1:numel(d)
-        if d(k).isdir; continue; end
-        files{end+1} = fullfile(d(k).folder, d(k).name); %#ok<AGROW>
-    end
+    d = d(~[d.isdir]);
+    files = [files, fullfile({d.folder}, {d.name})]; %#ok<AGROW>
 end
 files = sort(files);
 end
@@ -171,9 +171,6 @@ if isfield(s, name) && isnumeric(s.(name)) && isscalar(s.(name)) && isfinite(s.(
 end
 end
 
-function v = getfielddef(s, name, default)
-if isstruct(s) && isfield(s, name); v = s.(name); else, v = default; end
-end
 
 function c = asCellstr(v)
 if isempty(v); c = {}; elseif ischar(v); c = {v}; else, c = cellstr(v(:)'); end

@@ -20,7 +20,7 @@ function names = interactivePipelineSteps(spec, registry)
 %   The flag lives on the registry entry rather than in a name list here, so
 %   adding an interactive step cannot forget to update a second file.
 %
-%   See also: stepRegistry, runPipelineCore
+%   See also: canStepBlock, stepRegistry, runPipelineCore
 
 if nargin < 2 || isempty(registry)
     registry = stepRegistry();
@@ -35,8 +35,9 @@ for i = 1:numel(spec)
     k = find(strcmp({registry.name}, spec(i).name), 1);
     if isempty(k); continue; end
 
-    blocks = isfield(registry(k), 'interactive') && ...
-             ~isempty(registry(k).interactive) && registry(k).interactive;
+    % canStepBlock owns "could this ever block"; the conditional half below
+    % is what needs the params this function has and it does not.
+    [~, blocks] = canStepBlock(registry(k));
 
     % Some steps block only in certain modes - TESA compselect opens its
     % manual component review and waits only when compCheck is on. Check the

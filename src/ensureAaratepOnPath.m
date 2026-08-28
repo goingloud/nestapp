@@ -22,6 +22,10 @@ function ensureAaratepOnPath()
 % test using hideFromPath, a restoredefaultpath - would leave it true with the
 % functions gone, and every later AARATEP step in the session would then fail
 % with a bare "Undefined function". Verify a sentinel is still resolvable.
+% (addpath here is all-or-nothing, so one sentinel stands for the whole tree.)
+%
+% The persistent is not redundant with that check: `clear ensureAaratepOnPath`
+% is how tests force the FastICA resolution below to run again.
 persistent ready
 if ~isempty(ready) && ready && exist('c_TMSEEG_Preprocess_AARATEPPipeline', 'file') == 2
     return

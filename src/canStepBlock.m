@@ -24,8 +24,8 @@ function [tf, always] = canStepBlock(regEntry)
 %
 %   See also: interactivePipelineSteps, stepRegistry, populateStepsTree
 
-always = isfield(regEntry, 'interactive') && ~isempty(regEntry.interactive) ...
-         && isequal(regEntry.interactive, true);
+% isequal already rejects [] and 0, so no emptiness test is needed here.
+always = isfield(regEntry, 'interactive') && isequal(regEntry.interactive, true);
 conditional = isfield(regEntry, 'interactiveWhen') && ~isempty(regEntry.interactiveWhen);
 tf = always || conditional;
 end

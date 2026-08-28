@@ -102,6 +102,8 @@ if ~isempty(opts.progressQueue) && opts.fileIndex > 1 && opts.fileIndex <= opts.
     pause(0.25 * (opts.fileIndex - 1));
 end
 
+% Files that may be removed once this file completes - see the AARATEP case.
+pendingDeletes = {};
 stepLog = struct('step',{},'duration_s',{},'chanBefore',{},'chanAfter',{}, ...
                  'epochBefore',{},'epochAfter',{},'error',{});
 fileReport = initPipelineReport(fullPath);
@@ -351,10 +353,18 @@ for si = 1:nSteps
                 % .set, so the result exists once, in nestapp's own format.
                 hOpts                   = struct();
                 hOpts.keepIntermediates = opts.aaratepKeepIntermediates;
-                hOpts.dropFinalMat      = savesNewSetLater(spec, si);
                 hOpts.channelLabels     = channelLabelsOf(EEG);
                 [fileReport, hInfo] = aaratepHarvest( ...
                     fileReport, o.outputDir, o.outputFilePrefix, hOpts);
+                % Its final .mat and Save New Set's .set hold the same
+                % dataset, so only one should survive - but the .set does not
+                % exist yet. Deleting here would act on a prediction: a failing
+                % Quality Gate or a throwing step between here and the save
+                % would leave the result on disk nowhere at all. Queue it and
+                % delete once the file has actually come through.
+                if ~isempty(hInfo.droppableFinalMat) && savesNewSetLater(spec, si)
+                    pendingDeletes{end+1} = hInfo.droppableFinalMat; %#ok<AGROW>
+                end
                 mdTxt = 'NOT FOUND';
                 if hInfo.mdFound; mdTxt = 'read'; end
                 sendWorkerLog(opts.logQueue, wLabel, ...
@@ -1694,6 +1704,18 @@ for si = 1:nSteps
     end
 end % step loop
 
+%% Redundant copies, now that the file has come through
+% Queued during the run and only acted on here: every step succeeded, so
+% whatever was going to replace these files has been written.
+for pd = 1:numel(pendingDeletes)
+    try
+        delete(pendingDeletes{pd});
+        sendWorkerLog(opts.logQueue, wLabel, 'Removed redundant %s', pendingDeletes{pd});
+    catch
+        % A locked file costs disk, not results.
+    end
+end
+
 %% Write pipeline provenance to EEG.history
 if isstruct(EEG) && isfield(EEG, 'history')
     EEG.history = [EEG.history, newline, buildHistoryEntry(spec, opts.pipelineName)];
@@ -1862,10 +1884,7 @@ function tf = savesNewSetLater(spec, si)
 % True when a Save New Set step follows position si. AARATEP's final .mat and
 % that step's .set hold the same dataset, so exactly one of them should
 % survive - and only this tells us the .set is actually coming.
-tf = false;
-for k = si+1:numel(spec)
-    if strcmp(spec(k).name, 'Save New Set'); tf = true; return; end
-end
+tf = any(strcmp({spec(si+1:end).name}, 'Save New Set'));
 end
 
 function labels = channelLabelsOf(EEG)

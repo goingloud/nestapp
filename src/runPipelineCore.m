@@ -123,6 +123,20 @@ aaratepKeepIntermediates = getpref('nestapp', 'aaratepKeepIntermediates', true);
 if ~aaratepKeepIntermediates
     nestLog('CFG', 'aaratepKeepIntermediates = false (AARATEP _pre*.mat deleted after each file)');
 end
+
+% One bundle of the per-run settings every worker needs, assembled where they
+% are read. Passing it whole keeps adding a setting to a single edit, rather
+% than a positional argument threaded through a signature, three call sites
+% and a retry unpack.
+qcCtx = struct( ...
+    'batchCtx',                 batchCtx, ...
+    'autoQualityReport',        autoQualityReport, ...
+    'qcAttribute',              qcAttribute, ...
+    'qcTmsWindow',              qcTmsWindow, ...
+    'skipOnQualityFail',        skipOnQualityFail, ...
+    'qcTmsAutoDetect',          qcTmsAutoDetect, ...
+    'autoExportPDF',            autoExportPDF, ...
+    'aaratepKeepIntermediates', aaratepKeepIntermediates);
 if autoExportPDF
     nestLog('QC', 'autoExportPDF = true (one PDF per file alongside the .mat report)');
 end
@@ -247,7 +261,7 @@ if useParallel
     wOpts.progressQueue  = q;              % per-step progress + file-done sentinel
     wOpts.logQueue       = q;              % log msgs share the same queue
     wOpts.nWorkers       = pool.NumWorkers; % actual count for BLAS thread cap
-    wOpts = applyQCOpts(wOpts, batchCtx, autoQualityReport, qcAttribute, qcTmsWindow, skipOnQualityFail, qcTmsAutoDetect, autoExportPDF, aaratepKeepIntermediates);
+    wOpts = applyQCOpts(wOpts, qcCtx);
 
     nestLog('PAR', 'Submitting %d futures...', nFiles);
     for fi = 1:nFiles
@@ -331,7 +345,7 @@ else
         fOpts.onPickChanFile = @() pickChanFile(opts.uiFigure);
         fOpts.progressQueue  = [];   % serial uses progressFcn, not DataQueue
         fOpts.fileIndex      = fi;
-        fOpts = applyQCOpts(fOpts, batchCtx, autoQualityReport, qcAttribute, qcTmsWindow, skipOnQualityFail, qcTmsAutoDetect, autoExportPDF, aaratepKeepIntermediates);
+        fOpts = applyQCOpts(fOpts, qcCtx);
 
         try
             [reports{fi}, ~] = processOneFile(spec, filePaths{fi}, fOpts);
@@ -371,16 +385,9 @@ nestLog('CFG', 'Batch artifacts saved to: %s', batchCtx.batchRoot);
 if ~cancelled && ~isempty(failed)
     nSuccess = sum(~cellfun(@isempty, reports));
     if nSuccess > 0
-        runCtx = struct( ...
-            'nSteps',            nSteps, ...
-            'batchCtx',          batchCtx, ...
-            'autoQualityReport', autoQualityReport, ...
-            'qcAttribute',       qcAttribute, ...
-            'qcTmsWindow',       qcTmsWindow, ...
-            'skipOnQualityFail', skipOnQualityFail, ...
-            'qcTmsAutoDetect',   qcTmsAutoDetect, ...
-            'autoExportPDF',     autoExportPDF, ...
-            'aaratepKeepIntermediates', aaratepKeepIntermediates);
+        % batchCtx is also read directly (clearFileArtifacts), so it stays a
+        % field of its own rather than only living inside qc.
+        runCtx = struct('nSteps', nSteps, 'batchCtx', batchCtx, 'qc', qcCtx);
         while ~isempty(failed)
             decision = promptFailureRecovery(opts.uiFigure, failed, nFiles);
             if strcmp(decision, 'Abandon Run')
@@ -697,17 +704,13 @@ switch verdict
 end
 end
 
-function opts = applyQCOpts(opts, batchCtx, autoQualityReport, attribute, tmsWindow, ...
-        skipOnQualityFail, tmsAutoDetect, autoExportPDF, aaratepKeepIntermediates)
-% Assign the QC opts onto a worker/serial options struct.
-opts.batchCtx          = batchCtx;
-opts.autoQualityReport = autoQualityReport;
-opts.qcAttribute       = attribute;
-opts.qcTmsWindow       = tmsWindow;
-opts.skipOnQualityFail = skipOnQualityFail;
-opts.qcTmsAutoDetect   = tmsAutoDetect;
-opts.autoExportPDF     = autoExportPDF;
-opts.aaratepKeepIntermediates = aaratepKeepIntermediates;
+function opts = applyQCOpts(opts, qcCtx)
+% Copy the per-run settings onto a worker/serial options struct. Field-driven,
+% so a new setting is one line in the bundle and nothing here.
+names = fieldnames(qcCtx);
+for k = 1:numel(names)
+    opts.(names{k}) = qcCtx.(names{k});
+end
 end
 
 function parallelSkipMsg(statusBar, msg)
@@ -896,10 +899,7 @@ for j = 1:nRetry
     fOpts.onPickChanFile = @() pickChanFile(opts.uiFigure);
     fOpts.progressQueue  = [];
     fOpts.fileIndex      = j;
-    fOpts = applyQCOpts(fOpts, runCtx.batchCtx, runCtx.autoQualityReport, ...
-        runCtx.qcAttribute, runCtx.qcTmsWindow, runCtx.skipOnQualityFail, ...
-        runCtx.qcTmsAutoDetect, runCtx.autoExportPDF, ...
-        runCtx.aaratepKeepIntermediates);
+    fOpts = applyQCOpts(fOpts, runCtx.qc);
 
     try
         [reports{fi}, ~] = processOneFile(spec, filePaths{fi}, fOpts);
