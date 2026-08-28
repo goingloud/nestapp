@@ -214,6 +214,15 @@ classdef nestapp < matlab.apps.AppBase
         ExploreRoiSummaryLabel          matlab.ui.control.Label
         ExploreWindowsLabel             matlab.ui.control.Label
         ExploreWindowsTable             matlab.ui.control.Table
+        ExploreFilesButton              matlab.ui.control.Button
+        ExploreDesignLabel              matlab.ui.control.Label
+        ExploreDesignGroup              matlab.ui.container.ButtonGroup
+        ExploreUnpairedButton           matlab.ui.control.RadioButton
+        ExplorePairedButton             matlab.ui.control.RadioButton
+        ExploreDesignNoteLabel          matlab.ui.control.Label
+        ExploreWindowsModeDropDown      matlab.ui.control.DropDown
+        ExploreWindowsAddButton         matlab.ui.control.Button
+        ExploreWindowsRemoveButton      matlab.ui.control.Button
         ExploreWindowsResetButton       matlab.ui.control.Button
         ExplorePlotLabel                matlab.ui.control.Label
         ExplorePlotDropDown             matlab.ui.control.DropDown
@@ -2152,6 +2161,7 @@ classdef nestapp < matlab.apps.AppBase
             refreshExploreWindows(app);
             refreshExplorePlots(app);
             refreshExploreGroups(app);
+            refreshExploreDesign(app);
         end
 
         function refreshExplorePlots(app)
@@ -2233,6 +2243,7 @@ classdef nestapp < matlab.apps.AppBase
             app.ExploreGroupsListBox.ItemsData = data;
             app.ExploreRemoveGroupButton.Enable = onOffState(~isempty(data));
             hasData = ~isempty(data);
+            app.ExploreFilesButton.Enable   = onOffState(~isempty(app.exploreEntries));
             app.ExploreFigureButton.Enable  = onOffState(hasData);
             app.ExploreCsvButton.Enable     = onOffState(hasData);
             app.ExploreResultsButton.Enable = onOffState(hasData);
@@ -2269,12 +2280,115 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         function refreshExploreWindows(app)
+        % Two views of one list in the same space. The Analysis tab showed
+        % bounds AND measures in six columns; the rail is 197 px wide, so it
+        % switches rather than dropping the measures as the first version did.
             w = app.exploreWindows;
-            data = cell(numel(w), 3);
+            if strcmp(app.ExploreWindowsModeDropDown.Value, 'results')
+                showExploreWindowResults(app, w);
+            else
+                app.ExploreWindowsTable.ColumnName     = {'Name'; 'T1'; 'T2'};
+                app.ExploreWindowsTable.ColumnWidth    = {70, 55, 55};
+                app.ExploreWindowsTable.ColumnEditable = [true true true];
+                data = cell(numel(w), 3);
+                for i = 1:numel(w)
+                    data(i, :) = {w(i).name, w(i).winStart, w(i).winEnd};
+                end
+                app.ExploreWindowsTable.Data = data;
+            end
+        end
+
+        function showExploreWindowResults(app, w)
+        % Measures for the group SELECTED in the groups list - with n groups
+        % there is no single "the mean", so the table names whose it is.
+            app.ExploreWindowsTable.ColumnName     = {'Win'; 'Mean'; 'Peak ms'; 'Peak uV'};
+            app.ExploreWindowsTable.ColumnWidth    = {50, 48, 48, 48};
+            app.ExploreWindowsTable.ColumnEditable = [false false false false];
+
+            [curve, gname] = exploreSelectedCurve(app);
+            if isempty(curve)
+                app.ExploreWindowsTable.Data = ...
+                    [{w.name}', repmat({'-'}, numel(w), 3)];
+                app.ExploreWindowsLabel.Text = 'WINDOWS';
+                return
+            end
+            app.ExploreWindowsLabel.Text = sprintf('WINDOWS: %s', gname);
+
+            % Same functions the Analysis tab used, so the numbers agree with
+            % what that tab reported for the same curve.
+            peaks   = [];
+            haveTesa = false;
+            if strcmpi(currentMode(app), 'TEP')
+                try
+                    % evalc: TESA prints a line per component per call, and this
+                    % runs on every window edit and group selection - six lines
+                    % of chatter each time would bury the app's own logging.
+                    evalc('peaks = tepPeakFinder(curve, app.exploreRes.time, w);');
+                    haveTesa = ~isempty(peaks);
+                catch
+                    peaks = [];   % TESA absent
+                end
+            end
+
+            data = cell(numel(w), 4);
             for i = 1:numel(w)
-                data(i, :) = {w(i).name, w(i).winStart, w(i).winEnd};
+                m = computeWindowMeasures(curve, app.exploreRes.time, ...
+                        w(i).winStart, w(i).winEnd, windowPolarity(w(i)));
+                data{i, 1} = w(i).name;
+                data{i, 2} = num2str(m.mean, '%.2f');
+                % tepPeakFinder reports latencyMs/amplitudeUV with a `found`
+                % flag; computeWindowMeasures reports peakLatency/peakAmp.
+                % Prefer TESA's detection so the table agrees with the overlay,
+                % and show '-' rather than a number where no peak was found,
+                % which is what the Analysis tab did.
+                if haveTesa && i <= numel(peaks)
+                    % When TESA ran, its verdict stands - including "no peak
+                    % here", shown as '-' rather than quietly substituting the
+                    % window extremum. That is what the Analysis tab did, and a
+                    % number where there is no peak is worse than a dash.
+                    if peaks(i).found
+                        data{i, 3} = num2str(peaks(i).latencyMs, '%.0f');
+                        data{i, 4} = num2str(peaks(i).amplitudeUV, '%.2f');
+                    else
+                        data{i, 3} = '-';
+                        data{i, 4} = '-';
+                    end
+                elseif m.found
+                    data{i, 3} = num2str(m.peakLatency, '%.0f');
+                    data{i, 4} = num2str(m.peakAmp, '%.2f');
+                else
+                    data{i, 3} = '-';
+                    data{i, 4} = '-';
+                end
             end
             app.ExploreWindowsTable.Data = data;
+        end
+
+        function [curve, gname] = exploreSelectedCurve(app)
+        % The group mean curve for whichever group is selected in the rail,
+        % falling back to the first group when nothing is selected.
+            curve = []; gname = '';
+            if isempty(app.exploreRes) || isempty(app.exploreRes.groups); return; end
+            names = {app.exploreRes.groups.name};
+            k = find(strcmp(names, selectedExploreGroup(app)), 1);
+            if isempty(k); k = 1; end
+            curve = app.exploreRes.est(k).mean;
+            gname = names{k};
+        end
+
+        function name = selectedExploreGroup(app)
+        % '' when nothing is selected. A listbox with ItemsData and no selection
+        % returns {}, and strcmp(cellArray, {}) is a size-mismatch error rather
+        % than a miss - so every read of the selection goes through here.
+            name = '';
+            v = app.ExploreGroupsListBox.Value;
+            if ischar(v)
+                name = v;
+            elseif iscell(v) && ~isempty(v) && ischar(v{1})
+                name = v{1};
+            elseif isstring(v) && isscalar(v)
+                name = char(v);
+            end
         end
 
         function recomputeExplore(app)
@@ -2285,9 +2399,15 @@ classdef nestapp < matlab.apps.AppBase
             app.exploreRes = struct([]);
             if isempty(exploreGroupNames(app))
                 refreshExploreGroups(app);
+                refreshExploreDesign(app);
+                refreshExploreWindows(app);
                 renderExplorePlot(app);
                 return
             end
+            % Before reading the design: paired may have become undefined as
+            % groups changed, in which case this flips the control back to
+            % unpaired. Reading first would use a design the data cannot support.
+            refreshExploreDesign(app);
             % Availability depends on the group count, so the catalogue has to
             % be re-evaluated whenever the group set changes - otherwise every
             % plot stays marked with the count it had when the tab was built and
@@ -2305,19 +2425,63 @@ classdef nestapp < matlab.apps.AppBase
                 app.exploreRes = struct([]);
             end
             refreshExploreGroups(app);
+            refreshExploreWindows(app);
             renderExplorePlot(app);
         end
 
         function d = exploreDesign(app)
-        % Paired when every group holds the same subjects, unpaired otherwise.
-        % Inferred rather than asked: the answer is already in the data, and a
-        % control for it is a control the user can set wrongly.
-            d = 'unpaired';
-            [~, overall] = datasetSummary(app.exploreEntries);
-            names = exploreGroupNames(app);
-            if numel(names) >= 2 && overall.nComplete == overall.nSubjects ...
-                    && overall.nComplete > 0
+        % Read from the control. This used to be inferred from subject ids -
+        % which are a guess - so a naming coincidence could switch the design to
+        % paired and narrow every confidence interval without saying so. The
+        % default is unpaired because it is the conservative interval.
+            if app.ExplorePairedButton.Value && strcmp(app.ExplorePairedButton.Enable, 'on')
                 d = 'paired';
+            else
+                d = 'unpaired';
+            end
+        end
+
+        function refreshExploreDesign(app)
+        % Offer paired only when it is defined - every group holding the same
+        % subjects - and say how many complete sets there are either way.
+            [~, overall] = datasetSummary(app.exploreEntries);
+            names   = exploreGroupNames(app);
+            canPair = numel(names) >= 2 && overall.nComplete > 0 && ...
+                      overall.nComplete == overall.nSubjects;
+
+            app.ExplorePairedButton.Enable = onOffState(canPair);
+            if ~canPair && app.ExplorePairedButton.Value
+                app.ExploreUnpairedButton.Value = true;   % never leave it on a
+            end                                           % design that is undefined
+
+            if numel(names) < 2
+                app.ExploreDesignNoteLabel.Text = 'paired needs two or more groups';
+            elseif canPair
+                app.ExploreDesignNoteLabel.Text = sprintf( ...
+                    'paired available: %d complete set%s', ...
+                    overall.nComplete, plural(overall.nComplete));
+            elseif overall.nComplete > 0
+                app.ExploreDesignNoteLabel.Text = sprintf( ...
+                    'only %d of %d subjects are in every group', ...
+                    overall.nComplete, overall.nSubjects);
+            else
+                app.ExploreDesignNoteLabel.Text = 'no subject is in every group';
+            end
+        end
+
+        function ExploreDesignChanged(app, ~)
+            recomputeExplore(app);
+        end
+
+        function mode = currentMode(app)
+        % The curve mode the selected plot reduces with. Read from the registry
+        % entry rather than kept as separate state - the mode IS a property of
+        % the chosen plot, which is why the old Plot Type radios became registry
+        % entries.
+            mode  = 'TEP';
+            entry = currentPlotEntry(app);
+            if ~isempty(entry) && ~isempty(entry.mode)
+                mode = entry.mode;
             end
         end
 
@@ -2480,7 +2644,7 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         function ExploreRemoveGroupButtonPushed(app, ~)
-            name = app.ExploreGroupsListBox.Value;
+            name = selectedExploreGroup(app);
             if isempty(name); return; end
             drop = strcmp({app.exploreEntries.group}, name);
             gone = {app.exploreEntries(drop).path};
@@ -2490,6 +2654,46 @@ classdef nestapp < matlab.apps.AppBase
             app.exploreCache = app.exploreCache(keepCache);
             refreshExplorePlots(app);
             recomputeExplore(app);
+        end
+
+        function ExploreFilesButtonPushed(app, ~)
+        % The whole subject story is settled here: what n is, and why.
+            edited = exploreFilesTable(app.exploreEntries, ...
+                struct('parent', app.UIFigure));
+            if isempty(edited); return; end     % cancelled
+            app.exploreEntries = edited;
+            refreshExplorePlots(app);
+            recomputeExplore(app);
+        end
+
+        function ExploreGroupsListBoxValueChanged(app, ~)
+        % Selecting a group changes whose numbers the windows table shows.
+            if strcmp(app.ExploreWindowsModeDropDown.Value, 'results')
+                refreshExploreWindows(app);
+            end
+        end
+
+        function ExploreWindowsModeChanged(app, ~)
+            refreshExploreWindows(app);
+        end
+
+        function ExploreWindowsAddButtonPushed(app, ~)
+            n = numel(app.exploreWindows);
+            app.exploreWindows(n + 1) = struct('name', sprintf('W%d', n + 1), ...
+                'polarity', 'pos', 'nomLatency', 100, 'winStart', 100, 'winEnd', 150);
+            app.ExploreWindowsModeDropDown.Value = 'define';
+            refreshExploreWindows(app);
+            renderExplorePlot(app);
+        end
+
+        function ExploreWindowsRemoveButtonPushed(app, ~)
+            sel = app.ExploreWindowsTable.Selection;
+            if isempty(sel) || isempty(app.exploreWindows); return; end
+            r = sel(1, 1);
+            if r < 1 || r > numel(app.exploreWindows); return; end
+            app.exploreWindows(r) = [];
+            refreshExploreWindows(app);
+            renderExplorePlot(app);
         end
 
         function ExploreRoiEditButtonPushed(app, ~)

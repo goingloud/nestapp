@@ -53,7 +53,10 @@ end
 
 function [res, entries] = runFlow(design)
 [paths, map] = cohort();
-entries = exploreDataset(paths, {'_pre_', 'pre'; '_post_', 'post'});
+% Two people, two sessions each - the scenario subject collapsing exists for,
+% so this fixture asks for it explicitly. The default no longer guesses.
+entries = exploreDataset(paths, {'_pre_', 'pre'; '_post_', 'post'}, ...
+                         struct('subjectMode', 'guess'));
 cache   = loadReducedSets(paths, struct('loadFcn', @(p) map(p)));
 res     = groupCurves(cache, entries, struct( ...
     'roi', {{'AF3', 'F3', 'FC3'}}, 'mode', 'TEP', ...
@@ -68,20 +71,39 @@ end
 % ── exploreDataset ────────────────────────────────────────────────────────
 
 function test_filterRulesBuildTheGroups(testCase)
+% Grouping is the user's, and is unaffected by how subjects are decided.
 [paths, ~] = cohort();
 [entries, summary] = exploreDataset(paths, {'_pre_', 'pre'; '_post_', 'post'});
 testCase.verifyEqual({entries.group}, {'pre', 'post', 'pre', 'post'});
 testCase.verifyEqual(summary.nGroups, 2);
+end
+
+function test_subjectDefaultsToOnePerFile(testCase)
+% The default must not guess. n is the number of files, whatever that is,
+% because a silent collapse changes n for every interval.
+[paths, ~] = cohort();
+[entries, summary] = exploreDataset(paths, {'_pre_', 'pre'; '_post_', 'post'});
+testCase.verifyEqual(numel(unique({entries.subject})), 4, ...
+    'four files, four subjects, until someone says otherwise');
+testCase.verifyEqual(summary.nSubjects, 4);
+end
+
+function test_guessModeCollapsesRepeatRecordings(testCase)
+% Opt in, and the two sessions per person merge - which is the whole point of
+% the mode, and why it is not the default.
+[paths, ~] = cohort();
+[entries, summary] = exploreDataset(paths, {'_pre_', 'pre'; '_post_', 'post'}, ...
+                                    struct('subjectMode', 'guess'));
+testCase.verifyEqual(unique({entries.subject}), {'rtmsct001', 'rtmsct003'});
 testCase.verifyEqual(summary.nSubjects, 2, 'four files, two people');
 testCase.verifyEqual(summary.nComplete, 2, 'both have a pre and a post');
 end
 
-function test_subjectsAreInferredFromTheRealNamingShape(testCase)
-[paths, ~] = cohort();
-entries = exploreDataset(paths, {});
-testCase.verifyEqual(unique({entries.subject}), {'rtmsct001', 'rtmsct003'});
-testCase.verifyTrue(all([entries.subjectConfident]), ...
-    'letters-and-digits ids are trustworthy and reported as such');
+function test_onePerFileKeepsCollidingBasenamesDistinct(testCase)
+% Two pipeline runs produce the same basename; merging them would be a silent
+% subject collapse by another route.
+e = exploreDataset({'C:/a/run1/x.set', 'C:/a/run2/x.set'}, {});
+testCase.verifyEqual(numel(unique({e.subject})), 2);
 end
 
 function test_theFirstMatchingRuleWins(testCase)

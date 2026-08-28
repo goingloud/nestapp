@@ -1340,48 +1340,92 @@ function createComponents(app)
             % -- groups --------------------------------------------------
             app.ExploreGroupsLabel = uilabel(app.ExploreTab, ...
                 'Text', 'GROUPS', 'FontWeight', 'bold', 'FontSize', 10, ...
-                'Position', [RAIL_X 470 RAIL_W 18]);
+                'Position', [RAIL_X 472 RAIL_W 18]);
 
             app.ExploreGroupsListBox = uilistbox(app.ExploreTab);
             app.ExploreGroupsListBox.Items = {};
             app.ExploreGroupsListBox.ItemsData = {};
-            app.ExploreGroupsListBox.Position = [RAIL_X 362 RAIL_W 104];
-            app.ExploreGroupsListBox.Tooltip = {'Each group is a set of recordings compared as one condition. n counts SUBJECTS, not files.'};
+            app.ExploreGroupsListBox.ValueChangedFcn = createCallbackFcn(app, @ExploreGroupsListBoxValueChanged, true);
+            app.ExploreGroupsListBox.Position = [RAIL_X 404 RAIL_W 66];
+            app.ExploreGroupsListBox.Tooltip = {'Each group is a set of recordings compared as one condition. n counts SUBJECTS - see Files... for which file belongs to whom.'};
 
             app.ExploreAddGroupButton = uibutton(app.ExploreTab, 'push');
-            app.ExploreAddGroupButton.Text = 'Add group...';
             app.ExploreAddGroupButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreAddGroupButtonPushed, true);
-            app.ExploreAddGroupButton.Position = [RAIL_X 332 96 26];
+            app.ExploreAddGroupButton.Text = 'Add group...';
+            app.ExploreAddGroupButton.Position = [RAIL_X 374 96 26];
 
             app.ExploreRemoveGroupButton = uibutton(app.ExploreTab, 'push');
-            app.ExploreRemoveGroupButton.Text = 'Remove';
             app.ExploreRemoveGroupButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreRemoveGroupButtonPushed, true);
             app.ExploreRemoveGroupButton.Enable = 'off';
-            app.ExploreRemoveGroupButton.Position = [RAIL_X + 101 332 96 26];
+            app.ExploreRemoveGroupButton.Text = 'Remove';
+            app.ExploreRemoveGroupButton.Position = [RAIL_X + 101 374 96 26];
+
+            app.ExploreFilesButton = uibutton(app.ExploreTab, 'push');
+            app.ExploreFilesButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreFilesButtonPushed, true);
+            app.ExploreFilesButton.Enable = 'off';
+            app.ExploreFilesButton.Text = 'Files, subjects, groups...';
+            app.ExploreFilesButton.Position = [RAIL_X 344 RAIL_W 26];
+            app.ExploreFilesButton.Tooltip = {'See and correct which file belongs to which subject and group. This is where n comes from.'};
+
+            % -- design --------------------------------------------------
+            % An explicit control, not an inference. It used to be derived from
+            % guessed subject ids, so a naming coincidence could switch to
+            % paired and narrow every interval without saying so.
+            app.ExploreDesignLabel = uilabel(app.ExploreTab, ...
+                'Text', 'DESIGN', 'FontWeight', 'bold', 'FontSize', 10, ...
+                'Position', [RAIL_X 320 RAIL_W 18]);
+
+            app.ExploreDesignGroup = uibuttongroup(app.ExploreTab);
+            app.ExploreDesignGroup.AutoResizeChildren = 'off';
+            app.ExploreDesignGroup.BorderType = 'none';
+            app.ExploreDesignGroup.SelectionChangedFcn = createCallbackFcn(app, @ExploreDesignChanged, true);
+            app.ExploreDesignGroup.Position = [RAIL_X 294 RAIL_W 24];
+
+            app.ExploreUnpairedButton = uiradiobutton(app.ExploreDesignGroup);
+            app.ExploreUnpairedButton.Text = 'unpaired';
+            app.ExploreUnpairedButton.Position = [0 1 78 22];
+            app.ExploreUnpairedButton.Value = true;
+
+            app.ExplorePairedButton = uiradiobutton(app.ExploreDesignGroup);
+            app.ExplorePairedButton.Text = 'paired';
+            app.ExplorePairedButton.Position = [86 1 78 22];
+            app.ExplorePairedButton.Enable = 'off';
+
+            app.ExploreDesignNoteLabel = uilabel(app.ExploreTab, ...
+                'Position', [RAIL_X 274 RAIL_W 18], 'FontSize', 11, ...
+                'FontColor', [0.35 0.38 0.43]);
 
             % -- region of interest --------------------------------------
             app.ExploreRoiLabel = uilabel(app.ExploreTab, ...
                 'Text', 'REGION OF INTEREST', 'FontWeight', 'bold', ...
-                'FontSize', 10, 'Position', [RAIL_X 300 RAIL_W 18]);
+                'FontSize', 10, 'Position', [RAIL_X 250 RAIL_W 18]);
 
             app.ExploreRoiDropDown = uidropdown(app.ExploreTab);
             app.ExploreRoiDropDown.Items = {};
             app.ExploreRoiDropDown.ValueChangedFcn = createCallbackFcn(app, @ExploreRoiDropDownValueChanged, true);
-            app.ExploreRoiDropDown.Position = [RAIL_X 274 RAIL_W 24];
+            app.ExploreRoiDropDown.Position = [RAIL_X 224 RAIL_W 24];
 
             app.ExploreRoiEditButton = uibutton(app.ExploreTab, 'push');
             app.ExploreRoiEditButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreRoiEditButtonPushed, true);
             app.ExploreRoiEditButton.Text = 'Edit electrodes...';
-            app.ExploreRoiEditButton.Position = [RAIL_X 246 RAIL_W 24];
+            app.ExploreRoiEditButton.Position = [RAIL_X 196 RAIL_W 24];
 
             app.ExploreRoiSummaryLabel = uilabel(app.ExploreTab, ...
-                'Position', [RAIL_X 222 RAIL_W 22], 'FontSize', 11, ...
+                'Position', [RAIL_X 174 RAIL_W 20], 'FontSize', 11, ...
                 'FontColor', [0.35 0.38 0.43]);
 
             % -- windows of interest -------------------------------------
             app.ExploreWindowsLabel = uilabel(app.ExploreTab, ...
-                'Text', 'WINDOWS OF INTEREST', 'FontWeight', 'bold', ...
-                'FontSize', 10, 'Position', [RAIL_X 196 RAIL_W 18]);
+                'Text', 'WINDOWS', 'FontWeight', 'bold', ...
+                'FontSize', 10, 'Position', [RAIL_X 150 70 18]);
+
+            % Define or measure, in the same space. The Analysis tab showed the
+            % window bounds AND their measures in one table; the rail is too
+            % narrow for six columns, so it switches instead of dropping three.
+            app.ExploreWindowsModeDropDown = uidropdown(app.ExploreTab);
+            app.ExploreWindowsModeDropDown.Items = {'define', 'results'};
+            app.ExploreWindowsModeDropDown.ValueChangedFcn = createCallbackFcn(app, @ExploreWindowsModeChanged, true);
+            app.ExploreWindowsModeDropDown.Position = [RAIL_X + 89 148 108 22];
 
             app.ExploreWindowsTable = uitable(app.ExploreTab);
             app.ExploreWindowsTable.ColumnName = {'Name'; 'T1'; 'T2'};
@@ -1389,13 +1433,22 @@ function createComponents(app)
             app.ExploreWindowsTable.ColumnEditable = [true true true];
             app.ExploreWindowsTable.CellEditCallback = createCallbackFcn(app, @ExploreWindowsTableCellEdit, true);
             app.ExploreWindowsTable.RowName = {};
-            app.ExploreWindowsTable.Position = [RAIL_X 62 RAIL_W 132];
-            app.ExploreWindowsTable.Tooltip = {'Edited here, beside the plot they describe. The same windows place the TEP-topo maps and drive the exported measures.'};
+            app.ExploreWindowsTable.Position = [RAIL_X 42 RAIL_W 104];
+
+            app.ExploreWindowsAddButton = uibutton(app.ExploreTab, 'push');
+            app.ExploreWindowsAddButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreWindowsAddButtonPushed, true);
+            app.ExploreWindowsAddButton.Text = 'Add';
+            app.ExploreWindowsAddButton.Position = [RAIL_X 14 60 24];
+
+            app.ExploreWindowsRemoveButton = uibutton(app.ExploreTab, 'push');
+            app.ExploreWindowsRemoveButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreWindowsRemoveButtonPushed, true);
+            app.ExploreWindowsRemoveButton.Text = 'Remove';
+            app.ExploreWindowsRemoveButton.Position = [RAIL_X + 65 14 66 24];
 
             app.ExploreWindowsResetButton = uibutton(app.ExploreTab, 'push');
             app.ExploreWindowsResetButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreWindowsResetButtonPushed, true);
-            app.ExploreWindowsResetButton.Text = 'Reset windows';
-            app.ExploreWindowsResetButton.Position = [RAIL_X 34 RAIL_W 24];
+            app.ExploreWindowsResetButton.Text = 'Reset';
+            app.ExploreWindowsResetButton.Position = [RAIL_X + 136 14 61 24];
 
             % -- plot picker ---------------------------------------------
             app.ExplorePlotLabel = uilabel(app.ExploreTab, ...
