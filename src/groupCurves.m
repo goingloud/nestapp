@@ -67,7 +67,7 @@ if isempty(use); return; end
 % ── one montage, then one time base for the files that carry it ──────────
 % Montage first: files on a different cap are excluded outright, so they must
 % not get a say in the time base either.
-[res.channelLabels, conforms, chanIdx, montage] = modalMontage(use);
+[res.channelLabels, conforms, chanIdx, montage] = modalMontage(cache, use);
 use     = use(conforms);
 chanIdx = chanIdx(conforms);
 if isempty(res.channelLabels)
@@ -75,9 +75,9 @@ if isempty(res.channelLabels)
         'The selected files have no channel labels, so they cannot be compared.');
 end
 
-[res.time, timeIdx, res.info] = commonTimeBase({use.time}, {use.label});
+[res.time, timeIdx, res.info] = commonTimeBase({cache([use.ci]).time}, {use.label});
 res.info.montage = montage;
-res.chanlocs = use(1).chanlocs(chanIdx{1});
+res.chanlocs = cache(use(1).ci).chanlocs(chanIdx{1});
 
 % ── per file: crop to the common montage and time base, then reduce ──────
 roiIdx = roiChannelIndex(res.channelLabels, opts.roi);
@@ -89,7 +89,7 @@ if isempty(roiIdx) && ~strcmpi(opts.mode, 'GMFP')
 end
 
 for i = 1:numel(use)
-    avg           = use(i).trialAvg(chanIdx{i}, timeIdx{i});
+    avg            = cache(use(i).ci).trialAvg(chanIdx{i}, timeIdx{i});
     use(i).chanAvg = avg;
     % tepFieldCurve takes channels x time x trials; a 2-D trial average is the
     % degenerate case its mean(...,3) leaves untouched, so the one definition of
@@ -134,39 +134,47 @@ end
 % ── helpers ─────────────────────────────────────────────────────────────────
 
 function opts = withDefaults(opts)
-d = struct('roi', {{}}, 'mode', 'TEP', 'design', 'unpaired', ...
-           'smoothWin', 5, 'level', 0.95);
-f = fieldnames(d);
-for k = 1:numel(f)
-    if ~isfield(opts, f{k}) || isempty(opts.(f{k}))
-        opts.(f{k}) = d.(f{k});
-    end
-end
+opts = fillDefaults(opts, struct('roi', {{}}, 'mode', 'TEP', ...
+    'design', 'unpaired', 'smoothWin', 5, 'level', 0.95));
 end
 
 function use = usableEntries(cache, entries)
 % Join entries to their cached data, keeping only grouped files that loaded.
-use = struct('path', {}, 'subject', {}, 'group', {}, 'label', {}, ...
-             'trialAvg', {}, 'labels', {}, 'chanlocs', {}, 'time', {}, ...
+%
+% Holds a cache INDEX, not the cached arrays. Copying trialAvg in here put a
+% 63x2000 double - about 1 MB - into a struct array that grows once per file
+% and is then filtered again by montage, so those arrays were duplicated twice
+% per re-render for no gain. The cache already owns them and outlives this
+% call, so an index is enough.
+use = struct('ci', {}, 'subject', {}, 'group', {}, 'label', {}, ...
              'nTrials', {}, 'chanAvg', {}, 'curve', {});
 if isempty(entries) || isempty(cache); return; end
 
 paths = {cache.path};
+ci    = zeros(1, numel(entries));
 for i = 1:numel(entries)
     if isempty(entries(i).group); continue; end
     k = find(strcmp(paths, entries(i).path), 1);
     if isempty(k) || ~cache(k).ok; continue; end
-    [~, nm, ex]      = fileparts(entries(i).path);
-    use(end+1) = struct( ...
-        'path', entries(i).path, 'subject', char(entries(i).subject), ...
-        'group', char(entries(i).group), 'label', [nm ex], ...
-        'trialAvg', cache(k).trialAvg, 'labels', {cache(k).labels}, ...
-        'chanlocs', cache(k).chanlocs, 'time', cache(k).time, ...
-        'nTrials', max(cache(k).nTrials, 1), 'chanAvg', [], 'curve', []); %#ok<AGROW>
+    ci(i) = k;
+end
+
+idxE = find(ci > 0);
+if isempty(idxE); return; end
+use = repmat(struct('ci', 0, 'subject', '', 'group', '', 'label', '', ...
+                    'nTrials', 1, 'chanAvg', [], 'curve', []), 1, numel(idxE));
+for j = 1:numel(idxE)
+    i = idxE(j);
+    [~, nm, ex]    = fileparts(entries(i).path);
+    use(j).ci      = ci(i);
+    use(j).subject = char(entries(i).subject);
+    use(j).group   = char(entries(i).group);
+    use(j).label   = [nm ex];
+    use(j).nTrials = max(cache(ci(i)).nTrials, 1);
 end
 end
 
-function [labels, conforms, idx, montage] = modalMontage(use)
+function [labels, conforms, idx, montage] = modalMontage(cache, use)
 % The montage carried by the most files, and which files carry it.
 %
 % Not an intersection across every file. On this cohort 32 files carry
@@ -183,17 +191,18 @@ function [labels, conforms, idx, montage] = modalMontage(use)
 %
 % Ties (two montages with equally many files) go to the one seen first, which
 % is stable for a given file order and reported either way.
-sigs = arrayfun(@(u) strjoin(sort(lower(u.labels)), ','), use, 'UniformOutput', false);
+labelSets = {cache([use.ci]).labels};
+sigs = cellfun(@(L) strjoin(sort(lower(L)), ','), labelSets, 'UniformOutput', false);
 [uniqSigs, ~, which] = unique(sigs, 'stable');
 
 counts = accumarray(which(:), 1);
 [~, winner] = max(counts);          % max takes the first on a tie
 conforms = (which(:)' == winner);
-labels   = use(find(conforms, 1)).labels;
+labels   = labelSets{find(conforms, 1)};
 
 idx = cell(1, numel(use));
 for i = find(conforms)
-    [~, idx{i}] = ismember(lower(labels), lower(use(i).labels));
+    [~, idx{i}] = ismember(lower(labels), lower(labelSets{i}));
 end
 
 montage = struct();
@@ -203,7 +212,7 @@ montage.excluded  = {use(~conforms).label};
 montage.variants = struct('nChannels', {}, 'nFiles', {}, 'files', {}, 'missing', {});
 for v = 1:numel(uniqSigs)
     inV = (which(:)' == v);
-    vLabels = use(find(inV, 1)).labels;
+    vLabels = labelSets{find(inV, 1)};
     montage.variants(v).nChannels = numel(vLabels);
     montage.variants(v).nFiles    = sum(inV);
     montage.variants(v).files     = {use(inV).label};

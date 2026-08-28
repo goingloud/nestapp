@@ -84,15 +84,10 @@ end
 % ── helpers ─────────────────────────────────────────────────────────────────
 
 function opts = withDefaults(opts, res)
-nG = numel(res.groups);
-d  = struct('mode', 'TEP', 'xlim', [-50 300], 'colors', groupColors(nG), ...
-            'showBand', true, 'legend', true);
-f = fieldnames(d);
-for k = 1:numel(f)
-    if ~isfield(opts, f{k}) || isempty(opts.(f{k}))
-        opts.(f{k}) = d.(f{k});
-    end
-end
+nG   = numel(res.groups);
+opts = fillDefaults(opts, struct('mode', 'TEP', 'xlim', [-50 300], ...
+    'colors', groupColors(nG), 'showBand', true, 'legend', true));
+% A caller may pass a palette sized for a different group count.
 if size(opts.colors, 1) < nG
     opts.colors = groupColors(nG);
 end

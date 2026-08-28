@@ -329,12 +329,7 @@ defs = struct( ...
     'maxEMGFractionWarnAt',     0, ...
     'maxElectrodeCountWarnAt',  0);
 
-fns = fieldnames(defs);
-for k = 1:numel(fns)
-    if ~isfield(p, fns{k}) || isempty(p.(fns{k}))
-        p.(fns{k}) = defs.(fns{k});
-    end
-end
+p = fillDefaults(p, defs);
 if ischar(p.gateLabel) || isstring(p.gateLabel)
     p.gateLabel = char(p.gateLabel);
 end

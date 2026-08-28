@@ -60,13 +60,8 @@ end
 % ── helpers ─────────────────────────────────────────────────────────────────
 
 function ctx = withDefaults(ctx)
-d = struct('nGroups', 0, 'hasWindows', false, 'hasChanlocs', false);
-f = fieldnames(d);
-for k = 1:numel(f)
-    if ~isfield(ctx, f{k}) || isempty(ctx.(f{k}))
-        ctx.(f{k}) = d.(f{k});
-    end
-end
+ctx = fillDefaults(ctx, ...
+    struct('nGroups', 0, 'hasWindows', false, 'hasChanlocs', false));
 end
 
 function [ok, reason] = groupsSatisfied(rule, n)

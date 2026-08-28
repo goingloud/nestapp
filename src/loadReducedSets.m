@@ -41,8 +41,7 @@ function [cache, warnings] = loadReducedSets(paths, opts)
 %   See also: groupCurves, tepFieldCurve, drawScalpTopo
 
 if nargin < 2; opts = struct(); end
-if ~isfield(opts, 'loadFcn')     || isempty(opts.loadFcn);     opts.loadFcn     = @defaultLoad; end
-if ~isfield(opts, 'progressFcn'); opts.progressFcn = []; end
+opts = fillDefaults(opts, struct('loadFcn', @defaultLoad, 'progressFcn', []));
 
 if ischar(paths) || isstring(paths); paths = cellstr(paths); end
 n        = numel(paths);

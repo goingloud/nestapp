@@ -7,9 +7,10 @@ function tests = test_groupCurves
 %   These two functions carry the corrections that motivated the redesign:
 %   trials are discarded at load (so a cohort costs MB, not GB, and re-rendering
 %   needs no I/O), files are averaged within subject before across subjects (so
-%   n is people), electrodes are intersected across all groups (so conditions
-%   are not compared over different montages), and paired designs are restricted
-%   to complete cases with the exclusions named.
+%   n is people), one modal montage is used and files on a different cap are
+%   excluded and named (so conditions are not compared over different
+%   montages, and the majority does not pay for the minority), and paired
+%   designs are restricted to complete cases with the exclusions named.
 %
 %   A synthetic loader is injected, so nothing here needs EEGLAB or real data.
 %
@@ -63,6 +64,15 @@ cache   = loadReducedSets(specs(:,1)', struct('loadFcn', loaderFor(map)));
 entries = struct('path', specs(:,1)', 'subject', specs(:,2)', 'group', specs(:,3)');
 end
 
+function [cache, entries] = knownValueCache()
+% One file, F3 = 1 uV and CZ = 5 uV flat across time, so any ROI mean has an
+% obvious expected value: F3 -> 1, CZ -> 5, both -> 3.
+map     = containers.Map({'a.set'}, {fakeEEG({'F3','CZ'}, 0:3, 10, 1)});
+cache   = loadReducedSets({'a.set'}, struct('loadFcn', loaderFor(map)));
+cache(1).trialAvg = [ones(1,4); 5*ones(1,4)];
+entries = struct('path', {'a.set'}, 'subject', {'s1'}, 'group', {'g'});
+end
+
 function o = optsTEP(varargin)
 o = struct('roi', {{'F3', 'FC3'}}, 'mode', 'TEP', 'smoothWin', 0);
 for k = 1:2:numel(varargin); o.(varargin{k}) = varargin{k+1}; end
@@ -83,7 +93,7 @@ end
 function test_aFailedFileIsReportedNotFatal(testCase)
 map = containers.Map({'good.set'}, {fakeEEG({'A'}, 0:3, 10, 1)});
 [cache, warns] = loadReducedSets({'good.set', 'missing.set'}, ...
-    struct('loadFcn', @(p) map(p)));
+    struct('loadFcn', loaderFor(map)));
 testCase.verifyTrue(cache(1).ok);
 testCase.verifyFalse(cache(2).ok);
 testCase.verifyNumElements(warns, 1);
@@ -173,11 +183,7 @@ end
 function test_roiChangeNeedsNoReloadAndMovesTheCurve(testCase)
 % The user-visible promise: re-rendering with a different ROI is arithmetic on
 % the cache. The loader is booby-trapped to fail if called again.
-time = 0:3;
-map = containers.Map({'a.set'}, {fakeEEG({'F3','CZ'}, time, 10, 1)});
-cache = loadReducedSets({'a.set'}, struct('loadFcn', loaderFor(map)));
-cache(1).trialAvg = [ones(1,4); 5*ones(1,4)];    % F3 = 1, CZ = 5
-entries = struct('path', {'a.set'}, 'subject', {'s1'}, 'group', {'g'});
+[cache, entries] = knownValueCache();
 
 r1 = groupCurves(cache, entries, optsTEP('roi', {'F3'}));
 r2 = groupCurves(cache, entries, optsTEP('roi', {'CZ'}));
@@ -188,11 +194,7 @@ testCase.verifyEqual(r3.groups.curves(1,1), 3, 'AbsTol', 1e-12);
 end
 
 function test_modesShareOneDefinitionWithTepFieldCurve(testCase)
-time = 0:3;
-map = containers.Map({'a.set'}, {fakeEEG({'F3','CZ'}, time, 10, 1)});
-cache = loadReducedSets({'a.set'}, struct('loadFcn', loaderFor(map)));
-cache(1).trialAvg = [ones(1,4); 5*ones(1,4)];
-entries = struct('path', {'a.set'}, 'subject', {'s1'}, 'group', {'g'});
+[cache, entries] = knownValueCache();
 res = groupCurves(cache, entries, optsTEP('mode', 'GMFP'));
 expected = tepFieldCurve(cache(1).trialAvg, [1 2], 'GMFP');
 testCase.verifyEqual(res.groups.curves(1,:), expected, 'AbsTol', 1e-12);
