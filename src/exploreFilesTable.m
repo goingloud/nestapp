@@ -49,9 +49,19 @@ PAD = 12;
 
 fig = uifigure('Name', char(opts.title), 'Resize', 'off', ...
                'Position', centreOn(opts.parent, W, H), 'WindowStyle', 'modal');
-% Not an onCleanup: the callbacks below are nested functions holding this
+% Exit is by DELETING the figure, never by uiresume, and the wait is waitfor
+% rather than uiwait. selectDataTree already documents why: uiresume's
+% close-on-X path can leave the window up and soft-lock the app. The concrete
+% failure is a nested modal - uiconfirm or uialert on this same figure runs its
+% own wait, and afterwards a uiresume no longer releases the outer uiwait, so
+% the X silently does nothing and the app is stuck behind a window that will
+% not close. waitfor returns the moment the figure is destroyed, and a plain
+% delete cannot be vetoed or missed.
+%
+% Not an onCleanup either: the callbacks are nested functions holding this
 % workspace, which would hold the onCleanup, which would hold the figure - a
-% cycle that leaks a window on every call. Deleted explicitly at the end.
+% cycle that leaks a window on every call.
+fig.CloseRequestFcn = @(src, ~) delete(src);
 
 try
 tbl = uitable(fig, 'Position', [PAD, 96, W - 2*PAD, H - 96 - 56], ...
@@ -76,17 +86,18 @@ uilabel(fig, 'Position', [PAD, 34, W - 2*PAD, 22], 'FontSize', 11, ...
 uibutton(fig, 'Text', 'Use these assignments', 'Position', [W - PAD - 320, PAD, 155, 26], ...
     'ButtonPushedFcn', @(~, ~) accept());
 uibutton(fig, 'Text', 'Cancel', 'Position', [W - PAD - 155, PAD, 155, 26], ...
-    'ButtonPushedFcn', @(~, ~) uiresume(fig));
-fig.CloseRequestFcn = @(~, ~) uiresume(fig);
+    'ButtonPushedFcn', @(~, ~) delete(fig));
 
 refresh();
 setappdata(fig, 'nestappModalReady', true);
-uiwait(fig);
+waitfor(fig);
 catch ME
     if isvalid(fig); delete(fig); end
     rethrow(ME);
 end
 
+% `accepted` and `work` live in this workspace, which outlives the figure, so
+% the answer survives the deletion that released waitfor.
 if accepted
     entries = work;
 else
@@ -158,7 +169,7 @@ if isvalid(fig); delete(fig); end
 
     function accept()
         accepted = true;
-        uiresume(fig);
+        delete(fig);
     end
 end
 

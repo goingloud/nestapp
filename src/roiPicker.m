@@ -74,10 +74,22 @@ figH   = headSize(2) + BAR_H + PAD * 2;
 fig = uifigure('Name', char(opts.title), 'Resize', 'off', ...
                'Position', centreOn(opts.parent, figW, figH), ...
                'WindowStyle', 'modal');
-% Deliberately NOT an onCleanup. The figure's callbacks are nested functions,
-% which hold this workspace alive, and an onCleanup living in that workspace
-% would hold the figure alive in turn - a cycle in which neither is released
-% and every call leaks a window. Deleted explicitly below, on both paths.
+% Exit is by DELETING the figure, never by uiresume, and the wait is waitfor
+% rather than uiwait. selectDataTree already documents why: uiresume's
+% close-on-X path can leave the window up and soft-lock the app. The concrete
+% failure is a nested modal - uiconfirm or uialert on this same figure runs its
+% own wait, and afterwards a uiresume no longer releases the outer uiwait, so
+% the X silently does nothing and the app is stuck behind a window that will
+% not close. waitfor returns the moment the figure is destroyed, and a plain
+% delete cannot be vetoed or missed.
+%
+% Not an onCleanup either: the callbacks are nested functions holding this
+% workspace, which would hold the onCleanup, which would hold the figure - a
+% cycle that leaks a window on every call.
+%
+% This dialog has both nested modals - uialert when a preset is partly
+% unavailable, inputdlg when one is saved - so it had the same latent freeze.
+fig.CloseRequestFcn = @(src, ~) delete(src);
 
 try
 % ── head diagram with one toggle per electrode ───────────────────────────
@@ -126,8 +138,7 @@ uibutton(fig, 'Text', 'Use these electrodes', ...
     'ButtonPushedFcn', @(~, ~) accept());
 uibutton(fig, 'Text', 'Cancel', ...
     'Position', [right - BTN_W, PAD, BTN_W, 26], ...
-    'ButtonPushedFcn', @(~, ~) uiresume(fig));
-fig.CloseRequestFcn = @(~, ~) uiresume(fig);
+    'ButtonPushedFcn', @(~, ~) delete(fig));
 
 presets = struct('name', {}, 'labels', {}, 'userDefined', {});
 refreshPresets();
@@ -139,7 +150,7 @@ refreshCount();
 % flag makes "is it waiting yet" answerable instead of a race against however
 % long the 69 buttons took to build.
 setappdata(fig, 'nestappModalReady', true);
-uiwait(fig);
+waitfor(fig);
 catch ME
     if isvalid(fig); delete(fig); end
     rethrow(ME);
@@ -244,7 +255,7 @@ if isvalid(fig); delete(fig); end
 
     function accept()
         accepted = true;
-        uiresume(fig);
+        delete(fig);
     end
 end
 

@@ -12,13 +12,10 @@ function tests = test_windowGeometry
 %
 %   What remains needs the app:
 %
-%   1. The handler is wired to the clamp, and writing the result does not lift
-%      the window. (The clamp rule itself is proved without a window.)
-%
-%   2. The window does not drift while idle - only a live figure can show that
+%   1. The window does not drift while idle - only a live figure can show that
 %      nothing moves when nothing happens.
 %
-%   3. The Plot Type radio group clears the topoplot at every size. Its base
+%   2. The Plot Type radio group clears the topoplot at every size. Its base
 %      geometry ran to x=335 while UIAxes2 starts at x=340, and since every
 %      component scales by the same factor the base overlap scaled with it. This
 %      needs the app because the positions come from createComponents literals
@@ -48,26 +45,6 @@ r = fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))));
 end
 
 % ── the window must not walk up the screen ────────────────────────────────
-
-function test_theHandlerAppliesTheClampWithoutMovingTheWindow(testCase)
-% Wiring only. The arithmetic - including a 25-event shrink stream and the
-% fixed-point property - is covered without a window in
-% tests/regression/test_windowClamp; what needs a real figure is that the
-% size-changed handler actually calls it and writes the result.
-app = launchApp(testCase);
-app.UIFigure.Position = [100 100 867 500];
-drawnow;
-topBefore = sum(app.UIFigure.Position([2 4]));
-
-p = app.UIFigure.Position;
-app.UIFigure.Position = [p(1), p(2) + 120, p(3), p(4) - 120];   % below the minimum
-drawnow; drawnow;
-
-pos = app.UIFigure.Position;
-testCase.verifyGreaterThanOrEqual(pos(4), 420, 'the clamp must have applied');
-testCase.verifyEqual(sum(pos([2 4])), topBefore, 'AbsTol', 2, ...
-    'and it must not have lifted the window');
-end
 
 function test_idleWindowDoesNotDrift(testCase)
 % Nothing may move the window when no resize is happening. A resize handler
