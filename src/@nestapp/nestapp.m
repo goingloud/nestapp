@@ -2362,6 +2362,21 @@ classdef nestapp < matlab.apps.AppBase
             end
         end
 
+        function reRenderExploreOnResize(app)
+        % Repaint the Explore plot after a resize. rescaleComponents moves the
+        % canvas panel - it is a class property - but the axes inside it are
+        % created by renderExplorePlot and are not, so they keep their old
+        % pixel positions and the plot stops filling the panel. Same situation
+        % as the Quality Dashboard, same fix.
+        %
+        % No-op unless Explore is the selected tab: repainting a hidden panel
+        % during a drag is work nobody sees, and a resize event arrives for
+        % every pixel of the drag.
+            if isempty(app.ExploreCanvas) || ~isvalid(app.ExploreCanvas); return; end
+            if ~isequal(app.TabGroup.SelectedTab, app.ExploreTab); return; end
+            renderExplorePlot(app);
+        end
+
         function drawExploreInto(app, parent, entry)
         % Mint the axes the plot wants inside `parent`, then hand off to the
         % registry's draw function. Shared by the in-app canvas and the
@@ -3117,6 +3132,7 @@ classdef nestapp < matlab.apps.AppBase
             sY = newSize(2) / app.originalSize(2);
             rescaleComponents(app, sX, sY);
             reRenderReportsOnResize(app);  % reflow the Quality Dashboard if it's showing
+            reRenderExploreOnResize(app);  % and the Explore plot, for the same reason
         end
 
         function endResize(app)
@@ -3635,9 +3651,14 @@ classdef nestapp < matlab.apps.AppBase
 
         % Selection changed function: TabGroup
         function TabGroupSelectionChanged(app, event)
-        % Refresh the Analysis tab selection summary whenever it becomes active.
+        % Refresh a tab's contents when it becomes active.
             if event.NewValue == app.AnalysisTab
                 updateAnalysisSelectionSummary(app);
+            elseif event.NewValue == app.ExploreTab
+                % A resize while another tab was showing is skipped as wasted
+                % work, so the canvas may be sized for the old window. Repaint
+                % on the way in.
+                renderExplorePlot(app);
             end
         end
 
