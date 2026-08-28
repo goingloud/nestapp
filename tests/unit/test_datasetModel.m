@@ -153,6 +153,18 @@ testCase.verifyEqual(overall.nFiles, 1, 'ungrouped files are not in the dataset'
 testCase.verifyEqual(numel(g), 1);
 end
 
+function test_filesPresentButNoneGroupedIsSafe(testCase)
+% Distinct from empty input, and the normal state while the user is still
+% defining groups. A preallocation added to silence a lint warning turned this
+% into groups(0) = ..., which errors.
+e = makeEntries({'a','b'}, {'s1','s2'}, {'',''});
+[g, overall] = datasetSummary(e);
+testCase.verifyEmpty(g);
+testCase.verifyEqual(overall.nGroups, 0);
+testCase.verifyEqual(overall.nUngrouped, 2);
+testCase.verifyEqual(overall.nFiles, 0, 'ungrouped files are not in the dataset');
+end
+
 function test_emptyInputIsSafe(testCase)
 [g, overall] = datasetSummary(struct('path', {}, 'subject', {}, 'group', {}));
 testCase.verifyEmpty(g);

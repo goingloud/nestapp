@@ -50,6 +50,11 @@ overall.nFiles      = sum(assigned);
 overall.nSubjects   = numel(unique(allSubjects(assigned)));
 
 names = unique(allGroups(assigned), 'stable');   % first-seen order
+if isempty(names)
+    % Files present but none grouped yet - a normal state while the user is
+    % still defining groups, and groups(0) = ... is an error.
+    return
+end
 groups(numel(names)) = struct('name', '', 'nFiles', 0, 'nSubjects', 0, 'subjects', {{}});
 for g = 1:numel(names)
     inGroup = assigned & strcmp(allGroups, names{g});
