@@ -33,6 +33,8 @@ classdef nestapp < matlab.apps.AppBase
         InfoTextArea                    matlab.ui.control.TextArea
         CommandDescriptionLabel         matlab.ui.control.Label
         StepsTree                       matlab.ui.container.Tree
+        StepsTipPanel                   matlab.ui.container.Panel
+        StepsTipLabel                   matlab.ui.control.Label
         VisualizingTab                  matlab.ui.container.Tab
         TEPvarNameEditField             matlab.ui.control.EditField
         TEPvarNameEditFieldLabel        matlab.ui.control.Label
@@ -185,6 +187,9 @@ classdef nestapp < matlab.apps.AppBase
         % Tab Cleaning
         selectedItem % Selected Table Item Values
         info % containers.Map: step name -> info/description text (shown in InfoTextArea)
+        hoverTimer    % singleShot timer: fires once the pointer has rested on the Steps tree
+        treeRect      % cached figure-relative rect of StepsTree (getpixelposition is slow)
+        treeRectStamp % UIFigure.Position the cached rect was computed for
         stepBlocks    % containers.Map: step name -> true if it ALWAYS waits for a human
         stepProviders % containers.Map: step name -> provider (TESA, EEGLAB, ...)
         % Canonical pipeline state - single source of truth for steps and params.
@@ -246,11 +251,73 @@ classdef nestapp < matlab.apps.AppBase
             if ischar(d) || isstring(d); name = char(d); end
         end
 
+        function UIFigureMouseMoved(app, ~)
+        % Any pointer movement hides the tip and restarts its clock, so it
+        % only ever appears once the pointer has been still on the tree for
+        % HOVER_DELAY seconds - and gets out of the way the instant you move.
+            onPointerMoved(app);
+        end
+
+        function onPointerMoved(app)
+            if isempty(app.hoverTimer) || ~isvalid(app.hoverTimer); return; end
+            stop(app.hoverTimer);
+            hideStepsTip(app);
+            if ~pointerOverStepsTree(app); return; end
+            start(app.hoverTimer);
+        end
+
+        function tf = pointerOverStepsTree(app)
+        % True when the pointer is inside the Steps tree, which only exists
+        % while the Cleaning tab is showing.
+            tf = false;
+            if app.TabGroup.SelectedTab ~= app.CleaningTab; return; end
+            r = stepsTreeRect(app);
+            p = app.UIFigure.CurrentPoint;
+            tf = p(1) >= r(1) && p(1) <= r(1) + r(3) ...
+              && p(2) >= r(2) && p(2) <= r(2) + r(4);
+        end
+
+        function r = stepsTreeRect(app)
+        % Figure-relative rect of the tree. getpixelposition costs ~150 us, far
+        % too much for a callback that fires on every mouse move, so cache it
+        % and recompute only when the window has changed size or moved.
+            pos = app.UIFigure.Position;
+            if isempty(app.treeRect) || ~isequal(app.treeRectStamp, pos)
+                app.treeRect      = getpixelposition(app.StepsTree, true);
+                app.treeRectStamp = pos;
+            end
+            r = app.treeRect;
+        end
+
+        function showStepsTip(app)
+        % Fired by the dwell timer. Places the tip near the pointer, nudged so
+        % it never sits under the cursor and never leaves the window.
+            if ~isvalid(app.UIFigure) || ~pointerOverStepsTree(app); return; end
+            GAP = 14;
+            tip = app.StepsTipPanel.Position(3:4);
+            fig = app.UIFigure.Position(3:4);
+            p   = app.UIFigure.CurrentPoint;
+            x   = min(max(1, p(1) + GAP), fig(1) - tip(1) - 1);
+            y   = min(max(1, p(2) - tip(2) - GAP), fig(2) - tip(2) - 1);
+            app.StepsTipPanel.Position = [x, y, tip];
+            app.StepsTipPanel.Visible = 'on';
+        end
+
+        function hideStepsTip(app)
+            if ~isempty(app.StepsTipPanel) && isvalid(app.StepsTipPanel)
+                app.StepsTipPanel.Visible = 'off';
+            end
+        end
+
         function txt = stepsTreeLegend(app)
-        % The Steps tree's tooltip. uitreenode has no Tooltip property, so a
-        % per-node hover tip is not possible - the tree-level tooltip carries
-        % the key for the dot instead, and the Info panel below names the
-        % provider and the exact wait behaviour for whichever step is selected.
+        % The text of the tree's hover tip. uitreenode has no Tooltip property,
+        % so a per-node hover tip is not possible - this tree-level key carries
+        % the dot's meaning instead, and the Info panel below names the provider
+        % and the exact wait behaviour for whichever step is selected.
+        %
+        % It is shown by a dwell timer rather than the native Tooltip: the
+        % native one fires on MATLAB's own schedule and cannot be delayed, and
+        % assigning Tooltip mid-hover does not reliably re-trigger it.
             n = 0;
             if ~isempty(app.stepBlocks); n = app.stepBlocks.Count; end
             txt = sprintf([ ...
@@ -318,7 +385,6 @@ classdef nestapp < matlab.apps.AppBase
                 if tf; app.stepBlocks(reg(r).name) = always; end
             end
             flag = stepInteractiveIcon();
-            app.StepsTree.Tooltip = stepsTreeLegend(app);
             sCat = uistyle('FontWeight', 'bold');
             sOp  = uistyle('FontColor', [0.42 0.47 0.53]);
 
@@ -371,6 +437,7 @@ classdef nestapp < matlab.apps.AppBase
             end
 
             expand(app.StepsTree);
+            app.StepsTipLabel.Text = stepsTreeLegend(app);
         end
 
         function addStepLeaf(app, parent, v, flagIcon)
@@ -1996,6 +2063,16 @@ classdef nestapp < matlab.apps.AppBase
             app.tepComponentDefs  = defaultTEPComponentDefs();
             refreshAnalysisWindows(app);   % show the default windows up-front
             applyTooltips(app);
+            % Dwell timer for the Steps tree legend. StartDelay is restarted by
+            % every mouse move, so the tip appears only after the pointer has
+            % been still this long.
+            HOVER_DELAY = 3;
+            app.hoverTimer = timer( ...
+                'StartDelay',    HOVER_DELAY, ...
+                'ExecutionMode', 'singleShot', ...
+                'BusyMode',      'drop', ...
+                'Name',          'nestappStepsHover', ...
+                'TimerFcn',      @(~,~) showStepsTip(app));
             loadPrefs(app);
             buildRecentFilesMenu(app);
             buildRecentPipelinesMenu(app);
@@ -3124,6 +3201,12 @@ classdef nestapp < matlab.apps.AppBase
 
         % Code that executes before app deletion
         function delete(app)
+            % Stop the hover timer first: a pending callback would otherwise
+            % fire against a half-deleted app.
+            if ~isempty(app.hoverTimer) && isvalid(app.hoverTimer)
+                stop(app.hoverTimer);
+                delete(app.hoverTimer);
+            end
 
             % Delete UIFigure when app is deleted
             delete(app.UIFigure)

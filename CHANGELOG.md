@@ -120,10 +120,14 @@ The version here must match `src/nestappVersion.m` and the release git tag.
   discoverable *after* building a pipeline and pressing Run Analysis, when the
   parallel-processing warning fires. The set is derived from the registry via
   the new `canStepBlock`, so an interactive step marks itself.
-- The Steps tree carries a tooltip explaining the dot. `uitreenode` has no
-  Tooltip property, so a per-node hover tip is not possible; the tree-level
-  tooltip is the key, and selecting a step now shows what the dot means for
-  it, plus which toolbox supplies it, in the Info panel above the description.
+- The Steps tree carries a hover tip explaining the dot, shown only after the
+  pointer has rested on the tree for three seconds - any movement hides it and
+  restarts the clock, so it stays out of the way. `uitreenode` has no Tooltip
+  property, so a per-node tip is not possible, and the native tooltip fires on
+  a schedule that cannot be delayed; the tip is a small floating panel driven
+  by a singleShot timer restarted from `WindowButtonMotionFcn`. Selecting a
+  step also shows what the dot means for it, plus which toolbox supplies it,
+  in the Info panel above the description.
 - **Export Metrics Table** is now **Export Metrics CSV**, and its tooltip
   leads with "Write a CSV file". The previous name did not say what came out,
   and the other exports on that tab produce PDFs or MATLAB objects.

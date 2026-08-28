@@ -26,6 +26,8 @@ function createComponents(app)
             app.UIFigure.AutoResizeChildren = 'off';
             app.UIFigure.SizeChangedFcn    = createCallbackFcn(app, @UIFigureSizeChanged, true);
             app.UIFigure.CloseRequestFcn   = createCallbackFcn(app, @UIFigureCloseRequest, true);
+            % Drives the dwell-delayed step legend (see onPointerMoved).
+            app.UIFigure.WindowButtonMotionFcn = createCallbackFcn(app, @UIFigureMouseMoved, true);
 
             % Create menu bar
             mFile = uimenu(app.UIFigure, 'Text', 'File');
@@ -1299,6 +1301,25 @@ function createComponents(app)
             app.ReportsDashboardPanel.BorderType = 'none';
             app.ReportsDashboardPanel.AutoResizeChildren = 'off';
             app.ReportsDashboardPanel.Visible = 'off';
+
+            % Floating hover tip for the Steps tree. Parented to the figure
+            % rather than a tab so it is never clipped, and created last so it
+            % paints over the TabGroup. Shown by a dwell timer, not by the
+            % native Tooltip - see onPointerMoved.
+            app.StepsTipPanel = uipanel(app.UIFigure);
+            app.StepsTipPanel.BorderType = 'line';
+            app.StepsTipPanel.BackgroundColor = [1 1 0.88];
+            app.StepsTipPanel.AutoResizeChildren = 'off';
+            % Tall enough for the wrapped legend at this width; the text is
+            % fixed, so a fixed box that fits it is simpler than measuring.
+            app.StepsTipPanel.Position = [0 0 310 172];
+            app.StepsTipPanel.Visible = 'off';
+
+            app.StepsTipLabel = uilabel(app.StepsTipPanel);
+            app.StepsTipLabel.Position = [8 6 294 160];
+            app.StepsTipLabel.VerticalAlignment = 'top';
+            app.StepsTipLabel.WordWrap = 'on';
+            app.StepsTipLabel.FontSize = 11;
 
             % Show the figure after all components are created
             app.UIFigure.Visible = 'on';
