@@ -1460,8 +1460,18 @@ function createComponents(app)
             app.ExplorePlotDropDown.ValueChangedFcn = createCallbackFcn(app, @ExplorePlotDropDownValueChanged, true);
             app.ExplorePlotDropDown.Position = [MAIN_X + 36 470 300 24];
 
+            % Plot-specific settings live here rather than on the rail. The
+            % rail is for things that describe the DATASET - groups, ROI,
+            % windows - and it is already crowded; a setting that means
+            % something only while one plot is chosen does not belong beside
+            % them, and putting it there would grow the rail with every plot
+            % added.
+            app.ExplorePlotOptionsButton = uibutton(app.ExploreTab, ...
+                'Text', 'Options...', 'Position', [MAIN_X + 344 470 84 24], ...
+                'ButtonPushedFcn', createCallbackFcn(app, @ExplorePlotOptionsButtonPushed, true));
+
             app.ExplorePlotInfoLabel = uilabel(app.ExploreTab, ...
-                'Position', [MAIN_X + 344 466 MAIN_W - 344 28], ...
+                'Position', [MAIN_X + 436 466 MAIN_W - 436 28], ...
                 'FontSize', 11, 'WordWrap', 'on', ...
                 'VerticalAlignment', 'center', 'FontColor', [0.55 0.33 0.10]);
 

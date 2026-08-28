@@ -1987,35 +1987,6 @@ r = struct('fn', fn, 'plugin', plugin, 'installNote', installNote, ...
     'fileExt', fileExt, 'feature', feature, 'minVersion', minVersion);
 end
 
-function p = makeParam(key, friendlyName, unit, validRange, description, varargin)
-% makeParam  Make a parameter metadata struct.
-%   Optional name-value pairs:
-%     'placeholder' - shown in UITable for [] values, e.g. '(all channels)'
-%     'type'        - scalar (default) | integer | vector | logical | string |
-%                     stringlist | folder | file. folder/file behave exactly as
-%                     string; they record that the value is a path.
-%     'required'    - true when the step cannot run until the user supplies a
-%                     value. Used to prompt on load rather than letting the run
-%                     fail later, and kept as data here so the check is not
-%                     hardcoded in the GUI.
-placeholder = ''; type = 'scalar'; required = false;
-if mod(numel(varargin), 2) ~= 0
-    error('makeParam:oddArgs', 'Name-value arguments must come in pairs.');
-end
-for i = 1:2:numel(varargin)
-    switch lower(varargin{i})
-        case 'placeholder'; placeholder = varargin{i+1};
-        case 'type';        type = varargin{i+1};
-        case 'required';    required = logical(varargin{i+1});
-        otherwise
-            error('makeParam:unknownOpt', 'Unknown option "%s".', varargin{i});
-    end
-end
-p = struct('key',key,'friendlyName',friendlyName,'unit',unit, ...
-           'validRange',validRange,'description',description, ...
-           'placeholder',placeholder,'type',type,'required',required);
-end
-
 function p = icaPcaParam()
 % Shared 'pca' parameter for the per-method Run ICA steps.
 p = makeParam('pca','PCA reduction','','-1=rank; 0=off; int=#comps; 0-1=variance frac', ...

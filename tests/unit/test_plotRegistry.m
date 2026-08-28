@@ -155,3 +155,74 @@ entry = struct('name', 'x', 'category', 'y', 'info', '', 'draw', 'drawTEPOverlay
                'requires', struct('groups', 'lots', 'windows', false, 'chanlocs', false));
 testCase.verifyError(@() plotAvailability(entry, fullCtx()), 'nestapp:badGroupRule');
 end
+
+% -- plot parameters ------------------------------------------------------
+
+function test_everyParamKeyIsARealOptionOfItsDrawFunction(testCase)
+% The design claim: a registry param key IS the draw function's option name, so
+% the edited values are handed over with no translation table. If a key drifts
+% from what the function reads, the setting silently does nothing - the edit
+% lands in a field nobody looks at, and the plot is simply unchanged, which is
+% the failure a user is least likely to report as a bug.
+%
+% The search covers the draw function AND the drawers it hands opts on to: a
+% composite like TEP-topo passes its whole opts struct down to the curve
+% drawer, so 'xlim' is honoured one call deeper than the file that declares it.
+reg = plotRegistry();
+for k = 1:numel(reg)
+    if isempty(reg(k).params); continue; end
+    src = drawSourceGraph(reg(k).draw);
+    for p = 1:numel(reg(k).params)
+        key = reg(k).params(p).key;
+        testCase.verifyTrue(contains(src, ['opts.' key]), sprintf( ...
+            '%s declares "%s" but nothing under %s reads opts.%s', ...
+            reg(k).name, key, reg(k).draw, key));
+    end
+end
+end
+
+function src = drawSourceGraph(fn)
+% The named drawer plus every draw*/shade* helper it calls, one level down -
+% which is as deep as a plot's opts struct is ever forwarded.
+src = fileread(which(fn));
+callees = unique(regexp(src, '\<(?:draw|shade)\w+', 'match'));
+for c = 1:numel(callees)
+    w = which(callees{c});
+    if ~isempty(w) && ~strcmp(callees{c}, fn)
+        src = [src newline fileread(w)]; %#ok<AGROW>
+    end
+end
+end
+
+function test_everyParamHasThePlaceholderThatNamesItsDefault(testCase)
+% Defaults live in the draw function; the placeholder is how the table tells the
+% user what leaving a cell alone will do. Without one the cell reads "(not set)",
+% which says nothing about what will actually be drawn.
+reg = plotRegistry();
+for k = 1:numel(reg)
+    for p = 1:numel(reg(k).params)
+        testCase.verifyNotEmpty(reg(k).params(p).placeholder, ...
+            sprintf('%s / %s has no placeholder', reg(k).name, reg(k).params(p).key));
+    end
+end
+end
+
+function test_anOffSwitchActuallyReachesTheDrawFunctionAsFalse(testCase)
+% Logical params are STORED as 'on'/'off' text, because plots share the step
+% parameter editor. In MATLAB `if 'off'` is TRUE - every character is non-zero -
+% so passing the text straight through leaves every switch the user turned off
+% still on, with nothing in the picture to say the setting was ignored.
+entry = plotRegistry();
+entry = entry(strcmp({entry.name}, 'TEP (ROI mean)'));
+opts  = plotDrawOpts(entry, struct('showBand', 'off', 'showBands', 'on'));
+testCase.verifyFalse(opts.showBand);
+testCase.verifyTrue(opts.showBands);
+end
+
+function test_paramsNeverSetStayAbsentSoTheDrawDefaultApplies(testCase)
+entry = plotRegistry();
+entry = entry(strcmp({entry.name}, 'TEP (ROI mean)'));
+opts  = plotDrawOpts(entry, struct('xlim', [-20 200]));
+testCase.verifyEqual(fieldnames(opts), {'xlim'}, ...
+    'an untouched setting must not be materialised as a frozen copy of the default');
+end

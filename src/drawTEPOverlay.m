@@ -17,6 +17,8 @@ function drawTEPOverlay(ax, res, opts)
 %     .colors    n-by-3, default groupColors(nGroups)
 %     .showBand  draw the interval, default true
 %     .legend    draw the legend, default true
+%     .showBands shade the windows of interest, default false
+%     .windows   window structs for .showBands, default none
 %
 %   The band is the confidence interval curveInterval computed, not a decorative
 %   spread. The app previously shaded mean +/- SEM/2 with no label, which is not
@@ -69,6 +71,12 @@ plot(ax, opts.xlim, [0 0], 'Color', [0 0 0 0.25], 'LineWidth', 0.75, ...
 ylim(ax, yl);
 hold(ax, 'off');
 
+% Shading goes on last, so the y limits the bands span are the final ones.
+% shadeTimeWindows stacks its patches to the bottom, so no curve is covered.
+if opts.showBands
+    shadeTimeWindows(ax, opts.windows);
+end
+
 xlim(ax, opts.xlim);
 xlabel(ax, 'Time (ms)');
 ylabel(ax, yLabelFor(opts.mode));
@@ -86,7 +94,8 @@ end
 function opts = withDefaults(opts, res)
 nG   = numel(res.groups);
 opts = fillDefaults(opts, struct('mode', 'TEP', 'xlim', [-50 300], ...
-    'colors', groupColors(nG), 'showBand', true, 'legend', true));
+    'colors', groupColors(nG), 'showBand', true, 'legend', true, ...
+    'showBands', false, 'windows', []));
 % A caller may pass a palette sized for a different group count.
 if size(opts.colors, 1) < nG
     opts.colors = groupColors(nG);

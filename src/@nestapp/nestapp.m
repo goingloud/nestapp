@@ -226,6 +226,7 @@ classdef nestapp < matlab.apps.AppBase
         ExploreWindowsResetButton       matlab.ui.control.Button
         ExplorePlotLabel                matlab.ui.control.Label
         ExplorePlotDropDown             matlab.ui.control.DropDown
+        ExplorePlotOptionsButton        matlab.ui.control.Button
         ExplorePlotInfoLabel            matlab.ui.control.Label
         ExploreCanvas                   matlab.ui.container.Panel
         ExploreEmptyLabel               matlab.ui.control.Label
@@ -271,6 +272,12 @@ classdef nestapp < matlab.apps.AppBase
         exploreRoi     = {}      % ROI electrode labels (canonical spelling)
         exploreWindows = struct([])
         exploreRes     = struct([])   % last groupCurves result, for the exits
+        % Per-plot settings, as a name/params struct array rather than a
+        % struct keyed by plot name - "TEP (ROI mean)" is not a valid field
+        % name, and renaming plots to suit the storage would be backwards.
+        % Only params the user actually SET are held here; the rest stay with
+        % the draw function's own defaults.
+        explorePlotParams = struct('name', {}, 'params', {})
         exploreAvailablePlots = struct([])  % registry entries + availability
 
         % Tab Analysis
@@ -2504,6 +2511,7 @@ classdef nestapp < matlab.apps.AppBase
                 'Visible', 'off');
 
             entry = currentPlotEntry(app);
+            refreshExploreOptionsButton(app, entry);
             if isempty(entry); return; end
             app.ExplorePlotInfoLabel.Text = '';
 
@@ -2523,6 +2531,21 @@ classdef nestapp < matlab.apps.AppBase
             catch ME
                 showExploreEmpty(app, ME.message);
                 app.ExploreStatusLabel.Text = ME.message;
+            end
+        end
+
+        function refreshExploreOptionsButton(app, entry)
+        % Disabled rather than hidden when a plot has no settings: a button
+        % that comes and goes as the picker changes is harder to find than one
+        % that is always in the same place and sometimes greyed.
+            has = ~isempty(entry) && ~isempty(entry.params);
+            app.ExplorePlotOptionsButton.Enable = matlab.lang.OnOffSwitchState(has);
+            if has
+                n = numel(entry.params);
+                app.ExplorePlotOptionsButton.Tooltip = sprintf( ...
+                    '%d setting%s for %s', n, plural(n), entry.name);
+            else
+                app.ExplorePlotOptionsButton.Tooltip = 'This plot has no settings.';
             end
         end
 
@@ -2547,12 +2570,18 @@ classdef nestapp < matlab.apps.AppBase
         % popped-out figure, so what is exported is what was on screen.
             res = app.exploreRes;
             pos = parent.Position;
+            % The user's settings go in FIRST and the tab's context fills what
+            % is left, so a param the user set always wins and one they never
+            % touched is simply absent - leaving the draw function's own
+            % default to apply.
+            opts = explorePlotOpts(app, entry);
             switch entry.draw
                 case 'drawTEPTopo'
                     % Owns its own layout - it decides how many axes it needs
                     % from the group and window counts - so it takes the panel.
-                    drawTEPTopo(parent, res, struct( ...
+                    opts = fillDefaults(opts, struct( ...
                         'windows', app.exploreWindows, 'mode', entry.mode));
+                    drawTEPTopo(parent, res, opts);
                 case 'drawGroupTopo'
                     n = numel(res.groups);
                     axList = gobjects(1, n);
@@ -2561,13 +2590,30 @@ classdef nestapp < matlab.apps.AppBase
                         axList(k) = uiaxes(parent, ...
                             'Position', [10 + (k-1)*w, 30, w - 10, pos(4) - 60]);
                     end
-                    win = exploreTopoWindow(app);
-                    drawGroupTopo(axList, res, struct('window', win));
+                    opts = fillDefaults(opts, ...
+                        struct('window', exploreTopoWindow(app)));
+                    drawGroupTopo(axList, res, opts);
                 otherwise
                     ax = uiaxes(parent, 'Position', [45 45 pos(3) - 70 pos(4) - 70]);
                     fn = str2func(entry.draw);
-                    fn(ax, res, struct('mode', entry.mode));
+                    opts = fillDefaults(opts, struct('mode', entry.mode, ...
+                        'windows', app.exploreWindows));
+                    fn(ax, res, opts);
             end
+        end
+
+        function opts = explorePlotOpts(app, entry)
+        % The settings the user has set for this plot, typed the way the draw
+        % function wants them. plotDrawOpts does the work so the same
+        % conversion serves a headless caller and a saved session.
+            opts = plotDrawOpts(entry, explorePlotParamsFor(app, entry.name));
+        end
+
+        function params = explorePlotParamsFor(app, name)
+            params = struct();
+            if isempty(app.explorePlotParams); return; end
+            k = find(strcmp({app.explorePlotParams.name}, name), 1);
+            if ~isempty(k); params = app.explorePlotParams(k).params; end
         end
 
         function win = exploreTopoWindow(app)
@@ -2734,6 +2780,17 @@ classdef nestapp < matlab.apps.AppBase
             app.exploreRoi = p(k).labels;
             refreshExploreRoi(app);
             recomputeExplore(app);
+        end
+
+        function ExplorePlotOptionsButtonPushed(app, ~)
+            entry = currentPlotEntry(app);
+            if isempty(entry) || isempty(entry.params); return; end
+            [params, accepted] = plotOptionsDialog(entry, ...
+                explorePlotParamsFor(app, entry.name), app.UIFigure);
+            if ~accepted; return; end
+            app.explorePlotParams = upsertByName(app.explorePlotParams, ...
+                struct('name', entry.name, 'params', params));
+            renderExplorePlot(app);
         end
 
         function ExplorePlotDropDownValueChanged(app, ~)

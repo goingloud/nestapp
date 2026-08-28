@@ -27,7 +27,8 @@ if numel(res.groups) ~= 2
           'A difference wave needs exactly two groups; got %d.', numel(res.groups));
 end
 
-opts = fillDefaults(opts, struct('xlim', [-50 300], 'colors', groupColors(1)));
+opts = fillDefaults(opts, struct('xlim', [-50 300], 'colors', groupColors(1), ...
+                                 'showBands', false, 'windows', []));
 
 A = res.groups(1);
 B = res.groups(2);
@@ -52,6 +53,12 @@ plot(ax, [0 0], yl, 'Color', [0 0 0 0.35], 'LineWidth', 0.75, 'HandleVisibility'
 plot(ax, opts.xlim, [0 0], 'Color', [0 0 0 0.55], 'LineWidth', 0.9, 'HandleVisibility', 'off');
 ylim(ax, yl);
 hold(ax, 'off');
+
+% Shading goes on last, so the y limits the bands span are the final ones.
+% shadeTimeWindows stacks its patches to the bottom, so no curve is covered.
+if opts.showBands
+    shadeTimeWindows(ax, opts.windows);
+end
 
 xlim(ax, opts.xlim);
 xlabel(ax, 'Time (ms)');
