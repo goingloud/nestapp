@@ -38,8 +38,9 @@ function info = drawTEPTopo(parent, res, opts)
 %     .showBands shade the windows on the curve, default true
 %     .axesFcn   @(parent, position) -> axes. Default makes uiaxes, which is
 %                what an in-app panel needs; a publication figure passes a
-%                classic-axes maker. The alternative is sniffing the parent's
-%                type, which is unreliable - a uifigure and a figure are both
+%                classic-axes maker, because every export path drops UI
+%                components. The alternative is sniffing the parent's type,
+%                which is unreliable - a uifigure and a figure are both
 %                matlab.ui.Figure.
 %
 %   See also: drawTEPOverlay, drawScalpTopo, drawGroupTopo, groupCurves
@@ -95,11 +96,15 @@ info.clim = [-m m];
 % it is tall just adds dead space between columns while the heads stay small;
 % sizing off the smaller dimension and centring the block keeps the heads as
 % large as the panel allows at any window count and any window size.
-P       = parentRect(parent);
-PAD     = 10;
-TITLE_H = 18;                      % the column titles, above the first row
-LABEL_W = 58;                      % room for the row (group) names
-CBAR_W  = 62;                      % one shared bar, at the right of the grid
+P = parentRect(parent);
+s = chromeScale(P);
+PAD     = max(4,  round(10 * s));
+TITLE_H = max(9,  round(18 * s));  % the column titles, above the first row
+LABEL_W = max(24, round(58 * s));  % room for the row (group) names
+% The floor covers the bar's TICK LABELS, not just the bar: 28 px left room for
+% the 12 px bar and nothing for the numbers beside it, which then ran off the
+% edge of the page.
+CBAR_W  = max(40, round(62 * s));  % one shared bar, at the right of the grid
 availW  = P(3) - 2*PAD - LABEL_W - CBAR_W;
 availH  = P(4) * 0.55 - TITLE_H - PAD;
 side    = max(min(availW / nW, availH / nG), 40);
@@ -109,6 +114,7 @@ x0      = PAD + LABEL_W + max((availW - gridW) / 2, 0);
 yTop    = P(4) - PAD - TITLE_H;
 
 axesMade = gobjects(0);
+axRow    = gobjects(1, nG);   % the first map of each row, which carries its label
 
 % ── the map grid ────────────────────────────────────────────────────────
 for g = 1:nG
@@ -126,15 +132,31 @@ for g = 1:nG
             title(ax, '');
         end
         axesMade(end + 1) = ax; %#ok<AGROW>
+        if k == 1; axRow(g) = ax; end
     end
     % Row label, in the group's own colour so it ties to the curve below.
-    % Placed against the grid rather than the panel edge: a centred grid can sit
-    % well right of the edge, and a label stranded there reads as unattached.
-    yMid = yTop - g * side + side / 2 - 9;
-    uilabel(parent, 'Text', res.groups(g).name, ...
-        'Position', [x0 - LABEL_W, yMid, LABEL_W - 6, 18], ...
-        'HorizontalAlignment', 'right', 'FontWeight', 'bold', ...
-        'FontColor', opts.colors(min(g, size(opts.colors, 1)), :));
+    % A text object on the row's FIRST map, not a uilabel on the parent: a
+    % uilabel cannot live in a classic figure, and every export path -
+    % exportgraphics, print, saveas - silently drops UI components, so a
+    % publication figure built that way would come out with no group names on
+    % it and no warning that they were missing. Normalized units with clipping
+    % off put it just outside the axes whatever the map's data limits are.
+    text(axRow(g), -0.06, 0.5, res.groups(g).name, 'Units', 'normalized', ...
+        'HorizontalAlignment', 'right', 'VerticalAlignment', 'middle', ...
+        'FontWeight', 'bold', 'FontSize', 10, 'Clipping', 'off', ...
+        'Color', opts.colors(min(g, size(opts.colors, 1)), :));
+end
+
+% Re-assert the scale on every map now the loop can no longer disturb it.
+% Drawing one map resets the colormap of the axes already drawn - the same
+% thing drawGroupTopo documents - so setting it per map inside the loop is not
+% enough. Left unfixed, an exported grid comes out in topoplot's own colours
+% with the polarity unreadable, which looks like a result rather than a
+% rendering fault.
+cmap = divergingColormap();
+for a = 1:numel(axesMade)
+    colormap(axesMade(a), cmap);
+    axesMade(a).CLim = info.clim;
 end
 
 % One bar for the whole grid, since every map shares the scale.
@@ -143,7 +165,7 @@ cbAx = sharedColorbar(parent, opts.axesFcn, ...
 axesMade(end + 1) = cbAx;
 
 % ── the curve panel ─────────────────────────────────────────────────────
-cAx = opts.axesFcn(parent, curveRect(parent, gridH));
+cAx = opts.axesFcn(parent, curveRect(parent, gridH, s));
 drawTEPOverlay(cAx, res, opts);
 if opts.showBands
     shadeTimeWindows(cAx, w);
@@ -159,8 +181,28 @@ p = parent.Position;
 r = [0 0 p(3) p(4)];
 end
 
-function r = curveRect(parent, gridH)
-P   = parentRect(parent);
-PAD = 10;
-r   = [PAD + 45, PAD + 34, P(3) - 2*PAD - 55, max(P(4) - gridH - PAD - 44, 60)];
+function r = curveRect(parent, gridH, s)
+% The axis labels need room, and how much depends on how big the type is - which
+% scales with the panel. Fixed margins tuned for a 900 px panel take 20% of an
+% 89 mm one and push the curve up into the maps.
+if nargin < 3; s = 1; end
+P    = parentRect(parent);
+% Floors, because tick labels and an axis label do not shrink below legibility:
+% a proportional bottom margin alone left "Time (ms)" sitting on the footer.
+PAD  = max(4,  round(10 * s));
+left = max(32, round(45 * s));
+bot  = max(24, round(34 * s));
+top  = max(28, round(44 * s));   % the panel title needs room above the box
+rght = max(12, round(20 * s));   % the last x tick label needs room beside it
+r    = [PAD + left, PAD + bot, P(3) - PAD - left - rght, ...
+        max(P(4) - gridH - PAD - top, 40)];
+end
+
+function s = chromeScale(P)
+% Margins, labels and the colour bar are chrome: at the size the app draws they
+% are the pixel constants below, and on a smaller canvas they shrink with it
+% rather than eating the plot. Reference is 900x500, roughly the in-app panel;
+% the floor stops a very small figure from losing its labels entirely.
+s = min([P(3) / 900, P(4) / 500, 1]);
+s = max(s, 0.45);
 end

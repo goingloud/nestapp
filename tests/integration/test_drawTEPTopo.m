@@ -4,11 +4,9 @@
 function tests = test_drawTEPTopo
 % TEST_DRAWTEPTOPO  The composite: a grid of scalp maps over the group curves.
 %
-%   Needs EEGLAB (topoplot). Draws into an invisible uifigure - the function
-%   places uilabels for the row names, so a classic figure is not a valid
-%   parent here.
+%   Needs EEGLAB (topoplot).
 %
-%   Two things are worth pinning and the rest is layout arithmetic that a
+%   Three things are worth pinning and the rest is layout arithmetic that a
 %   screenshot checks better than an assertion:
 %
 %   1. The maps AVERAGE over each window. Sampling the window's midpoint
@@ -18,6 +16,10 @@ function tests = test_drawTEPTopo
 %   2. ONE colour bar for the whole grid. Every map shares the scale, so a bar
 %      per map repeated one fact twelve times and took about 40% of the width
 %      out of the heads to do it.
+%   3. A CLASSIC figure is a valid parent. Every MATLAB export path omits UI
+%      components, so if this drifts back to needing uiaxes or uilabel, saved
+%      figures lose their maps and their group names with only a warning on
+%      the command line - and the app's whole publication route is that call.
 %
 %   Run: runtests('tests/integration/test_drawTEPTopo')
 tests = functiontests(localfunctions);
@@ -143,4 +145,43 @@ fig  = uiParent(testCase);
 info = drawTEPTopo(fig, twoGroupRes(1), struct());
 nW   = numel(defaultTEPComponentDefs());
 testCase.verifyEqual(numel(info.axes), 2 * nW + 2);
+end
+
+function test_aClassicFigureIsAValidParent(testCase)
+% The publication route draws into a classic figure with classic axes, because
+% exportgraphics, print and saveas all silently drop UI components. A drawer
+% that reaches for uiaxes or uilabel breaks that route without failing here,
+% so the check is that NOTHING it created is a UI component.
+fig = figure('Visible', 'off', 'Position', [100 100 900 600]);
+testCase.addTeardown(@() delete(fig));
+w    = [oneWindow(), struct('name', 'P180', 'winStart', 150, 'winEnd', 240)];
+info = drawTEPTopo(fig, twoGroupRes(1), struct('windows', w, ...
+    'axesFcn', @(p, pos) axes('Parent', p, 'Units', 'pixels', 'Position', pos)));
+
+testCase.verifyEqual(numel(info.axes), 2 * 2 + 2);
+testCase.verifyEmpty(findall(fig, 'Type', 'uilabel'), ...
+    'a uilabel would be dropped from every exported figure');
+for k = 1:numel(info.axes)
+    testCase.verifyClass(info.axes(k), 'matlab.graphics.axis.Axes');
+end
+end
+
+function test_theGridStaysInsideThePanel(testCase)
+% topoplot calls axis equal, which moves and resizes the axes it is handed. Left
+% alone the maps grow out of their cells and overlap the curve below - which
+% looks like a layout choice rather than a bug, and only in the exported file.
+fig = figure('Visible', 'off', 'Position', [100 100 900 600]);
+testCase.addTeardown(@() delete(fig));
+info = drawTEPTopo(fig, twoGroupRes(1), struct('windows', oneWindow(), ...
+    'axesFcn', @(p, pos) axes('Parent', p, 'Units', 'pixels', 'Position', pos)));
+
+for k = 1:numel(info.axes)
+    pos = info.axes(k).Position;
+    testCase.verifyGreaterThanOrEqual(pos(1), 0);
+    testCase.verifyGreaterThanOrEqual(pos(2), 0);
+    testCase.verifyLessThanOrEqual(pos(1) + pos(3), 900, ...
+        'an axes ran off the right of the panel');
+    testCase.verifyLessThanOrEqual(pos(2) + pos(4), 600, ...
+        'an axes ran off the top of the panel');
+end
 end

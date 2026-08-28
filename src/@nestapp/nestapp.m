@@ -278,6 +278,7 @@ classdef nestapp < matlab.apps.AppBase
         % Only params the user actually SET are held here; the rest stay with
         % the draw function's own defaults.
         explorePlotParams = struct('name', {}, 'params', {})
+        exploreFigureOpts = struct()   % remembered publicationFigure settings
         exploreAvailablePlots = struct([])  % registry entries + availability
 
         % Tab Analysis
@@ -2564,10 +2565,20 @@ classdef nestapp < matlab.apps.AppBase
             renderExplorePlot(app);
         end
 
-        function drawExploreInto(app, parent, entry)
+        function drawExploreInto(app, parent, entry, axesFcn)
         % Mint the axes the plot wants inside `parent`, then hand off to the
         % registry's draw function. Shared by the in-app canvas and the
-        % popped-out figure, so what is exported is what was on screen.
+        % exported figure, so what is exported is what was on screen.
+        %
+        % axesFcn decides what KIND of axes: uiaxes for the canvas, classic
+        % axes for anything headed for a file. It is a parameter rather than
+        % something sniffed from the parent because every export path -
+        % exportgraphics, print, saveas - silently omits UI components, so a
+        % figure of uiaxes exports as a blank page with only a warning to say
+        % so. The choice belongs to the caller who knows where it is going.
+            if nargin < 4 || isempty(axesFcn)
+                axesFcn = @(p, pos) uiaxes(p, 'Position', pos);
+            end
             res = app.exploreRes;
             pos = parent.Position;
             % The user's settings go in FIRST and the tab's context fills what
@@ -2580,21 +2591,22 @@ classdef nestapp < matlab.apps.AppBase
                     % Owns its own layout - it decides how many axes it needs
                     % from the group and window counts - so it takes the panel.
                     opts = fillDefaults(opts, struct( ...
-                        'windows', app.exploreWindows, 'mode', entry.mode));
+                        'windows', app.exploreWindows, 'mode', entry.mode, ...
+                        'axesFcn', axesFcn));
                     drawTEPTopo(parent, res, opts);
                 case 'drawGroupTopo'
                     n = numel(res.groups);
                     axList = gobjects(1, n);
                     w = (pos(3) - 20) / max(n, 1);
                     for k = 1:n
-                        axList(k) = uiaxes(parent, ...
-                            'Position', [10 + (k-1)*w, 30, w - 10, pos(4) - 60]);
+                        axList(k) = axesFcn(parent, ...
+                            [10 + (k-1)*w, 30, w - 10, pos(4) - 60]);
                     end
                     opts = fillDefaults(opts, ...
                         struct('window', exploreTopoWindow(app)));
                     drawGroupTopo(axList, res, opts);
                 otherwise
-                    ax = uiaxes(parent, 'Position', [45 45 pos(3) - 70 pos(4) - 70]);
+                    ax = axesFcn(parent, [45 45 pos(3) - 70 pos(4) - 70]);
                     fn = str2func(entry.draw);
                     opts = fillDefaults(opts, struct('mode', entry.mode, ...
                         'windows', app.exploreWindows));
@@ -2818,17 +2830,53 @@ classdef nestapp < matlab.apps.AppBase
 
         function ExploreFigureButtonPushed(app, ~)
         % A real MATLAB figure, drawn fresh rather than copied: the in-app
-        % canvas is for looking, and a figure someone will edit and save wants
-        % its own axes at its own size.
+        % canvas is for looking, and a figure someone will publish wants its own
+        % axes at the size it will be printed. Composed by the same
+        % drawExploreInto the canvas uses, so what leaves is what was on screen.
             if isempty(app.exploreRes); return; end
             entry = currentPlotEntry(app);
             if isempty(entry) || ~entry.available; return; end
-            fig = figure('Name', sprintf('nestapp - %s', entry.name), ...
-                         'NumberTitle', 'off', 'Color', 'w', ...
-                         'Position', [120 120 900 520]);
-            holder = uipanel(fig, 'Units', 'pixels', 'BorderType', 'none', ...
-                             'Position', [0 0 900 520]);
-            drawExploreInto(app, holder, entry);
+
+            [opts, action] = figureExportDialog(app.exploreFigureOpts, app.UIFigure);
+            if strcmp(action, 'cancel'); return; end
+            % Remembered for the session: someone exporting a set of figures
+            % for one manuscript wants the same width every time, and re-picking
+            % it per figure is how they end up inconsistent.
+            app.exploreFigureOpts = rmfield(opts, 'file');
+
+            opts.title      = sprintf('nestapp - %s', entry.name);
+            opts.provenance = exploreProvenance(app, entry);
+            if strcmp(action, 'open'); opts.file = ''; end
+
+            try
+                publicationFigure(@(parent, axesFcn) ...
+                    drawExploreInto(app, parent, entry, axesFcn), opts);
+            catch ME
+                uialert(app.UIFigure, ME.message, 'Could not make the figure');
+                return
+            end
+            if strcmp(action, 'save')
+                app.ExploreStatusLabel.Text = sprintf('Saved %s (%s mm, %d dpi)', ...
+                    opts.file, num2str(opts.width), opts.dpi);
+            end
+        end
+
+        function p = exploreProvenance(app, entry)
+        % What the footer of an exported figure states. Enough to identify the
+        % analysis six months later from the image alone: which plot, which
+        % groups and how many subjects, which design, which electrodes.
+            res  = app.exploreRes;
+            bits = cell(1, numel(res.groups));
+            for g = 1:numel(res.groups)
+                bits{g} = sprintf('%s n=%d', res.groups(g).name, res.est(g).n);
+            end
+            p = struct( ...
+                'plot',      entry.name, ...
+                'groups',    strjoin(bits, ', '), ...
+                'design',    sprintf('%s, 95%% CI', res.design), ...
+                'ROI',       strjoin(app.exploreRoi, ' '), ...
+                'nestapp',   nestappVersion(), ...
+                'exported',  char(datetime('now', 'Format', 'yyyy-MM-dd')));
         end
 
         function ExploreCsvButtonPushed(app, ~)

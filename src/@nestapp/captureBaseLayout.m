@@ -42,7 +42,16 @@ function L = captureBaseLayout(app)
         h = app.(name);
         % Require a real [x y w h] rectangle: this skips menus (scalar Position
         % = menu order) and any non-positional graphics.
-        if ~(isscalar(h) && isgraphics(h) && isprop(h, 'Position') && numel(h.Position) == 4)
+        %
+        % isnumeric first, because isgraphics still honours old-style NUMERIC
+        % handles: a plain double property whose value happens to match a live
+        % figure number passes isgraphics AND isprop(h,'Position'), and then
+        % h.Position throws "dot indexing is not supported for double". Startup
+        % therefore failed only when a figure of that number was open - which
+        % is to say, at random, and never on a clean session. No property here
+        % ever stores a raw handle, so a numeric one is never a component.
+        if isnumeric(h) || ~(isscalar(h) && isgraphics(h) && ...
+                             isprop(h, 'Position') && numel(h.Position) == 4)
             continue
         end
         % Tabs are sized by their TabGroup and their Position is READ-ONLY, so

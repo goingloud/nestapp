@@ -57,10 +57,19 @@ restore = onCleanup(@() restoreCurrentFigure(prevFig));
 if isa(ax, 'matlab.ui.control.UIAxes')
     cLim = drawViaHiddenFigure(ax, values, chanlocs, topoArgs);
 else
+    % topoplot calls axis equal/square, which MOVES AND RESIZES the axes it was
+    % given. A caller laying out a grid has already decided where this map goes,
+    % so the frame is put back afterwards - otherwise the maps grow out of their
+    % cells and overlap whatever is below the grid. The uiaxes path never showed
+    % this because it draws offscreen and copies only the children back.
+    keepUnits = ax.Units;
+    keepPos   = ax.Position;
     cla(ax, 'reset');
     axes(ax);
     topoplot(values, chanlocs, topoArgs{:});
     cLim = symmetricLimits(ax);
+    ax.Units    = keepUnits;
+    ax.Position = keepPos;
 end
 
 % A caller comparing several maps supplies one scale for all of them; it wins
