@@ -134,8 +134,11 @@ testCase.verifyNotEmpty(diff.reason);
 end
 
 function test_categoriesFollowTaxonomyOrder(testCase)
+% Against the taxonomy itself, not a frozen list: the contract is "the picker
+% presents categories in taxonomy order", and a literal copy here just has to
+% be edited every time a category is added, which tests nothing.
 [~, cats] = availablePlots(fullCtx());
-testCase.verifyEqual({cats.name}, {'Waveform', 'Topography'});
+testCase.verifyEqual({cats.name}, {plotTaxonomy().name});
 testCase.verifyEqual(cats(1).entries(1).name, 'TEP (ROI mean)', ...
     'the default view must be offered first');
 end
