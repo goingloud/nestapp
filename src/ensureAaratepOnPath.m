@@ -54,6 +54,16 @@ for i = 1:numel(shadowDirs)
 end
 addpath(strjoin(allPaths(keep), pathsep));
 
+% LAST, so it prepends ahead of everything above: nestapp's replacement for
+% AARATEP's figure-export helper. AARATEP writes seven QC images through
+% c_FigurePrinter, and the vendored one aborts the whole pipeline when an image
+% cannot be written - after the cleaning step it belongs to has already
+% succeeded - because it lets the failure escape and never reaches the close()
+% that follows. It also clears globals and persistents mid-run via javaaddpath,
+% and re-prepends its own export_fig at call time, which is why excluding that
+% directory above would not have been enough. See src/aaratep_compat.
+addpath(fullfile(repoRoot, 'src', 'aaratep_compat'));
+
 resolveFastICA(fullfile(thirdParty, 'FastICA'));
 
 ready = true;

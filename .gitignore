@@ -35,6 +35,8 @@
 !src/qa/*.m
 !src/io/
 !src/io/*.m
+!src/aaratep_compat/
+!src/aaratep_compat/*.m
 
 # Tests (develop branch only)
 !tests/
