@@ -5,31 +5,31 @@ function [params, accepted] = plotOptionsDialog(entry, params, anchor)
 % PLOTOPTIONSDIALOG  Edit one plot's settings, generated from its registry entry.
 %   [params, accepted] = PLOTOPTIONSDIALOG(entry, params, anchor)
 %
-%   entry    - one element of plotRegistry(), whose .params drives the table
-%   params   - the values already set for this plot (struct, possibly empty)
-%   anchor   - optional figure to centre on
+%   entry    one element of plotRegistry(), whose .params drives the form
+%   params   the values already set for this plot (struct, possibly empty)
+%   anchor   optional figure to centre on
 %
 %   Returns the edited params and whether the user accepted them. On cancel -
 %   including the window's X - the input is handed back untouched.
 %
-%   Nothing here knows which plot it is editing. The table is built by
-%   buildParamTableData and edits are parsed by applyParamEdit, the same two
-%   functions the pipeline's step parameters use, so a plot that declares a new
-%   param in plotRegistry gets an editor for it with no change to this file or
-%   to the tab. That is the whole reason plot params are makeParam-shaped.
+%   Nothing here knows which plot it is editing. paramForm reads the makeParam
+%   metadata and picks a control per setting, so a plot that declares a new
+%   param in plotRegistry gets a usable editor for it with no change to this
+%   file or to the tab. That is the whole reason plot params are makeParam
+%   -shaped.
 %
-%   An unset param stays unset. The table shows the placeholder naming the
-%   default and clearing a cell removes the key again, so "I never touched
-%   this" and "I set this to the default value" stay distinguishable - the
-%   first follows the draw function if its default ever changes, the second
-%   does not.
+%   AN UNSET PARAM STAYS UNSET. Every control can say "default", and a setting
+%   the user has not touched is absent from the returned struct rather than
+%   frozen to a copy of whatever the default is today. So "I never touched this"
+%   and "I set this to the default value" stay distinguishable - the first
+%   follows the draw function if its default ever changes, the second does not.
 %
 %   Modal discipline: waitfor(fig) and a plain delete, never uiwait/uiresume.
 %   A nested uiconfirm or uialert inside a figure already sitting in uiwait
 %   leaves uiresume unable to release it, and the app hangs - the trap
 %   selectDataTree documents and exploreFilesTable was caught by.
 %
-%   See also: plotRegistry, makeParam, buildParamTableData, applyParamEdit
+%   See also: paramForm, plotRegistry, makeParam, plotDrawOpts
 
 if nargin < 2 || isempty(params); params = struct(); end
 if nargin < 3; anchor = []; end
@@ -41,73 +41,50 @@ if isempty(meta)
 end
 original = params;
 
-W = 460; H = min(150 + 24 * numel(meta), 520);
+ROW_H = 34;
+W     = 470;
+formH = ROW_H * numel(meta) + 8;
+H     = formH + 108;
+
 fig = uifigure('Name', sprintf('%s - options', entry.name), ...
                'Position', centreOn(anchor, W, H), 'Resize', 'off');
 fig.CloseRequestFcn = @(src, ~) delete(src);   % X == cancel, and nothing else
 
-uilabel(fig, 'Position', [16 H-38 W-32 22], 'Text', entry.name, ...
+uilabel(fig, 'Position', [16 H-32 W-32 22], 'Text', entry.name, ...
         'FontWeight', 'bold');
 
-tbl = uitable(fig, 'Position', [16 76 W-32 H-124], ...
-    'ColumnName', {'Setting', 'Value'}, 'ColumnWidth', {200, 'auto'}, ...
-    'ColumnEditable', [false true], 'RowName', {});
-tbl.CellEditCallback   = @onEdit;
-tbl.CellSelectionCallback = @onSelect;
+form = uipanel(fig, 'Position', [16 56 W-32 formH], 'BorderType', 'none');
+paramForm(form, meta, params, @onChange);
 
-hint = uilabel(fig, 'Position', [16 44 W-32 26], 'Text', '', ...
-    'FontSize', 11, 'FontColor', [0.35 0.38 0.43], 'WordWrap', 'on');
-
-uibutton(fig, 'Text', 'Reset', 'Position', [16 12 90 26], ...
+uibutton(fig, 'Text', 'Reset', 'Position', [16 16 90 26], ...
+    'Tooltip', 'Put every setting back to its default.', ...
     'ButtonPushedFcn', @(~,~) onReset());
-uibutton(fig, 'Text', 'Cancel', 'Position', [W-206 12 90 26], ...
+uibutton(fig, 'Text', 'Cancel', 'Position', [W-206 16 90 26], ...
     'ButtonPushedFcn', @(~,~) delete(fig));
-uibutton(fig, 'Text', 'OK', 'Position', [W-106 12 90 26], ...
+uibutton(fig, 'Text', 'OK', 'Position', [W-106 16 90 26], ...
     'ButtonPushedFcn', @(~,~) onOk());
 
-refresh();
 waitfor(fig);
 
 % Cancel, or the X, leaves the caller with exactly what it passed in. Edits are
-% applied to the live struct as they are typed - that is what keeps the table
+% applied to the live struct as they are made - that is what keeps the controls
 % and the values in step - so the discard has to happen here.
 if ~accepted
     params = original;
 end
 
-    function refresh()
-        tbl.Data = buildParamTableData(struct('name', entry.name, ...
-                                              'params', params), entry);
-        greyPlaceholderCells(tbl);
-    end
-
-    function onEdit(~, ev)
-        r = ev.Indices(1);
-        if r > numel(meta); return; end
-        raw = ev.NewData;
-        if isempty(raw) || (ischar(raw) && isempty(strtrim(raw)))
-            % Cleared: back to unset, so the draw function's default applies
-            % again rather than a frozen copy of what it used to be.
-            if isfield(params, meta(r).key)
-                params = rmfield(params, meta(r).key);
-            end
+    function onChange(key, value)
+        if isempty(value)
+            if isfield(params, key); params = rmfield(params, key); end
         else
-            s = applyParamEdit(struct('name', entry.name, 'params', params), ...
-                               1, r, raw, entry);
-            params = s.params;
+            params.(key) = value;
         end
-        refresh();
-    end
-
-    function onSelect(~, ev)
-        if isempty(ev.Indices); hint.Text = ''; return; end
-        r = ev.Indices(1);
-        if r <= numel(meta); hint.Text = meta(r).description; end
     end
 
     function onReset()
         params = struct();
-        refresh();
+        delete(form.Children);
+        paramForm(form, meta, params, @onChange);
     end
 
     function onOk()
