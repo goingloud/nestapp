@@ -29,7 +29,8 @@ function peaks = tepPeakFinder(waveform, times, compDefs)
 %
 %   Callers should pass the same smoothed, trial-averaged ROI waveform
 %   they display, so detection runs on the curve the user sees rather than
-%   on un-smoothed noise (see plotTEP / batchWindowExtract).
+%   on un-smoothed noise - which is what groupCurves' smoothWin gives the
+%   Explore results view.
 %
 %   Requires: TESA toolbox (tesa_peakanalysis) on the MATLAB path.
 

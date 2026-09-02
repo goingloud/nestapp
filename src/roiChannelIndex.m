@@ -9,6 +9,6 @@ function idx = roiChannelIndex(channelLabels, roiElectrodes)
 %   electrodes named in roiElectrodes. Matching ignores case because EEG
 %   montages vary in label case (e.g. a file's 'Fp1' vs a requested 'FP1').
 %
-%   See also: tepFieldCurve, batchWindowExtract, electrodeAvailability
+%   See also: tepFieldCurve, groupCurves, electrodeAvailability
     idx = find(ismember(lower(channelLabels), lower(roiElectrodes)));
 end
