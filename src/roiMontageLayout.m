@@ -23,10 +23,9 @@ function [layout, headSize] = roiMontageLayout()
 %   re-placing these rows, which is why the picker does not resize.
 %
 %   The rows were extracted verbatim from the 69 near-identical uibutton blocks
-%   in createComponents (637 of its 1326 lines, plus 69 class properties), so
-%   the diagram is unchanged. Those blocks are STILL THERE and still drive the
-%   Visualizing tab: this is a staged replacement, and they come out when the
-%   Explore tab takes over the space they occupy.
+%   that used to sit in createComponents, so the diagram the user sees is
+%   unchanged. Those blocks and their 69 class properties are gone now; this
+%   table is the only place the montage geometry lives.
 %
 %   See also: roiPicker, electrodeList, roiChannelIndex, electrodeAvailability
 

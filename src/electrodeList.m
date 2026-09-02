@@ -14,7 +14,7 @@ function labels = electrodeList()
 %
 %   That had already happened. The head-diagram buttons carried FPZ/FZ/FCZ/CZ/
 %   CPZ/PZ/POZ/OZ/AFZ while this list has FPz/Fz/FCz/Cz/CPz/Pz/POz/Oz/AFz, and
-%   findTEPelecs bridged the two with upper() at the point of use.
+%   the app's own widgets once bridged the two with upper() at the point of use.
 %
 %   This is the app's own vocabulary, not a claim about what a cap can have.
 %   Electrodes a user's montage carries but this list omits - FT9, FT10 and Iz

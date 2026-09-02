@@ -53,7 +53,6 @@ classdef nestapp < matlab.apps.AppBase
         ExportReportsCSVButton          matlab.ui.control.Button
         ExportPDFButton                 matlab.ui.control.Button
         CopyMethodsButton               matlab.ui.control.Button
-        % Analysis tab - static elements not auto-resized by MATLAB
     end
 
     properties (Access = private)
@@ -116,7 +115,7 @@ classdef nestapp < matlab.apps.AppBase
         ExploreResultsButton            matlab.ui.control.Button
         ExploreStatusLabel              matlab.ui.control.Label
 
-        % Tab Visualizing
+        % Menus
         MenuRecentFiles     % Handle to 'Recent Files' submenu - rebuilt on open
         MenuRecentPipelines % Handle to 'Recent Pipelines' submenu - rebuilt on open
         StatusBar           % uilabel pinned to bottom of UIFigure - visible on both tabs
@@ -1899,8 +1898,8 @@ classdef nestapp < matlab.apps.AppBase
             end
             app.ExploreWindowsLabel.Text = sprintf('WINDOWS: %s', gname);
 
-            % Same functions the Analysis tab used, so the numbers agree with
-            % what that tab reported for the same curve.
+            % TESA's own detector, so this table and any peak overlay drawn
+            % from the same curve cannot disagree.
             peaks   = [];
             haveTesa = false;
             if strcmpi(currentMode(app), 'TEP')
@@ -1924,13 +1923,12 @@ classdef nestapp < matlab.apps.AppBase
                 % tepPeakFinder reports latencyMs/amplitudeUV with a `found`
                 % flag; computeWindowMeasures reports peakLatency/peakAmp.
                 % Prefer TESA's detection so the table agrees with the overlay,
-                % and show '-' rather than a number where no peak was found,
-                % which is what the Analysis tab did.
+                % and show '-' rather than a number where no peak was found.
                 if haveTesa && i <= numel(peaks)
                     % When TESA ran, its verdict stands - including "no peak
                     % here", shown as '-' rather than quietly substituting the
-                    % window extremum. That is what the Analysis tab did, and a
-                    % number where there is no peak is worse than a dash.
+                    % window extremum: a number where there is no peak is
+                    % worse than a dash.
                     if peaks(i).found
                         data{i, 3} = num2str(peaks(i).latencyMs, '%.0f');
                         data{i, 4} = num2str(peaks(i).amplitudeUV, '%.2f');

@@ -5,7 +5,7 @@
 function tests = test_computeWindowMeasures
 % TEST_COMPUTEWINDOWMEASURES  Unit tests for the per-window mean+peak measure.
 %
-%   Backs the Analysis-tab windows-of-interest table: a window reports its
+%   Backs the Explore windows table: a window reports its
 %   mean (all modes) and, for TEP, a peak latency/amplitude chosen by polarity.
 %
 %   Run: runtests('tests/unit/test_computeWindowMeasures')

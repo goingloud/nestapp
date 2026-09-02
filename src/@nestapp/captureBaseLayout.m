@@ -44,7 +44,7 @@ function L = captureBaseLayout(app)
         % = menu order) and any non-positional graphics.
         %
         % isa, not isgraphics: isgraphics still honours old-style NUMERIC
-        % handles, so a plain double property (SMOOTH_WIN_PTS = 5, say) whose
+        % handles, so a plain double property (a window length, say) whose
         % value happens to match a live figure number passed isgraphics AND
         % isprop(h,'Position'), and then h.Position threw "dot indexing is not
         % supported for double". Startup therefore failed only when a figure of

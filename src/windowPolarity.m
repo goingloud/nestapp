@@ -6,7 +6,7 @@ function pol = windowPolarity(window)
 % WINDOWPOLARITY  Peak polarity for a window of interest, defaulting to 'auto'.
 %   pol = WINDOWPOLARITY(window) returns window.polarity when present and
 %   non-empty, otherwise 'auto' (largest absolute deflection). Used wherever a
-%   window's peak is measured (computeWindowMeasures, the Analysis table, the
+%   window's peak is measured (computeWindowMeasures, the Explore windows table,
 %   per-file results table).
     pol = 'auto';
     if isfield(window, 'polarity') && ~isempty(window.polarity)

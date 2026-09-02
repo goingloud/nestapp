@@ -6,7 +6,7 @@ function m = computeWindowMean(curve, times, t1, t2)
 % COMPUTEWINDOWMEAN  Mean of a waveform over a time window.
 %   m = COMPUTEWINDOWMEAN(curve, times, t1, t2) returns the mean of curve at
 %   the samples whose time (in the same units as t1/t2, e.g. ms) falls within
-%   the closed window [min(t1,t2), max(t1,t2)]. Used by the Visualizing tab to
+%   the closed window [min(t1,t2), max(t1,t2)]. Used by the Explore tab to
 %   report the average amplitude of the displayed TEP/GMFP/LMFP curve over a
 %   user-adjustable window.
 %

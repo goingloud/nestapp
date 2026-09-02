@@ -4,7 +4,7 @@
 % Part of nestapp; see the LICENSE file for full terms.
 function tests = test_tepWindowTable
 % TEST_TEPWINDOWTABLE  Unit tests for the per-file x per-window results table.
-%   Shared schema for the Analysis-tab workspace export and the batch CSV.
+%   Shared schema for Explore's Measures CSV and the quantification view.
 %   Run: runtests('tests/unit/test_tepWindowTable')
 tests = functiontests(localfunctions);
 end

@@ -5,7 +5,7 @@
 function tests = test_electrodeAvailability
 % TEST_ELECTRODEAVAILABILITY  Unit tests for the LoadLabels greying core.
 %
-%   electrodeAvailability is the pure function behind the Visualizing tab's
+%   electrodeAvailability is the pure function behind the ROI picker's
 %   electrode-button enable/disable logic. These tests pin the regression
 %   where buttons greyed out for a previous file selection stayed disabled
 %   even after loading a dataset that contains those electrodes again.

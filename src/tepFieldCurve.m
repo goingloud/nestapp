@@ -3,7 +3,7 @@
 % Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
 % Part of nestapp; see the LICENSE file for full terms.
 function curve = tepFieldCurve(data, roiIdx, plotType)
-% TEPFIELDCURVE  Per-file Visualizing-tab curve: TEP, GMFP or LMFP.
+% TEPFIELDCURVE  Per-file curve for one plot mode: TEP, GMFP or LMFP.
 %   curve = TEPFIELDCURVE(data, roiIdx, plotType) reduces an epoched EEG data
 %   array (channels x time x trials) to a single time series, after averaging
 %   across trials:

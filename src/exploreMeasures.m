@@ -14,7 +14,7 @@ function T = exploreMeasures(res, windows)
 %   (see exploreResults).
 %
 %   The per-window arithmetic is tepWindowTable's, unchanged, so a measure here
-%   is the same number the Analysis tab's export and the batch CSV produce. Only
+%   comes from the same tepWindowTable the quantification view uses. Only
 %   two things are added: the group column, and subject in place of file -
 %   because rows are subjects now, files having already been collapsed by
 %   groupCurves.

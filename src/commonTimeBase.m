@@ -8,7 +8,7 @@ function [t, idx, info] = commonTimeBase(times, labels)
 %   crop each file onto it.
 %
 %   This exists because the app used to have no answer to the question. The
-%   loader assigned `app.EEGtime = EEGaux.times` inside its loop, so the app's
+%   loader assigned the app's time base inside its loop, so the app's
 %   idea of time was whatever the LAST file happened to have. Files with a
 %   different epoch length or sample rate were then plotted and averaged
 %   against the wrong time axis - silently, because the curves still have the

@@ -5,7 +5,7 @@
 function tests = test_computeWindowMean
 % TEST_COMPUTEWINDOWMEAN  Unit tests for the windowed-average measurement core.
 %
-%   computeWindowMean backs the Visualizing-tab "Win mean" readout that
+%   computeWindowMean backs the Explore windows table's mean readout that
 %   reports the average amplitude of the displayed TEP/GMFP/LMFP curve over a
 %   user-adjustable [start end] ms window.
 %

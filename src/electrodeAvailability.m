@@ -8,7 +8,7 @@ function isAvailable = electrodeAvailability(elecList, labelSets)
 %   row vector, one entry per electrode in elecList, that is true when that
 %   electrode's label appears in EVERY label set in labelSets. Electrodes that
 %   are missing from at least one file (or, when no files are selected, none)
-%   are unavailable - the Visualizing tab greys those buttons out.
+%   are unavailable - the ROI picker greys those buttons out.
 %
 %   Inputs:
 %     elecList  - cellstr of the app's known electrode labels (one per button).

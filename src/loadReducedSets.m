@@ -15,8 +15,8 @@ function [cache, warnings] = loadReducedSets(paths, opts)
 %     .nTrials   trials that went into the average, for weighting
 %     .ok        false when the file could not be loaded
 %
-%   Why reduce at load time. The Visualizing tab kept every selected dataset
-%   whole in EEGofAllSelectedFiles. Real files here are 35 MB of .fdt each, so
+%   Why reduce at load time. The tab this replaced kept every selected dataset
+%   whole, in memory. Real files here are 35 MB of .fdt each, so
 %   a 32-file cohort held about 1.1 GB, and a second group would have doubled
 %   it. Nothing downstream ever needed the trials: tepFieldCurve's first act is
 %   mean(data,3), and every mode it offers - TEP, GMFP, LMFP - is a function of

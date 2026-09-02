@@ -14,7 +14,7 @@ function presets = roiPresets()
 %
 %   Built-ins are the two clusters this project uses:
 %
-%     'F3 cluster (default)'  AF3 F1 F3 FC1 FC3 - what the Visualizing tab has
+%     'F3 cluster (default)'  AF3 F1 F3 FC1 FC3 - what the app has
 %                             always started with, preserved so the app opens
 %                             on the ROI it always has.
 %     'Near-coil (F3)'        AF3 F5 F3 FC5 FC3 - the near-coil ROI used to

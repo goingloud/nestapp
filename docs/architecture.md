@@ -11,9 +11,9 @@ nestapp has two halves that share one engine:
 
 ```
             ┌─────────────────────────────┐
-   GUI ───► │  src/@nestapp/nestapp.m      │   five tabs:
-            │  (App Designer class, plain  │   Cleaning · Visualizing ·
-            │   text — edit directly)      │   Analysis · Reports · Settings
+   GUI ───► │  src/@nestapp/nestapp.m      │   three tabs:
+            │  (App Designer class, plain  │   Cleaning · Reports ·
+            │   text — edit directly)      │   Explore
             └──────────────┬──────────────┘
                            │ builds a pipeline "spec" (ordered steps + params)
                            ▼
@@ -27,7 +27,7 @@ nestapp has two halves that share one engine:
 ```
 
 The same `spec` (a struct array of `{name, params}`) drives both the GUI run
-button and headless callers like `batchWindowExtract` and the test suite.
+button and headless callers like `runPipelineCore` and the test suite.
 
 ## Module map (`src/`)
 
@@ -37,7 +37,7 @@ button and headless callers like `batchWindowExtract` and the test suite.
 | **Step registry** | `stepRegistry.m`, `makePipelineStep.m`, `checkStepDependencies.m` | The catalogue of pipeline steps: each step's name, default params, UI metadata, and dependency requirements. The single source of truth for "what steps exist." |
 | **Execution** | `runPipelineCore.m`, `processOneFile.m`, `paramsToVarin.m`, `varinToStruct.m`, `stripVarinKeys.m`, `stripEmptyVarin.m`, `nestLog.m` | The batch engine and the per-file dispatch `switch`. Each step name maps to an EEGLAB/TESA call or a nestapp helper here. |
 | **Templates** | `buildTemplates.m`, `templates/*.mat`, `templateCitation.m`, `specFromSaved.m` | Built-in pipelines. `buildTemplates.m` is the source; the `.mat` files are **generated artifacts** (see gotchas). |
-| **Step helpers** | `aaratepMuscleClassifier.m`, `artist*.m`, `ensureAaratepOnPath.m`, `computeICAActivation.m`, `tepPeakFinder.m`, `batchWindowExtract.m`, `tepFieldCurve.m`, `tepWindowTable.m`, `computeWindowMeasures.m`, `defaultTEPComponentDefs.m` | Algorithm implementations behind specific steps and analyses. |
+| **Step helpers** | `aaratepMuscleClassifier.m`, `artist*.m`, `ensureAaratepOnPath.m`, `computeICAActivation.m`, `tepPeakFinder.m`, `tepFieldCurve.m`, `tepWindowTable.m`, `computeWindowMeasures.m`, `defaultTEPComponentDefs.m` | Algorithm implementations behind specific steps and analyses. |
 | **Quality control** | `qa/*.m` | Quality Gate scoring, batch verdicts, QC images, dashboard, attribute matrices. |
 | **Reporting / IO** | `buildReportText.m`, `initPipelineReport.m`, `exportReport.m`, `summarizeReports.m`, `buildHistoryEntry.m`, `io/*.m` | Per-file reports, methods paragraphs, provenance, and output-path layout. |
 | **Version** | `nestappVersion.m` | Single source of truth for the app version (SemVer). |
@@ -51,7 +51,7 @@ button and headless callers like `batchWindowExtract` and the test suite.
 | Change/add a built-in template | `buildTemplates.m`, then run `buildTemplates()` and commit the regenerated `templates/*.mat` | The `.mat` is generated — never edit it directly. |
 | Add a citation for a template | `templateCitation.m` | Logged per run by `runPipelineCore.m`. |
 | Change a Quality Gate metric | `qa/qualityGate.m` (+ `qa/finalizeBatchVerdicts.m` for batch mode) | Step params live in `stepRegistry.m`. |
-| Change TEP peak detection | `tepPeakFinder.m` (interactive overlay) / `batchWindowExtract.m` + `computeWindowMeasures.m` (table/CSV) | The overlay uses `tepPeakFinder`; the windows-of-interest table/CSV use `computeWindowMeasures`. |
+| Change TEP peak detection | `tepPeakFinder.m` (TESA detection) / `computeWindowMeasures.m` (mean, area, fallback peak) | Explore's results table prefers `tepPeakFinder` so it agrees with what an overlay would draw, and falls back to `computeWindowMeasures` when TESA is absent. |
 | Change a tab's UI/behaviour | `@nestapp/nestapp.m` (callbacks) + `@nestapp/createComponents.m` (layout) | Plain-text class; diffable. |
 | Change report contents | `buildReportText.m`, `initPipelineReport.m` | |
 | Bump the version | `nestappVersion.m` + `CHANGELOG.md` (+ git tag) | A CI check keeps the three in sync. |
@@ -78,6 +78,37 @@ button and headless callers like `batchWindowExtract` and the test suite.
 - **EEGLAB and `third_party/` are not committed** — external dependencies.
 - **`processOneFile` uses EEGLAB globals** (`EEG`, `ALLEEG`, …); headless
   callers should expect shared state to be reset per worker.
+
+## Headless API
+
+The GUI is one caller, not the interface. Everything the Explore tab does is a
+pure function it calls, and each is usable from a script or a batch with no
+figure on screen - which is what makes the analysis reproducible from code
+rather than from a sequence of clicks.
+
+| Function | Takes | Gives back |
+|---|---|---|
+| `exploreDataset(paths, rules, opts)` | file paths | one entry per file: `.path .subject .group .subjectConfident` |
+| `loadReducedSets(paths, opts)` | file paths | per-file cache: `.trialAvg .labels .chanlocs .time .nTrials` - trial averages, not epochs (~800 kB/file) |
+| `groupCurves(cache, entries, opts)` | the two above | `res`: group means, per-subject `.curves`, per-file `.files`, intervals, montage report |
+| `curveInterval(curvesByGroup, design, level)` | subject x time per group | mean, CI, SEM, n, df - paired (Cousineau-Morey) or unpaired |
+| `exploreMeasures(res, windows)` | a `res` | one table row per subject x group x window |
+| `exploreResults(res, entries, opts)` | a `res` | the complete saved-analysis struct |
+| `computeWindowMeasures(curve, t, t1, t2, polarity)` | one curve | mean, area, peak latency/amplitude for one window |
+| `drawTEPOverlay` / `drawTEPTopo` / `drawGroupTopo` / `drawWindowBars` | axes (or a panel) + a `res` | the figure content, into axes the caller mints |
+
+Two conventions make these safe to call without a display:
+
+- **The caller mints the axes.** No drawing function creates a figure, so the
+  same code renders into a `uiaxes` on screen and a classic `axes` bound for
+  `print`. Every MATLAB export path silently omits UI components, which is why
+  the export path passes an `axesFcn` that makes classic axes.
+- **`nestapp.loadAnalysis(app, file)`** reopens a saved Results `.mat` without
+  a dialog, so a batch can restore groups, subjects, ROI, windows, design and
+  plot selection and carry on.
+
+`runPipelineCore(spec, filePaths, opts)` is the equivalent for cleaning: the
+same `spec` the GUI builds, driven from a script.
 
 ## Tests
 

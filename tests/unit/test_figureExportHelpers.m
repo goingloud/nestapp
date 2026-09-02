@@ -60,7 +60,7 @@ testCase.verifyNotEmpty(findobj(outFig, 'Type', 'legend'), ...
 end
 
 function test_popOutSkipsLegendWhenNothingNamed(testCase)
-% plotTEP hides the SEM ribbon from the legend; an unconditional
+% A curve plot hides its band from the legend; an unconditional
 % legend('show') would invent 'data1'-style entries for unnamed content.
 srcFig = figure('Visible', 'off');
 testCase.addTeardown(@() delete(srcFig));

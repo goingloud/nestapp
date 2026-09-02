@@ -6,8 +6,8 @@ function T = tepWindowTable(fileLabels, curves, time, windows, mode)
 % TEPWINDOWTABLE  Per-file x per-window measures as a MATLAB table.
 %   T = TEPWINDOWTABLE(fileLabels, curves, time, windows, mode) builds one row
 %   per (file, window): the window Mean of that file's curve, plus - for TEP
-%   mode - the peak latency and amplitude. Shared by the Analysis tab's
-%   workspace export and the batch CSV so both produce identical schemas.
+%   mode - the peak latency and amplitude. Shared by Explore's Measures CSV
+%   and the drawWindowBars quantification view so both produce identical numbers.
 %
 %   Inputs:
 %     fileLabels - 1xnFiles cellstr of file names.

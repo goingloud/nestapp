@@ -86,7 +86,7 @@ end
 end
 
 function addLegendIfNamed(ax)
-% Rebuild the legend only when something was actually named. plotTEP names the
+% Rebuild the legend only when something was actually named. A caller names the
 % mean line and hides the SEM ribbon, so an unconditional legend('show') would
 % invent entries such as 'data1' for anything left unnamed.
 kids = findobj(ax, '-property', 'DisplayName');

@@ -55,7 +55,7 @@ nestapp adds this tree to the MATLAB path automatically when an AARATEP step run
 1. **File → Load Template** to start from a ready-made pipeline, or build one from scratch in the Cleaning tab.
 2. Select your data files and press **Run Analysis**.
 3. Review the per-file summary in the **Reports** tab.
-4. Load the processed files in the **Visualizing** tab to inspect TEPs and topographies.
+4. Load the processed files in the **Explore** tab to compare conditions and inspect TEPs.
 5. Switch to the **Analysis** tab to view detected TEP components and export peak data to CSV.
 
 ---
@@ -117,35 +117,42 @@ eegh             % browse interactively using EEGLAB's history viewer
 
 ---
 
-## Visualizing tab
+## Explore tab
 
-The Visualizing tab works on processed `.set` files — either output from a nestapp pipeline run or any EEGLAB-compatible epoched dataset.
+The Explore tab supports the comparison most TMS-EEG studies are designed
+around - pre versus post, or one cohort against another. It works on processed
+`.set` files: output from a nestapp run, or any EEGLAB-compatible epoched
+dataset.
 
-- Select one or more `.set` files.
-- Click electrode buttons to define the region of interest (ROI).
-- **PLOT TEP** plots the trial-averaged waveform with a shaded SEM band. Multiple files can be overlaid on the same axes.
-- **Show Components** detects and overlays the six canonical TEP components (N15, P30, N45, P60, N100, P180) with latency and amplitude labels.
-- **TOPOPLOT** plots the scalp topography at a selected time point and window.
-- **Export TEP Figure** saves the current plot as PNG, PDF, or `.fig`.
-- The **TEP Window** slider sets the time range shown in the plot.
+- **Add group...** assigns recordings to a named condition. A group is defined
+  over SUBJECTS, so repeat recordings of one person are averaged before the
+  group estimate is formed and the reported n counts participants, not files.
+- **Files, subjects, groups...** shows and corrects which file belongs to whom.
+  This is where n comes from.
+- **Design** is set explicitly as paired or unpaired. Paired is offered only
+  when every group holds the same subjects.
+- **Region of interest** is chosen from a scalp diagram or a named preset,
+  defaulting to `AF3 F1 F3 FC1 FC3`.
+- **Windows** define the intervals measured. Each carries a peak polarity
+  (`auto`/`pos`/`neg`) deciding which way its peak is read. The same table
+  switches to **results**, reporting the mean, peak latency and peak amplitude
+  for the group selected in the groups list.
 
----
+The plot picker offers the region-of-interest waveform, global and local mean
+field power, the difference wave, scalp topographies, a TEP-topo grid, and a
+per-window bar chart. A plot that cannot be drawn with the current settings is
+listed with the reason rather than hidden. Plot-specific settings are behind
+**Options...**.
 
-## Analysis tab
+Three export routes:
 
-The Analysis tab works on the files and ROI selected in the Visualizing tab — set those up first, then switch here.
-
-### TEP component table
-
-After clicking **PLOT TEP** in the Visualizing tab, the table populates automatically with the detected latency and amplitude of the six canonical TEP components (N15, P30, N45, P60, N100, P180). Components not found in the current waveform are shown as —.
-
-**Edit Component Windows** opens a dialog to adjust the search window for each component. **Reset Defaults** restores the canonical windows from Beck et al. (2024, *Hum Brain Mapp*, 45:e70048). Changes are applied immediately to the current plot.
-
-### Exporting data
-
-**Export TEP to Workspace** saves the grand-mean ROI waveform as a MATLAB variable. Set the variable name in the field next to the button before clicking.
-
-**Extract Peaks → CSV** runs batch peak extraction across all selected files and saves a long-format CSV suitable for import into R, SPSS, or Excel. Each row is one file × component combination, with columns for latency, amplitude, search window, trial count, and ROI channel list. Any extraction warnings (missing electrodes, failed detections) are listed in an alert after the run.
+- **Figure...** composes the plot at a chosen column width and resolution,
+  stamping the groups, sample sizes, design and ROI into a caption line so the
+  image stays interpretable once separated from the session.
+- **Measures -> CSV...** writes one row per subject, group and window.
+- **Results -> MATLAB...** writes the complete result, curves included.
+  `File > Load Analysis` reads it back, restoring the groups, subject
+  assignments, ROI, windows, design and plot selection.
 
 ---
 

@@ -34,7 +34,7 @@ function selected = roiPicker(current, available, opts)
 %   of an 867x529 tab - the largest single consumer of space there - to serve a
 %   choice most users make once a session.
 %
-%   It also moves where the ROI lives. findTEPelecs reads the selection back out
+%   It also moves where the ROI lives. The old tab read the selection back out
 %   of the widgets, looping over app.(NAMEButton).Value, so the UI *is* the
 %   state: an ROI cannot be set programmatically, saved into a session, or
 %   applied without the buttons existing. The picker takes a cellstr in and

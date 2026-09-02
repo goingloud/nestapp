@@ -5,7 +5,7 @@
 function tests = test_tepFieldCurve
 % TEST_TEPFIELDCURVE  Unit tests for the TEP/GMFP/LMFP per-file reduction.
 %
-%   tepFieldCurve backs the Visualizing-tab Plot Type toggle. GMFP must match
+%   tepFieldCurve backs the Explore plot modes. GMFP must match
 %   TESA's GMFA definition exactly (std(mean(EEG.data,3))); LMFP is the same
 %   measure restricted to the ROI; TEP is the signed ROI mean.
 %
