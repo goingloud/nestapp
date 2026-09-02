@@ -16,7 +16,7 @@ function rows = paramForm(parent, meta, values, onChange)
 %   THE CONTROL FOLLOWS THE VALUES, not the storage type. makeParam already
 %   records enough to choose one, so nothing new has to be declared:
 %
-%     logical                    dropdown - Default / On / Off
+%     logical                    a checkbox, sitting at its default
 %     a pipe-separated validRange   dropdown of those choices
 %     a 2-element vector         a Default box and a from/to pair
 %     scalar or integer          a Default box and one number
@@ -27,13 +27,26 @@ function rows = paramForm(parent, meta, values, onChange)
 %   a setting would accept - which is how a documented option ended up
 %   unreachable from the interface that set it.
 %
-%   UNSET IS A FIRST-CLASS STATE, and every control can express it: the
-%   dropdowns carry a leading "Default (x)" item, the numeric rows a Default
-%   checkbox that disables the field it governs. Disabled rather than hidden, so
-%   the value that would be used stays visible. This matters because the
-%   defaults live in the function that applies them - the registry only names
-%   them in a placeholder - so a setting must be able to stay absent rather than
-%   being frozen to a copy of whatever the default happened to be today.
+%   UNSET IS A FIRST-CLASS STATE, and every control can express it - but not
+%   all of them need a separate item to say so. WHERE A CONTROL CAN DISPLAY THE
+%   DEFAULT AS ONE OF ITS ORDINARY STATES, IT DOES, and unset is inferred by
+%   comparing the selection against the default: choosing "on" when on IS the
+%   default writes nothing, so the setting stays absent and keeps following the
+%   draw function. A logical is then a plain checkbox rather than three items
+%   for a two-state setting, and an enum a dropdown of just its choices.
+%
+%   What that gives up is pinning a value that happens to equal today's default
+%   so it survives a later change to it. For a plot setting that is a non-goal,
+%   and not worth an extra item in every list.
+%
+%   Two kinds of row keep an explicit Default control, because there is nothing
+%   for a comparison to match against:
+%     - the numeric rows, whose defaults are DERIVED (a width-relative font
+%       size, say) rather than a number the field could be showing
+%     - any setting whose placeholder does not name a default, or names one
+%       outside its own choices. Then the form cannot know what unset means,
+%       and says so with a "Default" item rather than guessing.
+%   Disabled rather than hidden, so the value that would be used stays visible.
 %
 %   Built as a free function rather than inside a dialog because the pipeline's
 %   step parameters are the same problem at fifty-five steps, and they can adopt
@@ -52,31 +65,61 @@ W = parent.Position(3);
 y = parent.Position(4) - ROW_H;
 
 for k = 1:numel(meta)
-    m   = meta(k);
-    val = valueOf(values, m.key);
-    lbl = m.friendlyName;
+    m      = meta(k);
+    val    = valueOf(values, m.key);
+    widget = widgetFor(m);
+    lbl    = m.friendlyName;
     if ~isempty(m.unit); lbl = sprintf('%s (%s)', lbl, m.unit); end
 
-    uilabel(parent, 'Position', [12 y LABEL_W 22], 'Text', lbl, ...
-            'Tooltip', m.description);
+    dflt = statedDefault(m, widget);
 
-    switch widgetFor(m)
+    % A checkbox reads as its own label - "[x] Confidence band" - and the box
+    % alone is a poor click target, so a toggle spans the row rather than
+    % sitting in the control column behind a label that repeats it.
+    spansRow = strcmp(widget, 'toggle') && ~isempty(dflt);
+    if ~spansRow
+        uilabel(parent, 'Position', [12 y LABEL_W 22], 'Text', lbl, ...
+                'Tooltip', m.description);
+    end
+
+    switch widget
         case 'toggle'
-            h = uidropdown(parent, 'Position', [CTRL_X y 170 22], ...
-                'Items', {sprintf('Default (%s)', defaultText(m)), 'On', 'Off'}, ...
-                'ItemsData', {[], true, false}, ...
-                'Tooltip', m.description, ...
-                'ValueChangedFcn', @(src, ~) onChange(m.key, src.Value));
-            if ~isempty(val); h.Value = asLogical(val); end
+            if isempty(dflt)
+                % No stated default: no checkbox state means "untouched", so
+                % keep the item that says it.
+                h = uidropdown(parent, 'Position', [CTRL_X y 170 22], ...
+                    'Items', {'Default', 'On', 'Off'}, ...
+                    'ItemsData', {[], true, false}, ...
+                    'Tooltip', m.description, ...
+                    'ValueChangedFcn', @(src, ~) onChange(m.key, src.Value));
+                if ~isempty(val); h.Value = asLogical(val); end
+            else
+                shown = dflt;
+                if ~isempty(val); shown = asLogical(val); end
+                h = uicheckbox(parent, 'Position', [12 y W-36 22], 'Text', lbl, ...
+                    'Tooltip', m.description, 'Value', shown, ...
+                    'ValueChangedFcn', @(src, ~) ...
+                        onChange(m.key, unsetIfDefault(src.Value, dflt)));
+            end
 
         case 'choice'
             choices = choicesOf(m);
-            h = uidropdown(parent, 'Position', [CTRL_X y 170 22], ...
-                'Items', [{sprintf('Default (%s)', defaultText(m))}, choices], ...
-                'ItemsData', [{[]}, choices], ...
-                'Tooltip', m.description, ...
-                'ValueChangedFcn', @(src, ~) onChange(m.key, src.Value));
-            if ~isempty(val) && ismember(char(val), choices); h.Value = char(val); end
+            if isempty(dflt)
+                h = uidropdown(parent, 'Position', [CTRL_X y 170 22], ...
+                    'Items', [{'Default'}, choices], ...
+                    'ItemsData', [{[]}, choices], ...
+                    'Tooltip', m.description, ...
+                    'ValueChangedFcn', @(src, ~) onChange(m.key, src.Value));
+                if ~isempty(val) && ismember(char(val), choices); h.Value = char(val); end
+            else
+                shown = dflt;
+                if ~isempty(val) && ismember(char(val), choices); shown = char(val); end
+                h = uidropdown(parent, 'Position', [CTRL_X y 170 22], ...
+                    'Items', choices, 'Value', shown, ...
+                    'Tooltip', m.description, ...
+                    'ValueChangedFcn', @(src, ~) ...
+                        onChange(m.key, unsetIfDefault(src.Value, dflt)));
+            end
 
         case 'range'
             h = numericRow(parent, y, CTRL_X, m, val, onChange, 2);
@@ -157,6 +200,29 @@ c = {};
 if isempty(m.validRange) || ~contains(m.validRange, '|'); return; end
 parts = strtrim(strsplit(m.validRange, '|'));
 c = parts(~cellfun(@isempty, parts));
+end
+
+function d = statedDefault(m, widget)
+% The default this control can SHOW as one of its ordinary states, or [] when
+% there is none to show. Read from the placeholder, which by convention names
+% it - "(on)", "(mean)". Returning [] is what routes the row back to an
+% explicit Default item, so a registry entry that names no default, or names
+% one outside its own choices, degrades honestly instead of guessing.
+d = [];
+txt = defaultText(m);
+switch widget
+    case 'toggle'
+        if any(strcmpi(txt, {'on', 'true'}));   d = true;  end
+        if any(strcmpi(txt, {'off', 'false'})); d = false; end
+    case 'choice'
+        if ismember(txt, choicesOf(m)); d = txt; end
+end
+end
+
+function v = unsetIfDefault(v, dflt)
+% Selecting the default is not the same as setting it: report absence, so the
+% setting stays out of the struct and keeps following the draw function.
+if isequal(v, dflt); v = []; end
 end
 
 function s = defaultText(m)

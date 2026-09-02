@@ -13,7 +13,11 @@ function tests = test_paramForm
 %      anything new being declared.
 %   2. UNSET SURVIVES. A setting the user never touches must stay absent from
 %      the values struct, because the defaults live in the draw function and a
-%      value frozen here would stop following them.
+%      value frozen here would stop following them. Since a checkbox and a
+%      plain dropdown have no state that MEANS untouched, that now rests on a
+%      comparison - selecting the default reports absence - and on the form
+%      falling back to an explicit Default item when it cannot know what the
+%      default is.
 %
 %   Run: runtests('tests/unit/test_paramForm')
 tests = functiontests(localfunctions);
@@ -30,10 +34,26 @@ end
 
 function panel = build(testCase, meta, values)
 % No test here inspects the change callback, so it is a sink.
+[panel, ~] = buildWatched(testCase, meta, values);
+end
+
+function [panel, lastChange] = buildWatched(testCase, meta, values)
+% Same, but hands back a getter for what the form last reported. A nested
+% function, not @() reported - an anonymous handle would capture the value as
+% it was at construction and always answer with the empty seed.
+reported = struct('key', '', 'value', 'never called');
 fig = uifigure('Visible', 'off', 'Position', [100 100 500 400]);
 testCase.addTeardown(@() delete(fig));
 panel = uipanel(fig, 'Position', [0 0 470 34 * numel(meta) + 8]);
-paramForm(panel, meta, values, @(varargin) []);
+paramForm(panel, meta, values, @record);
+lastChange = @get;
+
+    function record(key, value)
+        reported = struct('key', key, 'value', {value});
+    end
+    function r = get()
+        r = reported;
+    end
 end
 
 function m = toggleParam()
@@ -53,13 +73,16 @@ end
 
 % -- tests ----------------------------------------------------------------
 
-function test_aLogicalBecomesADropdownOfDefaultOnOff(testCase)
+function test_aLogicalBecomesOneCheckboxSittingAtItsDefault(testCase)
+% Two items for a two-state setting, not three: On and "Default (on)" drew the
+% identical picture and differed only in whether a value was stored.
 panel = build(testCase, toggleParam(), struct());
-dd = findall(panel, 'Type', 'uidropdown');
-testCase.assertNumElements(dd, 1);
-testCase.verifyEqual(dd.Items, {'Default (on)', 'On', 'Off'}, ...
-    'the default has to be offerable, and named');
-testCase.verifyEmpty(dd.Value, 'an untouched setting starts at its default');
+testCase.verifyEmpty(findall(panel, 'Type', 'uidropdown'));
+cb = findall(panel, 'Type', 'uicheckbox');
+testCase.assertNumElements(cb, 1);
+testCase.verifyTrue(cb.Value, 'an untouched setting shows the default it will use');
+testCase.verifyEqual(cb.Text, 'Confidence band', ...
+    'the checkbox is its own label - a bare box is a poor click target');
 end
 
 function test_aPipeSeparatedRangeBecomesADropdownOfThoseChoices(testCase)
@@ -67,7 +90,67 @@ function test_aPipeSeparatedRangeBecomesADropdownOfThoseChoices(testCase)
 % closed list, so it can drive the control.
 panel = build(testCase, choiceParam(), struct());
 dd = findall(panel, 'Type', 'uidropdown');
-testCase.verifyEqual(dd.Items, {'Default (mean)', 'mean', 'peak', 'area'});
+testCase.verifyEqual(dd.Items, {'mean', 'peak', 'area'}, ...
+    'no separate Default item: the dropdown can show "mean" itself');
+testCase.verifyEqual(dd.Value, 'mean');
+end
+
+function test_choosingTheDefaultReportsAbsenceRatherThanTheValue(testCase)
+% The whole basis for dropping the Default item. Setting a param to what the
+% draw function would have done anyway must leave it unset, or it stops
+% following that function if the default ever changes.
+[panel, lastChange] = buildWatched(testCase, choiceParam(), struct('measure', 'peak'));
+dd = findall(panel, 'Type', 'uidropdown');
+testCase.assertEqual(dd.Value, 'peak');
+
+dd.Value = 'mean';
+dd.ValueChangedFcn(dd, []);
+r = lastChange();
+testCase.verifyEqual(r.key, 'measure');
+testCase.verifyEmpty(r.value, 'selecting the default means "unset", not "= mean"');
+
+dd.Value = 'area';
+dd.ValueChangedFcn(dd, []);
+r = lastChange();
+testCase.verifyEqual(r.value, 'area', 'a non-default choice is still reported');
+end
+
+function test_unTickingADefaultOnToggleReportsFalse(testCase)
+[panel, lastChange] = buildWatched(testCase, toggleParam(), struct());
+cb = findall(panel, 'Type', 'uicheckbox');
+cb.Value = false;
+cb.ValueChangedFcn(cb, []);
+r = lastChange();
+testCase.verifyEqual(r.value, false);
+
+cb.Value = true;
+cb.ValueChangedFcn(cb, []);
+r = lastChange();
+testCase.verifyEmpty(r.value, 'back to the default is back to unset');
+end
+
+function test_aSettingWithNoStatedDefaultKeepsAnExplicitDefaultItem(testCase)
+% The honest fallback. With no placeholder there is nothing for the comparison
+% to match, so a checkbox could not express "untouched" - say so in the control
+% rather than guessing that off means default.
+m = makeParam('legend', 'Legend', '', 'on|off', 'desc', 'type', 'logical');
+panel = build(testCase, m, struct());
+testCase.verifyEmpty(findall(panel, 'Type', 'uicheckbox'));
+dd = findall(panel, 'Type', 'uidropdown');
+testCase.assertNumElements(dd, 1);
+testCase.verifyEqual(dd.Items, {'Default', 'On', 'Off'});
+testCase.verifyEmpty(dd.Value);
+end
+
+function test_aDefaultOutsideItsOwnChoicesAlsoFallsBack(testCase)
+% A registry entry naming "(median)" where the choices are mean|peak|area is a
+% mistake, but the form must not silently show one of the three as if it were
+% the default.
+m = makeParam('measure', 'Measure', '', 'mean | peak | area', 'desc', ...
+              'type', 'string', 'placeholder', '(median)');
+panel = build(testCase, m, struct());
+dd = findall(panel, 'Type', 'uidropdown');
+testCase.verifyEqual(dd.Items, {'Default', 'mean', 'peak', 'area'});
 end
 
 function test_aTwoElementVectorBecomesADefaultBoxAndTwoNumbers(testCase)
@@ -94,8 +177,8 @@ end
 function test_aStoredOnOffStringStillShowsAsOn(testCase)
 % Sessions saved before the controls existed hold 'on'/'off' text.
 panel = build(testCase, toggleParam(), struct('showBand', 'off'));
-dd = findall(panel, 'Type', 'uidropdown');
-testCase.verifyEqual(dd.Value, false);
+cb = findall(panel, 'Type', 'uicheckbox');
+testCase.verifyFalse(cb.Value);
 end
 
 function test_everyRegistryParamGetsAControl(testCase)
