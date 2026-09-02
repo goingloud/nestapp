@@ -54,7 +54,7 @@ function createComponents(app)
 
             mTools = uimenu(app.UIFigure, 'Text', 'Tools');
             uimenu(mTools, 'Text', 'Browse Raw EEG...', ...
-                'MenuSelectedFcn', createCallbackFcn(app, @PlotEEGdataButtonPushed, true));
+                'MenuSelectedFcn', createCallbackFcn(app, @browseRawEegMenu, true));
 
             mHelp = uimenu(app.UIFigure, 'Text', 'Help');
             uimenu(mHelp, 'Text', 'About nestapp', ...
@@ -1194,14 +1194,16 @@ function createComponents(app)
             app.AnalysisStatusLabel.FontSize   = 10;
             app.AnalysisStatusLabel.FontColor  = [0.4 0.4 0.4];
 
-            % Create EEGDatasetDropDownLabel (kept for PlotEEGdataButtonPushed callback)
+            % Create EEGDatasetDropDownLabel (hidden; Visualizing-tab state,
+            % still populated by applyTEPSelection and deleted with the tab)
             app.EEGDatasetDropDownLabel = uilabel(app.VisualizingTab);
             app.EEGDatasetDropDownLabel.HorizontalAlignment = 'right';
             app.EEGDatasetDropDownLabel.Position = [152 58 75 22];
             app.EEGDatasetDropDownLabel.Text = 'EEG Dataset';
             app.EEGDatasetDropDownLabel.Visible = 'off';
 
-            % Create EEGDatasetDropDown (kept for PlotEEGdataButtonPushed; hidden)
+            % Create EEGDatasetDropDown (hidden; nothing reads its value now
+            % that Browse Raw EEG sources the Cleaning queue)
             app.EEGDatasetDropDown = uidropdown(app.VisualizingTab);
             app.EEGDatasetDropDown.Items = {'Select a file'};
             app.EEGDatasetDropDown.ValueChangedFcn = createCallbackFcn(app, @EEGDatasetDropDownValueChanged, true);
@@ -1209,14 +1211,6 @@ function createComponents(app)
             app.EEGDatasetDropDown.Position = [230 58 100 22];
             app.EEGDatasetDropDown.Value = 'Select a file';
             app.EEGDatasetDropDown.Visible = 'off';
-
-            % Create PlotEEGdataButton (hidden; triggered via Tools menu)
-            app.PlotEEGdataButton = uibutton(app.VisualizingTab, 'push');
-            app.PlotEEGdataButton.ButtonPushedFcn = createCallbackFcn(app, @PlotEEGdataButtonPushed, true);
-            app.PlotEEGdataButton.Enable  = 'off';
-            app.PlotEEGdataButton.Visible = 'off';
-            app.PlotEEGdataButton.Position = [5 26 108 23];
-            app.PlotEEGdataButton.Text = 'Plot EEG data';
 
             % Create ReportsTab
             app.ReportsTab = uitab(app.TabGroup);

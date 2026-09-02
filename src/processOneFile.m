@@ -194,20 +194,7 @@ for si = 1:nSteps
                 EEG = validateChannelCoords(EEG, coordCheck);
 
             case 'Load Data'
-                if   strcmpi(fileName(end-2:end),'set')
-                    EEG = pop_loadset( [pathName fileName]);
-                elseif strcmpi(fileName(end-2:end),'cnt')
-                    EEG = pop_loadcnt([pathName fileName] , 'dataformat', 'int32' );
-                elseif strcmpi(fileName(end-2:end),'cdt')
-                    EEG = loadcurry([pathName fileName], 'CurryLocations', 'False');
-                elseif strcmpi(fileName(end-3:end),'vhdr')
-                    EEG = pop_loadbv(pathName , fileName );
-                else
-                    error('nestapp:unknownFormat', ...
-                        'Load Data: unrecognized file extension in "%s". Supported: .set, .cnt, .cdt, .vhdr', ...
-                        fileName);
-                end
-                EEG.filename = fileName;
+                EEG = loadEegFile([pathName fileName]);
                 [ALLEEG, EEG, CURRENTSET] = eeg_store(ALLEEG, EEG, CURRENTSET);
                 if isfield(EEG, 'history')
                     histLenBefore = numel(EEG.history);

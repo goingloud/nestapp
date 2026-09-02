@@ -39,7 +39,6 @@ classdef nestapp < matlab.apps.AppBase
         TEPvarNameEditField             matlab.ui.control.EditField
         TEPvarNameEditFieldLabel        matlab.ui.control.Label
         ExportTEPDataButton             matlab.ui.control.Button
-        PlotEEGdataButton               matlab.ui.control.Button
         EEGDatasetDropDown              matlab.ui.control.DropDown
         EEGDatasetDropDownLabel         matlab.ui.control.Label
         TopoplottimeSpinner             matlab.ui.control.Spinner
@@ -3726,7 +3725,6 @@ classdef nestapp < matlab.apps.AppBase
             app.OpenTEPFigureButton.Enable   = "on";
             app.OpenTopoFigureButton.Enable  = "on";
             app.PLOTTEPButton.Enable         = "on";
-            app.PlotEEGdataButton.Enable     = 'on';
             app.EEGDatasetDropDown.Enable    = "on";
         end
 
@@ -3891,14 +3889,61 @@ classdef nestapp < matlab.apps.AppBase
         function EEGDatasetDropDownValueChanged(~, ~)
         end
 
-        % Button pushed function: PlotEEGdataButton
-        function PlotEEGdataButtonPushed(app, ~)
-            subInd = strcmpi(app.SelectedFilesforTEP, app.EEGDatasetDropDown.Value);
-            if isFileSelected(app)
-                if ~app.EEG_SelectedTEPFiles_Loaded
-                    LoadSelecEEGdata(app)
-                end
-                pop_eegplot(app.EEGofAllSelectedFiles{subInd},1,1,1)
+        % Menu selected function: Tools > Browse Raw EEG...
+        function browseRawEegMenu(app, ~)
+        % Open EEGLAB's scrolling viewer on one of the files queued on the
+        % Cleaning tab. This is raw-data QC - "does this recording look like
+        % anything" - so it reads the CLEANING queue (app.filePaths), not the
+        % group comparison in Explore, and it loads the file on demand rather
+        % than depending on a cohort someone else happened to load first.
+            paths = cleaningQueuePaths(app);
+            if isempty(paths)
+                uialert(app.UIFigure, ...
+                    'Select data files on the Cleaning tab first.', ...
+                    'Nothing to browse');
+                return
+            end
+
+            if isscalar(paths)
+                chosen = paths{1};
+            else
+                labels = buildFileLabels(app, paths);
+                k = pickOne('Browse Raw EEG', 'Which recording?', labels, app.UIFigure);
+                if isempty(k); return; end
+                chosen = paths{k};
+            end
+
+            % The viewer is EEGLAB's, so this is the point at which EEGLAB
+            % stops being optional.
+            [ok, msg] = ensureEeglabReady();
+            if ~ok
+                uialert(app.UIFigure, msg, 'EEGLAB Init Failed', 'Icon', 'error');
+                return
+            end
+
+            try
+                EEG = loadEegFile(chosen);
+            catch err
+                uialert(app.UIFigure, ...
+                    sprintf('Could not read %s\n\n%s', chosen, err.message), ...
+                    'Load failed', 'Icon', 'error');
+                return
+            end
+            pop_eegplot(EEG, 1, 1, 1);
+        end
+
+        function paths = cleaningQueuePaths(app)
+        % The Cleaning tab's queue as full paths. filePaths is the source of
+        % truth and spans folders; the app.path join is the fallback for a
+        % selection made before filePaths was populated, exactly as
+        % RunAnalysisButtonPushed resolves it.
+            if ~isempty(app.filePaths)
+                paths = app.filePaths(:)';
+            elseif ~isempty(app.file) && ~isempty(app.path)
+                paths = cellfun(@(f) fullfile(app.path, f), app.file(:)', ...
+                                'UniformOutput', false);
+            else
+                paths = {};
             end
         end
 
