@@ -2,33 +2,57 @@
 % Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
 % Part of nestapp; see the LICENSE file for full terms.
 function clim = drawGroupTopo(axList, res, opts)
-% DRAWGROUPTOPO  One scalp map per group, on a shared microvolt scale.
+% DRAWGROUPTOPO  One scalp map per group, by default on one shared scale.
 %   clim = DRAWGROUPTOPO(axList, res, opts) draws the window-averaged scalp
 %   distribution for each group into the corresponding axes of axList, and
-%   returns the symmetric colour limits used.
+%   returns the symmetric colour limits used - or [] when each map carries its
+%   own scale, because then there is nothing one bar could describe. A caller
+%   minting a shared colour bar must check for that.
 %
 %   axList must have at least one axes per group; the caller mints them, so
 %   this works the same into a uifigure panel and into a publication figure.
 %
 %   opts:
 %     .window   [t1 t2] in ms to average over (default the whole epoch)
-%     .clim     force colour limits; default symmetric across ALL groups
+%     .scale    'shared' (default) | 'per map'
+%     .climit   scalar uV pinning the scale to [-climit climit]; overrides
+%               .scale, since a stated number is a stated scale
+%     .clim     force colour limits outright (2-element); wins over both
 %     .titles   cellstr overriding the per-map titles
 %     .colorbar false when the caller draws its own shared bar (see
-%               sharedColorbar); default true, putting one on the last map
+%               sharedColorbar); ignored under 'per map', where each map needs
+%               its own
+%     .markers  passed to drawScalpTopo: 'off' | 'dots' | 'labels'
+%     .contours passed to drawScalpTopo: contour-line count
 %
-%   The shared scale is the point. Each map drawn with its own limits would
-%   make two groups look alike whatever their amplitudes - a 1 uV map and a
-%   10 uV map both render as a full-range red and blue dipole. Colour limits
-%   are computed once across every group and applied to all of them, so the
-%   maps are comparable by eye, which is the only reason to put them side by
-%   side. They are symmetric about zero for the same reason drawScalpTopo makes
-%   them symmetric: with a diverging map, an off-centre zero puts the neutral
-%   colour somewhere other than no-deflection and misreads the polarity.
+%   THE SHARED SCALE IS STILL THE DEFAULT, and for the usual reason: each map
+%   drawn with its own limits makes two groups look alike whatever their
+%   amplitudes - a 1 uV map and a 10 uV map both render as a full-range red and
+%   blue dipole. Comparability by eye is the only reason to put maps side by
+%   side, so nothing about the default view changes.
 %
-%   See also: drawScalpTopo, groupCurves, divergingColormap
+%   'per map' exists for the case the shared scale is bad at: one group an
+%   order of magnitude larger flattens every other map to near-neutral, and
+%   the TOPOGRAPHY of the smaller groups - which is a separate question from
+%   their amplitude - becomes unreadable. Each map then gets its own bar, and
+%   clim comes back empty so a caller cannot hang one shared bar over maps that
+%   no longer share a scale.
+%
+%   'climit' answers a third question: holding the scale FIXED across runs, so
+%   two exported figures can be compared. It is a scalar rather than a pair
+%   because the limits must stay symmetric about zero - with a diverging map an
+%   off-centre zero puts the neutral colour somewhere other than
+%   no-deflection and misreads the polarity, which is drawScalpTopo's
+%   invariant, not a preference.
+%
+%   See also: drawScalpTopo, groupCurves, divergingColormap, sharedColorbar
 
 if nargin < 3; opts = struct(); end
+opts = fillDefaults(opts, struct('scale', 'shared', 'climit', [], ...
+                                'markers', [], 'contours', []));
+% markers and contours stay EMPTY when unset rather than being defaulted
+% here: drawScalpTopo owns those defaults, and fillDefaults reads empty as
+% absent, so passing [] through leaves them in exactly one place.
 nG = numel(res.groups);
 if nG == 0; clim = [0 0]; return; end
 if numel(axList) < nG
@@ -54,8 +78,18 @@ for g = 1:nG
     vals{g} = mean(res.groups(g).chanMeans(:, sel), 2, 'omitnan');
 end
 
+perMap = strcmpi(strrep(char(opts.scale), ' ', ''), 'permap') ...
+         && isempty(opts.climit) ...
+         && (~isfield(opts, 'clim') || isempty(opts.clim));
+
 if isfield(opts, 'clim') && ~isempty(opts.clim)
     clim = opts.clim;
+elseif ~isempty(opts.climit)
+    m    = abs(opts.climit(1));
+    if ~isfinite(m) || m == 0; m = 1; end
+    clim = [-m m];
+elseif perMap
+    clim = [];       % nothing shared to report, and nothing for one bar to say
 else
     m    = max(cellfun(@(v) max(abs(v)), vals));
     if ~isfinite(m) || m == 0; m = 1; end
@@ -67,10 +101,15 @@ end
 % figure whose whole purpose is that the maps are comparable by eye. The caller
 % mints the axes, so the caller reserves a strip and hangs one sharedColorbar
 % there; opts.colorbar exists for a caller that has nowhere to put one.
+% Under 'per map' the caller's shared strip is empty, so each map has to carry
+% its own bar whatever the caller asked for - a map with no scale at all is
+% worse than a slightly smaller head.
 showBar = ~isfield(opts, 'colorbar') || opts.colorbar;
+mapOpts = struct('markers', opts.markers, 'contours', opts.contours);
 for g = 1:nG
-    drawScalpTopo(axList(g), vals{g}, res.chanlocs, ...
-                  struct('clim', clim, 'colorbar', showBar && g == nG));
+    mapOpts.clim     = clim;
+    mapOpts.colorbar = perMap || (showBar && g == nG);
+    drawScalpTopo(axList(g), vals{g}, res.chanlocs, mapOpts);
     if isfield(opts, 'titles') && numel(opts.titles) >= g
         title(axList(g), opts.titles{g});
     else
@@ -79,5 +118,7 @@ for g = 1:nG
     end
 end
 
-applySharedScale(axList(1:nG), clim);
+if ~perMap
+    applySharedScale(axList(1:nG), clim);
+end
 end

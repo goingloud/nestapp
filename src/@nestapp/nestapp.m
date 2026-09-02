@@ -2205,8 +2205,18 @@ classdef nestapp < matlab.apps.AppBase
                     % in a figure whose point is that they are comparable.
                     clim = fn(axList, res, ...
                               fillDefaults(struct('colorbar', false), opts));
-                    sharedColorbar(parent, axesFcn, ...
-                        [pos(3) - BAR_W + 8, 40, 12, pos(4) - 80], clim);
+                    if ~isempty(clim)
+                        sharedColorbar(parent, axesFcn, ...
+                            [pos(3) - BAR_W + 8, 40, 12, pos(4) - 80], clim);
+                    end
+                    % Empty clim means the maps no longer share a scale, so
+                    % each carries its own bar and one hung here would be a
+                    % lie. The strip stays reserved and empty rather than
+                    % reclaimed: the axes are minted before the drawer runs,
+                    % so the layout cannot know, and asking the tab to read
+                    % the plot's own params to find out is exactly the
+                    % plot-specific knowledge the layout indirection exists
+                    % to keep out of here.
 
                 otherwise   % 'single'
                     ax = axesFcn(parent, [45 45 pos(3) - 70 pos(4) - 70]);

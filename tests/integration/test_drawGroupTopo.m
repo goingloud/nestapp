@@ -111,3 +111,127 @@ axs = twoAxes(testCase);
 testCase.verifyError(@() drawGroupTopo(axs, twoGroupRes(1), ...
     struct('window', [900 1200])), 'nestapp:windowOutsideEpoch');
 end
+
+% -- colour scale mode ----------------------------------------------------
+
+function test_perMapGivesEachMapItsOwnScale(testCase)
+% The setting exists because a group ten times larger flattens the others to
+% near-neutral, and their topography then cannot be read at all.
+axs = twoAxes(testCase);
+drawGroupTopo(axs, twoGroupRes(0.1), struct('window', [90 120], 'scale', 'per map'));
+testCase.verifyNotEqual(axs(1).CLim, axs(2).CLim);
+for k = 1:2
+    testCase.verifyEqual(axs(k).CLim(1), -axs(k).CLim(2), 'AbsTol', 1e-12, ...
+        'each map is still symmetric - zero stays at the middle of the map');
+end
+end
+
+function test_perMapReportsNoSharedScaleForTheCallerToLabel(testCase)
+% The contract the tab relies on. A shared bar hung over maps that no longer
+% share a scale states a voltage for a colour that means a different voltage
+% in the map beside it - a wrong number on a published figure, which is the
+% class of bug this whole stage is about.
+axs  = twoAxes(testCase);
+clim = drawGroupTopo(axs, twoGroupRes(0.1), ...
+                     struct('window', [90 120], 'scale', 'per map'));
+testCase.verifyEmpty(clim);
+end
+
+function test_perMapPutsABarOnEveryMapSinceNoSharedOneCan(testCase)
+axs = twoAxes(testCase);
+drawGroupTopo(axs, twoGroupRes(0.1), struct('window', [90 120], ...
+    'scale', 'per map', 'colorbar', false));
+for k = 1:2
+    testCase.verifyNotEmpty(findall(axs(k).Parent, 'Type', 'colorbar'), ...
+        'a map with no scale at all is worse than a slightly smaller head');
+end
+end
+
+function test_sharedStaysTheDefault(testCase)
+% Every figure already exported reads a shared scale; an absent setting must
+% still mean exactly that.
+axs  = twoAxes(testCase);
+clim = drawGroupTopo(axs, twoGroupRes(0.2), struct('window', [90 120]));
+testCase.verifyNotEmpty(clim);
+testCase.verifyEqual(axs(1).CLim, axs(2).CLim);
+end
+
+function test_aFixedLimitPinsTheScaleSymmetrically(testCase)
+% What makes two runs comparable: a derived scale moves with the data, so the
+% same colour means a different voltage in each figure.
+axs  = twoAxes(testCase);
+clim = drawGroupTopo(axs, twoGroupRes(1), struct('window', [90 120], 'climit', 7));
+testCase.verifyEqual(clim, [-7 7]);
+testCase.verifyEqual(axs(1).CLim, [-7 7]);
+testCase.verifyEqual(axs(2).CLim, [-7 7]);
+end
+
+function test_aFixedLimitOverridesPerMap(testCase)
+% A stated number is a stated scale, so it cannot also be per-map. Documented
+% precedence, pinned because the two settings are independently reachable.
+axs  = twoAxes(testCase);
+clim = drawGroupTopo(axs, twoGroupRes(0.1), ...
+                     struct('window', [90 120], 'scale', 'per map', 'climit', 4));
+testCase.verifyEqual(clim, [-4 4]);
+testCase.verifyEqual(axs(1).CLim, axs(2).CLim);
+end
+
+function test_aNegativeFixedLimitIsReadAsAMagnitude(testCase)
+% -6 and 6 name the same symmetric scale; the alternative is an inverted CLim
+% that renders every map in reverse polarity.
+axs  = twoAxes(testCase);
+clim = drawGroupTopo(axs, twoGroupRes(1), struct('window', [90 120], 'climit', -6));
+testCase.verifyEqual(clim, [-6 6]);
+end
+
+% -- markers and contours -------------------------------------------------
+
+function test_markersAreOffByDefaultAndDrawnWhenAsked(testCase)
+axs = twoAxes(testCase);
+drawGroupTopo(axs, twoGroupRes(1), struct('window', [90 120]));
+bare = nMarks(axs(1));
+
+axs = twoAxes(testCase);
+drawGroupTopo(axs, twoGroupRes(1), struct('window', [90 120], 'markers', 'dots'));
+testCase.verifyGreaterThan(nMarks(axs(1)), bare);
+end
+
+function test_labelsNameTheElectrodesRatherThanJustMarkingThem(testCase)
+axs = twoAxes(testCase);
+drawGroupTopo(axs, twoGroupRes(1), struct('window', [90 120], 'markers', 'labels'));
+txt   = findall(axs(1), 'Type', 'text');
+% topoplot pads each label with a leading space to hold it off the marker,
+% so the comparison has to trim - matching on ' E1' would pin a detail of
+% topoplot's spacing rather than the behaviour under test.
+shown = strtrim(cellfun(@(c) char(string(c)), {txt.String}, 'UniformOutput', false));
+testCase.verifyTrue(any(strcmp(shown, 'E1')), ...
+    'the point of labels is answering WHICH electrode');
+end
+
+function test_anUnknownMarkerWordIsAnErrorNotASilentOff(testCase)
+% Passing an unrecognised word straight to topoplot draws nothing and reports
+% nothing, so a typo in a saved session would silently lose the markers.
+axs = twoAxes(testCase);
+testCase.verifyError(@() drawGroupTopo(axs, twoGroupRes(1), ...
+    struct('window', [90 120], 'markers', 'dot')), 'nestapp:badMarkers');
+end
+
+function test_zeroContoursLeavesTheFieldAlone(testCase)
+axs = twoAxes(testCase);
+drawGroupTopo(axs, twoGroupRes(1), struct('window', [90 120], 'contours', 0));
+few = numel(findall(axs(1), 'Type', 'contour')) ...
+    + numel(findall(axs(1), 'Type', 'line'));
+
+axs = twoAxes(testCase);
+drawGroupTopo(axs, twoGroupRes(1), struct('window', [90 120], 'contours', 10));
+many = numel(findall(axs(1), 'Type', 'contour')) ...
+     + numel(findall(axs(1), 'Type', 'line'));
+testCase.verifyGreaterThanOrEqual(many, few);
+end
+
+function n = nMarks(ax)
+% topoplot draws electrode markers as line objects with no connecting segment.
+% findall, not findobj: topoplot leaves much of what it draws
+% handle-invisible, and findobj skips exactly those.
+n = numel(findall(ax, 'Type', 'line', 'LineStyle', 'none'));
+end

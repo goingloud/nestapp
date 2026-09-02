@@ -20,6 +20,10 @@ function cLim = drawScalpTopo(ax, values, chanlocs, opts)
 %                           shared scale needs ONE bar, not one per map: twelve
 %                           identical bars cost about 40% of the width and
 %                           shrink every head to pay for it.
+%                .markers   'off' (default) | 'dots' | 'labels'. Whether the
+%                           electrode positions are drawn, and named.
+%                .contours  number of iso-voltage contour lines, default 5.
+%                           0 for a plain interpolated field.
 %
 %   Returns the symmetric colour limits actually applied, in uV.
 %
@@ -28,6 +32,13 @@ function cLim = drawScalpTopo(ax, values, chanlocs, opts)
 %   render as a full-range dipole - so a caller drawing one map per group
 %   computes the limits once across all of them and passes them in. Without an
 %   override the behaviour is unchanged: symmetric absmax from this map.
+%
+%   Markers are off by default because a scalp map's job here is the field, and
+%   sixty-odd dots over a 40 mm head obscure it. They matter when the question
+%   is WHICH electrode - a reader checking that a frontal focus really sits on
+%   the channels the ROI names - so 'labels' exists for the figure that has to
+%   answer that, and is unreadable at grid size on purpose: it is for one large
+%   map, not twelve small ones.
 %
 %   The colour scale is plain linear microvolts: topoplot's default maplimits
 %   is 'absmax', so the limits are symmetric about zero and recomputed for
@@ -39,11 +50,14 @@ function cLim = drawScalpTopo(ax, values, chanlocs, opts)
 %
 %   See also: divergingColormap, drawGroupTopo, topoplot
 
-INTRAD      = 0.55;   % EEGLAB default interpolation radius
-NUM_CONTOUR = 5;
-CB_LABEL    = 'uV';
+INTRAD   = 0.55;   % EEGLAB default interpolation radius
+CB_LABEL = 'uV';
 
-topoArgs = {'electrodes', 'off', 'numcontour', NUM_CONTOUR, ...
+if nargin < 4 || ~isstruct(opts); opts = struct(); end
+opts = fillDefaults(opts, struct('markers', 'off', 'contours', 5));
+
+topoArgs = {'electrodes', topoElectrodes(opts.markers), ...
+            'numcontour', max(0, round(opts.contours)), ...
             'intsquare', 'on', 'style', 'map', 'conv', 'on', ...
             'intrad', INTRAD};
 
@@ -74,13 +88,13 @@ end
 
 % A caller comparing several maps supplies one scale for all of them; it wins
 % over the per-map limits derived above.
-if nargin >= 4 && isstruct(opts) && isfield(opts, 'clim') && ~isempty(opts.clim)
+if isfield(opts, 'clim') && ~isempty(opts.clim)
     cLim = opts.clim(:)';
 end
 
 ax.CLim = cLim;
 colormap(ax, divergingColormap());
-if nargin < 4 || ~isstruct(opts) || ~isfield(opts, 'colorbar') || opts.colorbar
+if ~isfield(opts, 'colorbar') || opts.colorbar
     cb = colorbar(ax);
     cb.Label.String = CB_LABEL;
 end
@@ -118,6 +132,20 @@ cla(uiAx, 'reset');
 copyobj(allchild(tmpAx), uiAx);
 axis(uiAx, 'equal');
 axis(uiAx, 'off');
+end
+
+function e = topoElectrodes(markers)
+% Our three words for topoplot's option. Named for what the reader sees rather
+% than for topoplot's spelling, where 'on' means dots and there is no word for
+% the difference between a dot and a named dot.
+switch lower(strtrim(char(markers)))
+    case {'off', ''};  e = 'off';
+    case 'dots';       e = 'on';
+    case 'labels';     e = 'labels';
+    otherwise
+        error('nestapp:badMarkers', ...
+              'markers must be off, dots or labels; got "%s".', char(markers));
+end
 end
 
 function restoreCurrentFigure(prevFig)
