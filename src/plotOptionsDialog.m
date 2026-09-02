@@ -1,13 +1,16 @@
 % SPDX-License-Identifier: GPL-3.0-or-later
 % Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
 % Part of nestapp; see the LICENSE file for full terms.
-function [params, accepted] = plotOptionsDialog(entry, params, anchor)
+function [params, accepted] = plotOptionsDialog(entry, params, anchor, context)
 % PLOTOPTIONSDIALOG  Edit one plot's settings, generated from its registry entry.
-%   [params, accepted] = PLOTOPTIONSDIALOG(entry, params, anchor)
+%   [params, accepted] = PLOTOPTIONSDIALOG(entry, params, anchor, context)
 %
 %   entry    one element of plotRegistry(), whose .params drives the form
 %   params   the values already set for this plot (struct, possibly empty)
 %   anchor   optional figure to centre on
+%   context  optional struct supplying choices for params that declare
+%            'choicesFrom' - the windows in the table right now, say. Passed
+%            straight to paramForm; nothing here reads it.
 %
 %   Returns the edited params and whether the user accepted them. On cancel -
 %   including the window's X - the input is handed back untouched.
@@ -33,6 +36,7 @@ function [params, accepted] = plotOptionsDialog(entry, params, anchor)
 
 if nargin < 2 || isempty(params); params = struct(); end
 if nargin < 3; anchor = []; end
+if nargin < 4; context = struct(); end
 accepted = false;
 
 meta = entry.params;
@@ -41,9 +45,8 @@ if isempty(meta)
 end
 original = params;
 
-ROW_H = 34;
 W     = 470;
-formH = ROW_H * numel(meta) + 8;
+formH = paramFormHeight(meta);
 H     = formH + 108;
 
 fig = uifigure('Name', sprintf('%s - options', entry.name), ...
@@ -54,7 +57,7 @@ uilabel(fig, 'Position', [16 H-32 W-32 22], 'Text', entry.name, ...
         'FontWeight', 'bold');
 
 form = uipanel(fig, 'Position', [16 56 W-32 formH], 'BorderType', 'none');
-paramForm(form, meta, params, @onChange);
+paramForm(form, meta, params, @onChange, context);
 
 uibutton(fig, 'Text', 'Reset', 'Position', [16 16 90 26], ...
     'Tooltip', 'Put every setting back to its default.', ...
@@ -84,7 +87,7 @@ end
     function onReset()
         params = struct();
         delete(form.Children);
-        paramForm(form, meta, params, @onChange);
+        paramForm(form, meta, params, @onChange, context);
     end
 
     function onOk()

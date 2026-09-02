@@ -2432,11 +2432,22 @@ classdef nestapp < matlab.apps.AppBase
             recomputeExplore(app);
         end
 
+        function ctx = explorePlotContext(app)
+        % Choices for params that declare 'choicesFrom' - a list the registry
+        % cannot state because it is whatever the user has in the table right
+        % now. One key, because one param needs one; a context field with no
+        % consumer is surface to keep in step for nothing.
+            names = {};
+            if ~isempty(app.exploreWindows); names = {app.exploreWindows.name}; end
+            ctx = struct('windows', {names});
+        end
+
         function ExplorePlotOptionsButtonPushed(app, ~)
             entry = currentPlotEntry(app);
             if isempty(entry) || isempty(entry.params); return; end
             [params, accepted] = plotOptionsDialog(entry, ...
-                explorePlotParamsFor(app, entry.name), app.UIFigure);
+                explorePlotParamsFor(app, entry.name), app.UIFigure, ...
+                explorePlotContext(app));
             if ~accepted; return; end
             app.explorePlotParams = upsertByName(app.explorePlotParams, ...
                 struct('name', entry.name, 'params', params));

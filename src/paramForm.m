@@ -1,17 +1,25 @@
 % SPDX-License-Identifier: GPL-3.0-or-later
 % Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
 % Part of nestapp; see the LICENSE file for full terms.
-function rows = paramForm(parent, meta, values, onChange)
+function rows = paramForm(parent, meta, values, onChange, context)
 % PARAMFORM  Build editing controls for a list of makeParam settings.
 %   rows = PARAMFORM(parent, meta, values, onChange)
+%   rows = PARAMFORM(parent, meta, values, onChange, context)
 %
 %   meta     makeParam struct array - the settings to offer
 %   values   struct of the values already set; a field that is ABSENT means the
 %            setting is at its default
 %   onChange @(key, value) called when a control is touched. value = [] means
 %            "back to the default", i.e. remove the field
+%   context  struct whose fields supply choices for params declaring
+%            'choicesFrom'. For a list that is not knowable when the registry
+%            is written - the windows in the user's table right now - there is
+%            nothing a validRange could say, so the caller passes them in.
 %
 %   Returns a struct array with .key and .handles, one entry per setting.
+%
+%   Panel height comes from paramFormHeight, which the CALLER must also use to
+%   size the panel - see that function for why the row heights live there.
 %
 %   THE CONTROL FOLLOWS THE VALUES, not the storage type. makeParam already
 %   records enough to choose one, so nothing new has to be declared:
@@ -21,6 +29,10 @@ function rows = paramForm(parent, meta, values, onChange)
 %     a 2-element vector         a Default box and a from/to pair
 %     scalar or integer          a Default box and one number
 %     anything else              a text field
+%
+%   makeParam's 'widget' overrides that inference, for the one control it
+%   cannot reach: 'multiselect', a listbox for choosing several of a list the
+%   registry does not know.
 %
 %   A table of text cells could express none of that. It made the user type
 %   "on", know that a width was spelled "single", and gave no hint which values
@@ -57,17 +69,20 @@ function rows = paramForm(parent, meta, values, onChange)
 ROW_H   = 34;
 LABEL_W = 150;
 CTRL_X  = 170;
+if nargin < 5 || isempty(context); context = struct(); end
 
 rows = struct('key', {}, 'handles', {});
 if isempty(meta); return; end
 
-W = parent.Position(3);
-y = parent.Position(4) - ROW_H;
+[~, rowH] = paramFormHeight(meta);
+W      = parent.Position(3);
+rowTop = parent.Position(4);
 
 for k = 1:numel(meta)
+    y = rowTop - ROW_H;   % a one-line control sits at the bottom of its row
     m      = meta(k);
     val    = valueOf(values, m.key);
-    widget = widgetFor(m);
+    widget = widgetFor(m, context);
     lbl    = m.friendlyName;
     if ~isempty(m.unit); lbl = sprintf('%s (%s)', lbl, m.unit); end
 
@@ -76,7 +91,8 @@ for k = 1:numel(meta)
     % A checkbox reads as its own label - "[x] Confidence band" - and the box
     % alone is a poor click target, so a toggle spans the row rather than
     % sitting in the control column behind a label that repeats it.
-    spansRow = strcmp(widget, 'toggle') && ~isempty(dflt);
+    spansRow = (strcmp(widget, 'toggle') && ~isempty(dflt)) ...
+               || strcmp(widget, 'multiselect');   % labels itself, above the list
     if ~spansRow
         uilabel(parent, 'Position', [12 y LABEL_W 22], 'Text', lbl, ...
                 'Tooltip', m.description);
@@ -102,8 +118,31 @@ for k = 1:numel(meta)
                         onChange(m.key, unsetIfDefault(src.Value, dflt)));
             end
 
+        case 'multiselect'
+            % Unset shows EVERYTHING selected, because that is what unset
+            % does: no subset named means every item is used. Selecting them
+            % all again therefore reports absence, exactly as choosing a
+            % dropdown's default does.
+            %
+            % An empty selection also means unset rather than "none". The two
+            % are indistinguishable to the onChange contract, where an empty
+            % value IS the signal to drop the field, and the state it would
+            % buy - a TEP-topo grid with no maps - is a plot the catalogue
+            % already offers three other ways. One fewer ambiguous state is
+            % worth more than reaching it from here.
+            choices = choicesOf(m, context);
+            uilabel(parent, 'Position', [12 rowTop-26 LABEL_W 22], 'Text', lbl, ...
+                    'Tooltip', m.description);
+            h = uilistbox(parent, ...
+                'Position', [CTRL_X, rowTop - rowH(k) + 6, W - CTRL_X - 24, rowH(k) - 32], ...
+                'Items', choices, 'Multiselect', 'on', ...
+                'Tooltip', m.description, ...
+                'ValueChangedFcn', @(src, ~) ...
+                    onChange(m.key, subsetOrAll(src.Value, choices)));
+            h.Value = shownSubset(val, choices);
+
         case 'choice'
-            choices = choicesOf(m);
+            choices = choicesOf(m, context);
             if isempty(dflt)
                 h = uidropdown(parent, 'Position', [CTRL_X y 170 22], ...
                     'Items', [{'Default'}, choices], ...
@@ -136,7 +175,7 @@ for k = 1:numel(meta)
     end
 
     rows(end+1) = struct('key', m.key, 'handles', h); %#ok<AGROW>
-    y = y - ROW_H;
+    rowTop = rowTop - rowH(k);
 end
 end
 
@@ -180,7 +219,36 @@ else
 end
 end
 
-function w = widgetFor(m)
+function s = shownSubset(val, choices)
+% What the listbox starts on. An absent value means every item, and anything
+% no longer in the list - a window since renamed or deleted - is dropped
+% rather than crashing the form.
+if isempty(val); s = choices; return; end
+if ~iscell(val); val = cellstr(string(val)); end
+s = choices(ismember(lower(choices), lower(val)));
+if isempty(s); s = choices; end
+end
+
+function v = subsetOrAll(selected, choices)
+% Report a genuine subset; report absence for "all of them" and for "none of
+% them", both of which mean the same as never having touched it.
+if ~iscell(selected); selected = cellstr(string(selected)); end
+if isempty(selected) || numel(selected) == numel(choices)
+    v = [];
+else
+    v = selected;
+end
+end
+
+function w = widgetFor(m, context)
+if isfield(m, 'widget') && ~isempty(m.widget)
+    % The registry asked for a specific control, because inference could not
+    % have reached it. Only honoured when the choices actually arrived - a
+    % context missing its key would otherwise build an empty listbox with no
+    % hint why, where a text field at least still accepts a value.
+    w = lower(char(m.widget));
+    if ~strcmp(w, 'multiselect') || ~isempty(choicesOf(m, context)); return; end
+end
 switch lower(char(m.type))
     case 'logical'
         w = 'toggle';
@@ -189,14 +257,25 @@ switch lower(char(m.type))
     case {'scalar', 'integer'}
         w = 'number';
     otherwise
-        if ~isempty(choicesOf(m)); w = 'choice'; else; w = 'text'; end
+        if ~isempty(choicesOf(m, context)); w = 'choice'; else; w = 'text'; end
 end
 end
 
-function c = choicesOf(m)
-% A validRange written as "a | b | c" is already a closed list; nothing new has
-% to be declared in the registry for it to become a dropdown.
+function c = choicesOf(m, context)
+% Either the caller supplied this param's list, or validRange already is one.
+%
+% A validRange written as "a | b | c" is a closed list, so nothing new has to
+% be declared in the registry for it to become a dropdown. 'choicesFrom' is for
+% the list that cannot be written down in advance.
 c = {};
+if isfield(m, 'choicesFrom') && ~isempty(m.choicesFrom)
+    key = char(m.choicesFrom);
+    if isstruct(context) && isfield(context, key) && ~isempty(context.(key))
+        c = cellstr(context.(key));
+        c = c(:)';
+    end
+    return
+end
 if isempty(m.validRange) || ~contains(m.validRange, '|'); return; end
 parts = strtrim(strsplit(m.validRange, '|'));
 c = parts(~cellfun(@isempty, parts));
@@ -215,7 +294,7 @@ switch widget
         if any(strcmpi(txt, {'on', 'true'}));   d = true;  end
         if any(strcmpi(txt, {'off', 'false'})); d = false; end
     case 'choice'
-        if ismember(txt, choicesOf(m)); d = txt; end
+        if ismember(txt, choicesOf(m, struct())); d = txt; end
 end
 end
 

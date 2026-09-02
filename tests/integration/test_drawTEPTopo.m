@@ -158,6 +158,104 @@ nW   = numel(defaultTEPComponentDefs());
 testCase.verifyEqual(numel(info.axes), 2 * nW + 2);
 end
 
+function test_aWindowSubsetGetsOnlyThoseColumns(testCase)
+% Six columns is what makes a single-column figure unreadable, which is the
+% whole reason to be able to pick.
+fig  = uiParent(testCase);
+info = drawTEPTopo(fig, twoGroupRes(1), ...
+    struct('windows', twoWindows(), 'mapWindows', {{'P180'}}));
+testCase.verifyEqual(numel(info.axes), 2 * 1 + 2, ...
+    '2 groups x 1 window, plus the shared bar and the curve');
+testCase.verifyTrue(any(contains(columnTitles(info, 2 * 1), 'P180')));
+testCase.verifyFalse(any(contains(columnTitles(info, 2 * 1), 'N100')));
+end
+
+function test_theSubsetIsCaseInsensitiveAndOrderedByDefinition(testCase)
+% Picking P180 first must not put the late component in the left column - the
+% grid reads left to right in time.
+fig  = uiParent(testCase);
+info = drawTEPTopo(fig, twoGroupRes(1), ...
+    struct('windows', twoWindows(), 'mapWindows', {{'p180', 'n100'}}));
+t = columnTitles(info, 2 * 2);
+testCase.assertNumElements(t, 2);
+testCase.verifyTrue(contains(t{1}, 'N100'), 'the earlier window comes first');
+testCase.verifyTrue(contains(t{2}, 'P180'));
+end
+
+function test_aStaleWindowNameDoesNotEmptyTheFigure(testCase)
+% A saved selection naming a window since renamed or deleted. Mapping nothing
+% would look like a broken plot; all of them is what unset means and is the
+% honest fallback.
+fig  = uiParent(testCase);
+info = drawTEPTopo(fig, twoGroupRes(1), ...
+    struct('windows', twoWindows(), 'mapWindows', {{'N45'}}));
+testCase.verifyEqual(numel(info.axes), 2 * 2 + 2);
+end
+
+function test_perWindowScalesEachColumnOnItsOwn(testCase)
+% What it is for: a late component sitting neutral against a scale an early
+% peak set says nothing at all.
+fig  = uiParent(testCase);
+info = drawTEPTopo(fig, twoGroupRes(1), ...
+    struct('windows', twoWindows(), 'mapScale', 'per window'));
+maps = info.axes(1:4);      % no shared bar under per-window
+% Columns are drawn (g, k) in row-major order: 1,2 = group 1's two windows.
+testCase.verifyNotEqual(maps(1).CLim, maps(2).CLim, ...
+    'the two windows must not share a limit');
+testCase.verifyEqual(maps(1).CLim, maps(3).CLim, 'AbsTol', 1e-9, ...
+    'the GROUPS within a window still share one - that is the comparison');
+end
+
+function test_perWindowReportsNoSharedScaleAndDrawsNoSharedBar(testCase)
+% Same contract as drawGroupTopo: one bar over columns that no longer share a
+% scale would state a voltage for a colour meaning something else next door.
+fig  = uiParent(testCase);
+info = drawTEPTopo(fig, twoGroupRes(1), ...
+    struct('windows', twoWindows(), 'mapScale', 'per window'));
+testCase.verifyEmpty(info.clim);
+testCase.verifyEmpty(findall(fig, 'Type', 'ColorBar'));
+end
+
+function test_perWindowStatesEachColumnsLimitInItsTitle(testCase)
+% With no bar, the title is the only place the colour-to-voltage mapping is
+% recorded - and with a symmetric diverging map it fully determines it.
+fig  = uiParent(testCase);
+info = drawTEPTopo(fig, twoGroupRes(1), ...
+    struct('windows', twoWindows(), 'mapScale', 'per window'));
+testCase.verifyTrue(all(contains(columnTitles(info, 2 * 2), '\muV')), ...
+    'a map with no stated scale cannot be read');
+end
+
+function test_turningOffTheCurveGivesTheGridTheHeight(testCase)
+fig  = uiParent(testCase);
+withCurve = drawTEPTopo(fig, twoGroupRes(1), struct('windows', twoWindows()));
+
+fig  = uiParent(testCase);
+info = drawTEPTopo(fig, twoGroupRes(1), ...
+    struct('windows', twoWindows(), 'curve', false));
+testCase.verifyEqual(numel(info.axes), 2 * 2 + 1, 'maps and the bar, no curve');
+
+% The heads are square, so "taller grid" shows up as a bigger side length.
+testCase.verifyGreaterThan(info.axes(1).Position(4), ...
+                           withCurve.axes(1).Position(4));
+end
+
+function t = columnTitles(info, nMaps)
+% Only the top row is titled, so the non-empty titles among the FIRST nMaps
+% axes are the columns, in left-to-right order. Bounded by nMaps because the
+% curve panel is titled too and would otherwise read as an extra column.
+%
+% Flattened to one row per title: a two-line title is stored as a cell of
+% lines, and contains() rejects a cell holding a char matrix.
+t = {};
+for k = 1:min(nMaps, numel(info.axes))
+    ax = info.axes(k);
+    if ~isprop(ax, 'Title'); continue; end
+    s = strjoin(cellstr(ax.Title.String), ' ');
+    if ~isempty(strtrim(s)); t{end+1} = s; end %#ok<AGROW>
+end
+end
+
 function test_aClassicFigureIsAValidParent(testCase)
 % The publication route draws into a classic figure with classic axes, because
 % exportgraphics, print and saveas all silently drop UI components. A drawer

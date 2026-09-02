@@ -20,9 +20,20 @@ function info = drawTEPTopo(parent, res, opts)
 %   construction. Change N45 to 40-55 ms and both move together. Sampling at a
 %   window's midpoint instead would put a map beside a mean it does not match.
 %
-%   One colour scale across every map, every group and every window. Per-map
-%   limits would make a 1 uV map and a 10 uV map look identical, which is the
-%   one thing a grid of maps must not do.
+%   One colour scale across every map by default - per-map limits would make a
+%   1 uV map and a 10 uV map look identical, which is the one thing a grid of
+%   maps must not do.
+%
+%   'per window' scales each COLUMN instead, and is a different claim rather
+%   than a weaker one: it keeps the groups comparable within a window, which is
+%   the comparison the rows exist for, while letting a late component read at
+%   all. P180 against a scale set by an early muscle-adjacent peak is a
+%   uniformly neutral row that says nothing. Each column then states its own
+%   limit in its title - with a symmetric diverging map that fixes the whole
+%   mapping, white at 0 and the extremes at the stated value, so it needs no
+%   bar of its own - and info.clim comes back EMPTY, the same signal
+%   drawGroupTopo gives, so a caller cannot hang one shared bar over columns
+%   that no longer share a scale.
 %
 %   The curve panel shades each window, so the reader can see which slice of the
 %   waveform each column of maps came from - the linkage the dashed leader lines
@@ -30,9 +41,13 @@ function info = drawTEPTopo(parent, res, opts)
 %   when windows overlap.
 %
 %   opts:
-%     .windows   window structs; omit for defaultTEPComponentDefs. Supplying an
-%                EMPTY set means no windows, and draws the curve alone
-%     .mode      'TEP' | 'GMFP' | 'LMFP' for the curve's axis label
+%     .windows    window structs; omit for defaultTEPComponentDefs. Supplying an
+%                 EMPTY set means no windows, and draws the curve alone
+%     .mapWindows names of the windows to map, a subset of .windows; omit for
+%                 all of them. Six columns is what crowds an 89 mm figure
+%     .mapScale   'shared' (default) | 'per window'
+%     .curve      false to omit the curve panel and give the grid the height
+%     .mode       'TEP' | 'GMFP' | 'LMFP' for the curve's axis label
 %     .xlim      curve time limits, default [-50 300]
 %     .colors    group colours, default groupColors(nGroups)
 %     .showBands shade the windows on the curve, default true
@@ -57,7 +72,13 @@ if ~isfield(opts, 'windows'); opts.windows = defaultTEPComponentDefs(); end
 opts = fillDefaults(opts, struct( ...
     'mode', 'TEP', 'xlim', [-50 300], ...
     'colors', groupColors(max(nG, 1)), 'showBands', true, ...
+    'mapWindows', [], 'mapScale', 'shared', 'curve', true, ...
     'axesFcn', @(p, pos) uiaxes(p, 'Position', pos)));
+
+% The subset is applied to opts.windows itself, so the columns and the curve's
+% shading are the same set by construction. Shading six windows under three
+% columns of maps would break the linkage the shading exists to draw.
+opts.windows = keepNamedWindows(opts.windows, opts.mapWindows);
 
 info = struct('clim', [0 0], 'axes', gobjects(0));
 if nG == 0 || isempty(res.time); return; end
@@ -88,9 +109,22 @@ for k = 1:nW
         end
     end
 end
-m = max(cellfun(@(v) max(abs(v)), vals(:)));
-if ~isfinite(m) || m == 0; m = 1; end
-info.clim = [-m m];
+perWindow = strcmpi(strrep(char(opts.mapScale), ' ', ''), 'perwindow');
+if perWindow
+    % One symmetric limit per column, across the groups in it.
+    colClim = cell(1, nW);
+    for k = 1:nW
+        m = max(cellfun(@(v) max(abs(v)), vals(:, k)));
+        if ~isfinite(m) || m == 0; m = 1; end
+        colClim{k} = [-m m];
+    end
+    info.clim = [];   % nothing shared for a caller to label
+else
+    m = max(cellfun(@(v) max(abs(v)), vals(:)));
+    if ~isfinite(m) || m == 0; m = 1; end
+    info.clim = [-m m];
+    colClim   = repmat({info.clim}, 1, nW);
+end
 
 % ── geometry ────────────────────────────────────────────────────────────
 % Maps are SQUARE and sized by whichever budget binds - the width available per
@@ -112,7 +146,15 @@ BAR_W   = max(10, round(12 * s));
 TICK_W  = max(24, round(40 * s));
 CBAR_W  = BAR_GAP + BAR_W + TICK_W;
 availW  = P(3) - 2*PAD - LABEL_W - CBAR_W;
-availH  = P(4) * 0.55 - TITLE_H - PAD;
+% With no curve under it the grid takes the height the curve was using. The
+% strip reserved for the colour bar stays reserved either way: under 'per
+% window' each column carries its limit in its own title instead, and
+% reclaiming the strip would move every map when the setting changed.
+if opts.curve
+    availH = P(4) * 0.55 - TITLE_H - PAD;
+else
+    availH = P(4) - 2*PAD - TITLE_H;
+end
 side    = max(min(availW / nW, availH / nG), 40);
 gridW   = side * nW;
 gridH   = side * nG + TITLE_H + PAD;
@@ -129,11 +171,15 @@ for g = 1:nG
         y = yTop - g * side;
         ax = opts.axesFcn(parent, [x, y, side - 6, side - 6]);
         drawScalpTopo(ax, vals{g, k}, res.chanlocs, ...
-                      struct('clim', info.clim, 'colorbar', false));
+                      struct('clim', colClim{k}, 'colorbar', false));
         % Only the top row is titled: one label per column, not nG copies.
         if g == 1
-            title(ax, sprintf('%s  %g-%g', w(k).name, w(k).winStart, w(k).winEnd), ...
-                  'FontSize', 9);
+            ttl = sprintf('%s  %g-%g', w(k).name, w(k).winStart, w(k).winEnd);
+            if perWindow
+                % The column's own scale, since there is no bar to read it off.
+                ttl = sprintf('%s\n\\pm%.3g \\muV', ttl, colClim{k}(2));
+            end
+            title(ax, ttl, 'FontSize', 9);
         else
             title(ax, '');
         end
@@ -154,14 +200,16 @@ for g = 1:nG
         'Color', opts.colors(min(g, size(opts.colors, 1)), :));
 end
 
-applySharedScale(axesMade, info.clim);
+if ~perWindow
+    applySharedScale(axesMade, info.clim);
 
-% One bar for the whole grid, since every map shares the scale.
-cbAx = sharedColorbar(parent, opts.axesFcn, ...
-    [x0 + gridW + BAR_GAP, yTop - nG * side + 6, BAR_W, side * nG - 16], ...
-    info.clim);
-nMade = nMade + 1;
-axesMade(nMade) = cbAx;
+    % One bar for the whole grid, since every map shares the scale.
+    cbAx = sharedColorbar(parent, opts.axesFcn, ...
+        [x0 + gridW + BAR_GAP, yTop - nG * side + 6, BAR_W, side * nG - 16], ...
+        info.clim);
+    nMade = nMade + 1;
+    axesMade(nMade) = cbAx;
+end
 
 % ── the curve panel ─────────────────────────────────────────────────────
 % TEP-topo's registry entry deliberately offers FEWER overlay options than
@@ -173,11 +221,29 @@ axesMade(nMade) = cbAx;
 % opts carries .showBands and .windows straight through, and drawTEPOverlay
 % owns the shading - calling shadeTimeWindows again here painted every band,
 % boundary and label twice, stacking the alpha and overprinting the names.
-cAx = opts.axesFcn(parent, curveRect(parent, gridH));
-drawTEPOverlay(cAx, res, opts);
-nMade = nMade + 1;
-axesMade(nMade) = cAx;
+if opts.curve
+    cAx = opts.axesFcn(parent, curveRect(parent, gridH));
+    drawTEPOverlay(cAx, res, opts);
+    nMade = nMade + 1;
+    axesMade(nMade) = cAx;
+end
 info.axes = axesMade(1:nMade);
+end
+
+function w = keepNamedWindows(w, names)
+% The named subset, in the ORDER THE WINDOWS ARE DEFINED rather than the order
+% they were picked: the columns read left to right in time, and letting a
+% selection reorder them would put a late component before an early one.
+%
+% An empty or absent selection means all of them, and a name matching nothing -
+% a window renamed or deleted since the setting was saved - is simply not
+% matched. Falling back to all when NOTHING matches keeps a stale saved
+% selection from silently emptying the figure.
+if isempty(names) || isempty(w); return; end
+if ~iscell(names); names = cellstr(string(names)); end
+keep = ismember(lower({w.name}), lower(names));
+if ~any(keep); return; end
+w = w(keep);
 end
 
 % ── helpers ─────────────────────────────────────────────────────────────────

@@ -16,7 +16,8 @@ function clim = drawGroupTopo(axList, res, opts)
 %     .window   [t1 t2] in ms to average over (default the whole epoch)
 %     .scale    'shared' (default) | 'per map'
 %     .climit   scalar uV pinning the scale to [-climit climit]; overrides
-%               .scale, since a stated number is a stated scale
+%               .scale, since a stated number is a stated scale. 0 and
+%               non-finite are read as no scale at all, i.e. derived
 %     .clim     force colour limits outright (2-element); wins over both
 %     .titles   cellstr overriding the per-map titles
 %     .colorbar false when the caller draws its own shared bar (see
@@ -50,6 +51,13 @@ function clim = drawGroupTopo(axList, res, opts)
 if nargin < 3; opts = struct(); end
 opts = fillDefaults(opts, struct('scale', 'shared', 'climit', [], ...
                                 'markers', [], 'contours', []));
+% Zero names no scale - a symmetric range of zero width - so it is read as
+% "derive one" rather than pinning every map to a +/-1 uV clip that hides all
+% of the data. That is exactly the state left behind by unticking the form's
+% Default checkbox without yet typing a number, so it has to be harmless.
+if ~isempty(opts.climit) && (~isfinite(opts.climit(1)) || opts.climit(1) == 0)
+    opts.climit = [];
+end
 % markers and contours stay EMPTY when unset rather than being defaulted
 % here: drawScalpTopo owns those defaults, and fillDefaults reads empty as
 % absent, so passing [] through leaves them in exactly one place.
@@ -86,7 +94,6 @@ if isfield(opts, 'clim') && ~isempty(opts.clim)
     clim = opts.clim;
 elseif ~isempty(opts.climit)
     m    = abs(opts.climit(1));
-    if ~isfinite(m) || m == 0; m = 1; end
     clim = [-m m];
 elseif perMap
     clim = [];       % nothing shared to report, and nothing for one bar to say

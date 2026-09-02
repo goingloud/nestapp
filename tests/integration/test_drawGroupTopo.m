@@ -176,6 +176,27 @@ testCase.verifyEqual(clim, [-4 4]);
 testCase.verifyEqual(axs(1).CLim, axs(2).CLim);
 end
 
+function test_aZeroFixedLimitFallsBackToADerivedScale(testCase)
+% Unticking the form's Default checkbox without typing a number leaves 0 in
+% the field. Honouring it would pin every map to +/-1 uV and clip all of the
+% data, which looks like a result rather than an unfinished setting.
+axs  = twoAxes(testCase);
+clim = drawGroupTopo(axs, twoGroupRes(1), struct('window', [90 120], 'climit', 0));
+testCase.verifyNotEqual(clim, [-1 1]);
+testCase.verifyEqual(clim, drawGroupTopo(twoAxes(testCase), twoGroupRes(1), ...
+                                         struct('window', [90 120])), ...
+    'zero names no scale, so the derived one applies');
+end
+
+function test_aZeroFixedLimitDoesNotSuppressPerMap(testCase)
+% The precedence only applies to a limit that actually states something.
+axs  = twoAxes(testCase);
+clim = drawGroupTopo(axs, twoGroupRes(0.1), ...
+                     struct('window', [90 120], 'scale', 'per map', 'climit', 0));
+testCase.verifyEmpty(clim);
+testCase.verifyNotEqual(axs(1).CLim, axs(2).CLim);
+end
+
 function test_aNegativeFixedLimitIsReadAsAMagnitude(testCase)
 % -6 and 6 name the same symmetric scale; the alternative is an inverted CLim
 % that renders every map in reverse polarity.
