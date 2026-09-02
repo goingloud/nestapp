@@ -109,7 +109,7 @@ for k = 1:nW
         end
     end
 end
-perWindow = strcmpi(strrep(char(opts.mapScale), ' ', ''), 'perwindow');
+perWindow = matchesChoice(opts.mapScale, 'per window');
 if perWindow
     % One symmetric limit per column, across the groups in it.
     colClim = cell(1, nW);

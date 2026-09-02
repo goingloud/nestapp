@@ -19,11 +19,6 @@ function p = makeParam(key, friendlyName, unit, validRange, description, varargi
 %                     value. Used to prompt on load rather than letting the run
 %                     fail later, and kept as data here so the check is not
 %                     hardcoded in the GUI.
-%     'widget'      - override the control paramForm would infer. Only for what
-%                     inference cannot reach: 'multiselect' is the one so far.
-%                     Left empty, the control follows from type and validRange,
-%                     which is the case for nearly every param and the reason
-%                     this field is an exception rather than the mechanism.
 %     'choicesFrom' - name of a CONTEXT key supplying this param's choices, for
 %                     a list that is not knowable when the registry is written.
 %                     "Which windows to map" is the case: the windows are the
@@ -40,8 +35,7 @@ function p = makeParam(key, friendlyName, unit, validRange, description, varargi
 %
 %   See also: stepRegistry, plotRegistry, buildParamTableData, convertParam
 
-placeholder = ''; type = 'scalar'; required = false;
-widget = ''; choicesFrom = '';
+placeholder = ''; type = 'scalar'; required = false; choicesFrom = '';
 if mod(numel(varargin), 2) ~= 0
     error('makeParam:oddArgs', 'Name-value arguments must come in pairs.');
 end
@@ -50,7 +44,6 @@ for i = 1:2:numel(varargin)
         case 'placeholder'; placeholder = varargin{i+1};
         case 'type';        type = varargin{i+1};
         case 'required';    required = logical(varargin{i+1});
-        case 'widget';      widget = varargin{i+1};
         case 'choicesfrom'; choicesFrom = varargin{i+1};
         otherwise
             error('makeParam:unknownOpt', 'Unknown option "%s".', varargin{i});
@@ -59,5 +52,5 @@ end
 p = struct('key',key,'friendlyName',friendlyName,'unit',unit, ...
            'validRange',validRange,'description',description, ...
            'placeholder',placeholder,'type',type,'required',required, ...
-           'widget',widget,'choicesFrom',choicesFrom);
+           'choicesFrom',choicesFrom);
 end

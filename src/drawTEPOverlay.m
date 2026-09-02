@@ -21,6 +21,9 @@ function drawTEPOverlay(ax, res, opts)
 %     .windows   window structs for .showBands, default none
 %     .showTraces draw each individual recording behind the means, default
 %                 false - see below
+%     .level     confidence level for the band, default the one groupCurves
+%                already used. Re-derived here rather than recomputed: see
+%                intervalAtLevel for why that is exact and cheap
 %
 %   The band is the confidence interval curveInterval computed, not a decorative
 %   spread. The app previously shaded mean +/- SEM/2 with no label, which is not
@@ -47,6 +50,9 @@ opts = withDefaults(opts, res);
 cla(ax, 'reset');
 if isempty(res.groups); return; end
 
+% One re-derivation for the whole function, so the band and the legend cannot
+% end up describing different levels.
+est  = intervalAtLevel(res.est, opts.level);
 nG   = numel(res.groups);
 time = res.time;
 hold(ax, 'on');
@@ -70,7 +76,7 @@ end
 % Bands next, so every mean line sits above every band.
 if opts.showBand
     for g = 1:nG
-        e = res.est(g);
+        e = est(g);
         if isempty(e.lo) || all(isnan(e.lo)); continue; end
         xf = [time, fliplr(time)];
         yf = [e.lo,  fliplr(e.hi)];
@@ -81,7 +87,7 @@ end
 
 labels = cell(1, nG);
 for g = 1:nG
-    e = res.est(g);
+    e = est(g);
     labels{g} = sprintf('%s (n=%d)', res.groups(g).name, e.n);
     plot(ax, time, e.mean, 'Color', opts.colors(g, :), ...
          'LineWidth', 1.75, 'DisplayName', labels{g});
@@ -121,7 +127,7 @@ function opts = withDefaults(opts, res)
 nG   = numel(res.groups);
 opts = fillDefaults(opts, struct('mode', 'TEP', 'xlim', [-50 300], ...
     'colors', groupColors(nG), 'showBand', true, 'legend', true, ...
-    'showBands', false, 'windows', [], 'showTraces', false));
+    'showBands', false, 'windows', [], 'showTraces', false, 'level', []));
 % A caller may pass a palette sized for a different group count.
 if size(opts.colors, 1) < nG
     opts.colors = groupColors(nG);

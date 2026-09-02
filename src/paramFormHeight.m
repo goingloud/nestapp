@@ -29,14 +29,23 @@ PAD    = 8;
 
 rows = repmat(ROW_H, 1, numel(meta));
 for k = 1:numel(meta)
-    if strcmpi(widgetOverride(meta(k)), 'multiselect')
+    if isMultiselect(meta(k))
         rows(k) = LIST_H;
     end
 end
 total = sum(rows) + PAD;
 end
 
-function w = widgetOverride(m)
-w = '';
-if isfield(m, 'widget'); w = char(m.widget); end
+function tf = isMultiselect(m)
+% The same rule paramForm applies, and the reason it is not passed a context:
+% a param that names a choice source IS a multi-select, whether or not the
+% caller's context happens to supply the choices right now. Reserving the
+% taller row for the degenerate case leaves a row too tall, which is harmless;
+% deciding it from the context would let the height and the control disagree.
+tf = strcmpi(charOr(m, 'type'), 'stringlist') && ~isempty(charOr(m, 'choicesFrom'));
+end
+
+function s = charOr(m, name)
+s = '';
+if isfield(m, name); s = char(m.(name)); end
 end

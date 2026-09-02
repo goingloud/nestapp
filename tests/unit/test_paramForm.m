@@ -37,15 +37,23 @@ function panel = build(testCase, meta, values)
 [panel, ~] = buildWatched(testCase, meta, values);
 end
 
-function [panel, lastChange] = buildWatched(testCase, meta, values)
-% Same, but hands back a getter for what the form last reported. A nested
-% function, not @() reported - an anonymous handle would capture the value as
-% it was at construction and always answer with the empty seed.
+function [panel, lastChange] = buildWatched(testCase, meta, values, ctx)
+% Builds the form and hands back a getter for what it last reported.
+%
+% ONE builder, and it sizes the panel with paramFormHeight - the same call the
+% real caller makes. An earlier version hardcoded 34 * numel(meta) + 8 here,
+% which is precisely the second height table paramFormHeight exists to
+% prevent: a test passing a multi-select through it would have got a silently
+% under-sized panel instead of catching the overflow.
+%
+% lastChange is a nested function, not @() reported - an anonymous handle
+% captures by value at construction and would always answer with the seed.
+if nargin < 4; ctx = struct(); end
 reported = struct('key', '', 'value', 'never called');
 fig = uifigure('Visible', 'off', 'Position', [100 100 500 400]);
 testCase.addTeardown(@() delete(fig));
-panel = uipanel(fig, 'Position', [0 0 470 34 * numel(meta) + 8]);
-paramForm(panel, meta, values, @record);
+panel = uipanel(fig, 'Position', [0 0 470 paramFormHeight(meta)]);
+paramForm(panel, meta, values, @record, ctx);
 lastChange = @get;
 
     function record(key, value)
@@ -73,29 +81,15 @@ end
 
 function m = multiParam()
 m = makeParam('mapWindows', 'Windows to map', '', '', 'desc', ...
-              'type', 'stringlist', 'widget', 'multiselect', ...
-              'choicesFrom', 'windows', 'placeholder', '(all of them)');
+              'type', 'stringlist', 'choicesFrom', 'windows', ...
+              'placeholder', '(all of them)');
 end
 
 function ctx = windowCtx()
 ctx = struct('windows', {{'N15', 'P30', 'N100'}});
 end
 
-function [panel, lastChange] = buildWithCtx(testCase, meta, values, ctx)
-reported = struct('key', '', 'value', 'never called');
-fig = uifigure('Visible', 'off', 'Position', [100 100 500 400]);
-testCase.addTeardown(@() delete(fig));
-panel = uipanel(fig, 'Position', [0 0 470 paramFormHeight(meta)]);
-paramForm(panel, meta, values, @record, ctx);
-lastChange = @get;
 
-    function record(key, value)
-        reported = struct('key', key, 'value', {value});
-    end
-    function r = get()
-        r = reported;
-    end
-end
 
 % -- tests ----------------------------------------------------------------
 
@@ -184,7 +178,7 @@ end
 function test_aMultiselectOffersTheContextsChoices(testCase)
 % "Which windows" is a list of whatever is in the user's table right now, so
 % there is nothing a validRange could have said.
-panel = buildWithCtx(testCase, multiParam(), struct(), windowCtx());
+panel = buildWatched(testCase, multiParam(), struct(), windowCtx());
 lb = findall(panel, 'Type', 'uilistbox');
 testCase.assertNumElements(lb, 1);
 testCase.verifyEqual(lb.Items, {'N15', 'P30', 'N100'});
@@ -194,13 +188,13 @@ end
 function test_anUnsetMultiselectShowsEverythingSelected(testCase)
 % Because that is what unset DOES: no subset named means all of them. Showing
 % an empty list instead would misreport the picture the plot draws.
-panel = buildWithCtx(testCase, multiParam(), struct(), windowCtx());
+panel = buildWatched(testCase, multiParam(), struct(), windowCtx());
 lb = findall(panel, 'Type', 'uilistbox');
 testCase.verifyEqual(sort(lb.Value), sort({'N15', 'P30', 'N100'}));
 end
 
 function test_aSubsetIsReportedAndSelectingAllIsNot(testCase)
-[panel, lastChange] = buildWithCtx(testCase, multiParam(), struct(), windowCtx());
+[panel, lastChange] = buildWatched(testCase, multiParam(), struct(), windowCtx());
 lb = findall(panel, 'Type', 'uilistbox');
 
 lb.Value = {'P30'};
@@ -218,12 +212,12 @@ end
 function test_aStoredSubsetIsShownAndAStaleNameIsDropped(testCase)
 % A window renamed since the setting was saved. Falling back to everything
 % when NOTHING matches keeps a stale selection from emptying the figure.
-panel = buildWithCtx(testCase, multiParam(), ...
+panel = buildWatched(testCase, multiParam(), ...
                      struct('mapWindows', {{'P30', 'N45'}}), windowCtx());
 lb = findall(panel, 'Type', 'uilistbox');
 testCase.verifyEqual(lb.Value, {'P30'});
 
-panel = buildWithCtx(testCase, multiParam(), ...
+panel = buildWatched(testCase, multiParam(), ...
                      struct('mapWindows', {{'N45'}}), windowCtx());
 lb = findall(panel, 'Type', 'uilistbox');
 testCase.verifyEqual(sort(lb.Value), sort({'N15', 'P30', 'N100'}));
@@ -232,7 +226,7 @@ end
 function test_aMultiselectWithNoChoicesFallsBackToAField(testCase)
 % An empty listbox gives the user nothing and no hint why. A text field at
 % least still accepts a value, which is what this param was before.
-panel = buildWithCtx(testCase, multiParam(), struct(), struct());
+panel = buildWatched(testCase, multiParam(), struct(), struct());
 testCase.verifyEmpty(findall(panel, 'Type', 'uilistbox'));
 testCase.verifyNotEmpty(findall(panel, 'Type', 'uieditfield'));
 end
@@ -254,7 +248,7 @@ function test_everyControlFitsInsideThePanelItWasSizedFor(testCase)
 % The failure paramFormHeight exists to prevent: a form that overflows its
 % panel, with a setting invisible and nothing reporting it.
 meta  = [rangeParam(), multiParam(), toggleParam()];
-panel = buildWithCtx(testCase, meta, struct(), windowCtx());
+panel = buildWatched(testCase, meta, struct(), windowCtx());
 for h = findall(panel, '-property', 'Position')'
     if isequal(h, panel); continue; end
     p = h.Position;

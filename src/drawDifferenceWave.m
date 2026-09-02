@@ -10,6 +10,7 @@ function drawDifferenceWave(ax, res, opts)
 %     .colors     n-by-3 (only the difference colour is used; default near-black)
 %     .xlim       time limits, default [-50 300]
 %     .direction  'second - first' (default) or 'first - second'
+%     .level      confidence level, default the one groupCurves used
 %
 %   WHICH WAY ROUND IS A CHOICE, not a consequence of the order the groups were
 %   added. A difference wave inverted is the same result reported upside down,
@@ -44,15 +45,17 @@ end
 
 opts = fillDefaults(opts, struct('xlim', [-50 300], 'colors', groupColors(1), ...
                                  'showBands', false, 'windows', [], ...
-                                 'direction', 'second - first'));
+                                 'direction', 'second - first', 'level', []));
 
 A = res.groups(1);
 B = res.groups(2);
 % groupCurves computed this at the run's confidence level; deriving it here
 % would silently ignore that level, as this function used to.
-est = res.contrast;
+% Re-derived before the flip, so .note carries the drawn level into the title
+% and from there into the exported figure's footer.
+est = intervalAtLevel(res.contrast, opts.level);
 
-if isFirstMinusSecond(opts.direction)
+if matchesChoice(opts.direction, 'first - second')
     % Negate, and swap the bounds with it: lo = mean - t*sem becomes the upper
     % bound of the negated estimate. Swapping the group handles too keeps the
     % legend, title and picture describing the same subtraction.
@@ -94,8 +97,3 @@ box(ax, 'off');
 legend(ax, 'Location', 'northeast', 'Box', 'off');
 end
 
-function tf = isFirstMinusSecond(direction)
-% Tolerant of spacing and of the hyphen the registry writes, so a value typed
-% into a saved .mat by hand is not silently read as the default.
-tf = strcmpi(regexprep(char(direction), '[\s-]+', ''), 'firstsecond');
-end

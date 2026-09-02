@@ -138,6 +138,39 @@ testCase.verifyEqual(numel(info.axes), 2);
 testCase.verifyEqual(numel(info.est),  2);
 end
 
+function test_theLevelFollowsTheRunRatherThanALiteral(testCase)
+% This function used to default opts.level to 0.95 of its own, independent of
+% the level groupCurves had actually used. The two matched only because both
+% defaults happened to be 0.95 - so a run at another level would have drawn
+% these intervals at 0.95 while the status line and the exported figure's
+% footer both stated the run's level.
+%
+% Asserted against a DOCTORED res.info.level, because that is the only way to
+% tell "reads the recorded level" apart from "happens to agree with it".
+res = twoGroupRes();
+res.info = struct('level', 0.80);
+fig = uiParent(testCase);
+
+fromRun      = drawWindowBars(fig, res, struct('windows', oneWindow()));
+askedFor80   = drawWindowBars(fig, res, struct('windows', oneWindow(), 'level', 0.80));
+askedFor95   = drawWindowBars(fig, res, struct('windows', oneWindow(), 'level', 0.95));
+
+testCase.verifyEqual(fromRun.est{1}(1).lo, askedFor80.est{1}(1).lo, ...
+    'AbsTol', 1e-12, 'unset must follow the level the run was computed at');
+testCase.verifyNotEqual(fromRun.est{1}(1).lo, askedFor95.est{1}(1).lo, ...
+    'and must not silently fall back to a literal 0.95');
+end
+
+function test_aResultPredatingTheRecordedLevelStillDraws(testCase)
+% res.info.level is new; a session saved before it simply lacks the field, and
+% then curveInterval's own default applies rather than an error.
+res = twoGroupRes();
+testCase.assertFalse(isfield(res, 'info'));
+fig  = uiParent(testCase);
+info = drawWindowBars(fig, res, struct('windows', oneWindow()));
+testCase.verifyNotEmpty(info.est{1}(1).lo);
+end
+
 function test_anEmptyWindowSetDrawsNothing(testCase)
 res  = twoGroupRes();
 info = drawWindowBars(uiParent(testCase), res, struct('windows', struct( ...

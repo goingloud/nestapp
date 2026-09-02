@@ -86,9 +86,9 @@ for g = 1:nG
     vals{g} = mean(res.groups(g).chanMeans(:, sel), 2, 'omitnan');
 end
 
-perMap = strcmpi(strrep(char(opts.scale), ' ', ''), 'permap') ...
+perMap = matchesChoice(opts.scale, 'per map') ...
          && isempty(opts.climit) ...
-         && (~isfield(opts, 'clim') || isempty(opts.clim));
+         && isempty(fieldOr(opts, 'clim', []));
 
 if isfield(opts, 'clim') && ~isempty(opts.clim)
     clim = opts.clim;

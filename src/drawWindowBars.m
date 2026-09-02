@@ -42,9 +42,18 @@ function info = drawWindowBars(parent, res, opts)
 %               EMPTY set means no windows, and draws nothing
 %     .measure  'mean' (default) | 'peak' | 'area'
 %     .mode     'TEP' | 'GMFP' | 'LMFP', for the axis label
-%     .level    confidence level, default 0.95
+%     .level    confidence level. Unset follows the level the run was
+%               computed at (res.info.level), NOT a literal here - see below
 %     .colors   group colours, default groupColors(nGroups)
 %     .axesFcn  @(parent, position) -> axes, as drawTEPTopo
+%
+%   THE LEVEL IS NOT DEFAULTED HERE. It used to be a literal 0.95, which
+%   matched what groupCurves had actually used only by coincidence: the two
+%   numbers were independent, so a run at another level would have drawn these
+%   intervals at 0.95 while the status line and the exported figure's footer
+%   both stated the run's level. Unset now follows res.info.level, and falls
+%   through to curveInterval's own default for a result predating that field -
+%   so the number lives in exactly one place at each layer.
 %
 %   See also: computeWindowMeasures, curveInterval, exploreMeasures, drawTEPTopo
 
@@ -56,9 +65,17 @@ nG = numel(res.groups);
 % are none", and a defaults struct cannot tell those apart.
 if ~isfield(opts, 'windows'); opts.windows = defaultTEPComponentDefs(); end
 opts = fillDefaults(opts, struct( ...
-    'measure', 'mean', 'mode', 'TEP', 'level', 0.95, ...
+    'measure', 'mean', 'mode', 'TEP', 'level', [], ...
     'colors', groupColors(max(nG, 1)), ...
     'axesFcn', @(p, pos) uiaxes(p, 'Position', pos)));
+
+% [] all the way down to curveInterval, which owns the default. An explicit
+% draw option wins; failing that the run's own level; failing that whatever
+% curveInterval decides.
+level = opts.level;
+if isempty(level) && isfield(res, 'info') && isfield(res.info, 'level')
+    level = res.info.level;
+end
 
 info = struct('est', {{}}, 'axes', gobjects(0));
 if nG == 0 || isempty(res.time); return; end
@@ -78,7 +95,7 @@ for k = 1:nW
     % Each subject contributes ONE number, so this is curveInterval over a
     % one-sample "curve" - which is exactly what it is, and keeps the paired
     % normalisation and Morey correction identical to the waveform's.
-    est{k} = curveInterval(perGroup, res.design, opts.level);
+    est{k} = curveInterval(perGroup, res.design, level);
 end
 info.est = est;
 

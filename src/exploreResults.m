@@ -109,13 +109,6 @@ end
 
 % ── helpers ─────────────────────────────────────────────────────────────────
 
-function v = fieldOr(s, name, default)
-if isstruct(s) && isfield(s, name) && ~isempty(s.(name))
-    v = s.(name);
-else
-    v = default;
-end
-end
 
 function v = eeglabVersionOrUnknown()
 % A result may legitimately be built with no EEGLAB on the path (the curve layer

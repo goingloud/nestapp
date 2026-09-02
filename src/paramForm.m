@@ -30,9 +30,9 @@ function rows = paramForm(parent, meta, values, onChange, context)
 %     scalar or integer          a Default box and one number
 %     anything else              a text field
 %
-%   makeParam's 'widget' overrides that inference, for the one control it
-%   cannot reach: 'multiselect', a listbox for choosing several of a list the
-%   registry does not know.
+%   A 'stringlist' that names a 'choicesFrom' is the multi-select: the type
+%   already says the value is a list, and the choice source already says the
+%   list is closed, so no extra field is needed to ask for a listbox.
 %
 %   A table of text cells could express none of that. It made the user type
 %   "on", know that a width was spelled "single", and gave no hint which values
@@ -66,7 +66,6 @@ function rows = paramForm(parent, meta, values, onChange, context)
 %
 %   See also: makeParam, plotOptionsDialog, plotRegistry, stepRegistry
 
-ROW_H   = 34;
 LABEL_W = 150;
 CTRL_X  = 170;
 if nargin < 5 || isempty(context); context = struct(); end
@@ -74,25 +73,31 @@ if nargin < 5 || isempty(context); context = struct(); end
 rows = struct('key', {}, 'handles', {});
 if isempty(meta); return; end
 
+% Row heights come from paramFormHeight, which the CALLER also used to size
+% the panel. Reading them from there rather than keeping a second copy of the
+% one-line height is the point: two tables would drift and the form would
+% overflow the panel it was sized for.
 [~, rowH] = paramFormHeight(meta);
 W      = parent.Position(3);
 rowTop = parent.Position(4);
 
 for k = 1:numel(meta)
-    y = rowTop - ROW_H;   % a one-line control sits at the bottom of its row
-    m      = meta(k);
-    val    = valueOf(values, m.key);
-    widget = widgetFor(m, context);
-    lbl    = m.friendlyName;
+    m       = meta(k);
+    val     = valueOf(values, m.key);
+    choices = choicesOf(m, context);
+    widget  = widgetFor(m, choices);
+    y       = rowTop - rowH(k);   % a one-line control fills its row
+    lbl     = m.friendlyName;
     if ~isempty(m.unit); lbl = sprintf('%s (%s)', lbl, m.unit); end
 
-    dflt = statedDefault(m, widget);
+    dflt = statedDefault(m, widget, choices);
 
-    % A checkbox reads as its own label - "[x] Confidence band" - and the box
-    % alone is a poor click target, so a toggle spans the row rather than
-    % sitting in the control column behind a label that repeats it.
+    % A checkbox and a listbox each read as their own label - "[x] Confidence
+    % band" - and a bare checkbox is a poor click target, so those span the
+    % row instead of sitting in the control column behind a label that
+    % repeats them. Asked once, and reused by the cases below.
     spansRow = (strcmp(widget, 'toggle') && ~isempty(dflt)) ...
-               || strcmp(widget, 'multiselect');   % labels itself, above the list
+               || strcmp(widget, 'multiselect');
     if ~spansRow
         uilabel(parent, 'Position', [12 y LABEL_W 22], 'Text', lbl, ...
                 'Tooltip', m.description);
@@ -100,7 +105,14 @@ for k = 1:numel(meta)
 
     switch widget
         case 'toggle'
-            if isempty(dflt)
+            if spansRow
+                shown = dflt;
+                if ~isempty(val); shown = asLogical(val); end
+                h = uicheckbox(parent, 'Position', [12 y W-36 22], 'Text', lbl, ...
+                    'Tooltip', m.description, 'Value', shown, ...
+                    'ValueChangedFcn', @(src, ~) ...
+                        onChange(m.key, unsetIfDefault(src.Value, dflt)));
+            else
                 % No stated default: no checkbox state means "untouched", so
                 % keep the item that says it.
                 h = uidropdown(parent, 'Position', [CTRL_X y 170 22], ...
@@ -109,13 +121,6 @@ for k = 1:numel(meta)
                     'Tooltip', m.description, ...
                     'ValueChangedFcn', @(src, ~) onChange(m.key, src.Value));
                 if ~isempty(val); h.Value = asLogical(val); end
-            else
-                shown = dflt;
-                if ~isempty(val); shown = asLogical(val); end
-                h = uicheckbox(parent, 'Position', [12 y W-36 22], 'Text', lbl, ...
-                    'Tooltip', m.description, 'Value', shown, ...
-                    'ValueChangedFcn', @(src, ~) ...
-                        onChange(m.key, unsetIfDefault(src.Value, dflt)));
             end
 
         case 'multiselect'
@@ -130,7 +135,6 @@ for k = 1:numel(meta)
             % buy - a TEP-topo grid with no maps - is a plot the catalogue
             % already offers three other ways. One fewer ambiguous state is
             % worth more than reaching it from here.
-            choices = choicesOf(m, context);
             uilabel(parent, 'Position', [12 rowTop-26 LABEL_W 22], 'Text', lbl, ...
                     'Tooltip', m.description);
             h = uilistbox(parent, ...
@@ -142,23 +146,25 @@ for k = 1:numel(meta)
             h.Value = shownSubset(val, choices);
 
         case 'choice'
-            choices = choicesOf(m, context);
+            % With a stated default the dropdown shows it as an ordinary item;
+            % without one it needs a synthetic "Default" carrying []. Only the
+            % item list and the starting value differ, so they are settled
+            % first and the control is built once - unsetIfDefault(v, []) is a
+            % no-op, which is exactly right for the synthetic item's [].
+            items = choices;
+            data  = choices;
+            shown = dflt;
             if isempty(dflt)
-                h = uidropdown(parent, 'Position', [CTRL_X y 170 22], ...
-                    'Items', [{'Default'}, choices], ...
-                    'ItemsData', [{[]}, choices], ...
-                    'Tooltip', m.description, ...
-                    'ValueChangedFcn', @(src, ~) onChange(m.key, src.Value));
-                if ~isempty(val) && ismember(char(val), choices); h.Value = char(val); end
-            else
-                shown = dflt;
-                if ~isempty(val) && ismember(char(val), choices); shown = char(val); end
-                h = uidropdown(parent, 'Position', [CTRL_X y 170 22], ...
-                    'Items', choices, 'Value', shown, ...
-                    'Tooltip', m.description, ...
-                    'ValueChangedFcn', @(src, ~) ...
-                        onChange(m.key, unsetIfDefault(src.Value, dflt)));
+                items = [{'Default'}, choices];
+                data  = [{[]},        choices];
+                shown = [];
             end
+            if ~isempty(val) && ismember(char(val), choices); shown = char(val); end
+            h = uidropdown(parent, 'Position', [CTRL_X y 170 22], ...
+                'Items', items, 'ItemsData', data, 'Value', shown, ...
+                'Tooltip', m.description, ...
+                'ValueChangedFcn', @(src, ~) ...
+                    onChange(m.key, unsetIfDefault(src.Value, dflt)));
 
         case 'range'
             h = numericRow(parent, y, CTRL_X, m, val, onChange, 2);
@@ -240,15 +246,9 @@ else
 end
 end
 
-function w = widgetFor(m, context)
-if isfield(m, 'widget') && ~isempty(m.widget)
-    % The registry asked for a specific control, because inference could not
-    % have reached it. Only honoured when the choices actually arrived - a
-    % context missing its key would otherwise build an empty listbox with no
-    % hint why, where a text field at least still accepts a value.
-    w = lower(char(m.widget));
-    if ~strcmp(w, 'multiselect') || ~isempty(choicesOf(m, context)); return; end
-end
+function w = widgetFor(m, choices)
+% Every control follows from the type plus whether the value has a closed list
+% of choices. Nothing in the registry names a widget.
 switch lower(char(m.type))
     case 'logical'
         w = 'toggle';
@@ -256,8 +256,13 @@ switch lower(char(m.type))
         w = 'range';
     case {'scalar', 'integer'}
         w = 'number';
+    case 'stringlist'
+        % A list-valued param with a closed set of choices is a multi-select.
+        % Without choices there is nothing to list, and a text field at least
+        % still accepts a value where an empty listbox offers none.
+        if ~isempty(choices); w = 'multiselect'; else; w = 'text'; end
     otherwise
-        if ~isempty(choicesOf(m, context)); w = 'choice'; else; w = 'text'; end
+        if ~isempty(choices); w = 'choice'; else; w = 'text'; end
 end
 end
 
@@ -281,7 +286,7 @@ parts = strtrim(strsplit(m.validRange, '|'));
 c = parts(~cellfun(@isempty, parts));
 end
 
-function d = statedDefault(m, widget)
+function d = statedDefault(m, widget, choices)
 % The default this control can SHOW as one of its ordinary states, or [] when
 % there is none to show. Read from the placeholder, which by convention names
 % it - "(on)", "(mean)". Returning [] is what routes the row back to an
@@ -294,7 +299,9 @@ switch widget
         if any(strcmpi(txt, {'on', 'true'}));   d = true;  end
         if any(strcmpi(txt, {'off', 'false'})); d = false; end
     case 'choice'
-        if ismember(txt, choicesOf(m, struct())); d = txt; end
+        % Compared against the choices actually offered, so a default outside
+        % them falls back to a "Default" item instead of being shown as one.
+        if ismember(txt, choices); d = txt; end
 end
 end
 

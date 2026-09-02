@@ -30,7 +30,7 @@ function res = groupCurves(cache, entries, opts)
 %     .design         the design actually used
 %     .complete       subjects present in every group
 %     .dropped        subjects excluded from a paired estimate, and why
-%     .info           time-base info from commonTimeBase, plus .roi
+%     .info           time-base info from commonTimeBase, plus .roi and .level
 %                     (.requested .matched .missing - a partial ROI is
 %                     averaged, not refused, so the difference is recorded)
 %                     and .montage:
@@ -87,6 +87,12 @@ end
 
 [res.time, timeIdx, res.info] = commonTimeBase({cache([use.ci]).time}, {use.label});
 res.info.montage = montage;
+% The level the estimates were computed at, recorded so nothing downstream has
+% to restate it. A status line or figure footer that hardcoded 95 would keep
+% saying 95 after this default changed, or after a draw option overrode it -
+% and a wrong coverage on an exported figure is the one label that does real
+% damage, because the figure outlives the session that made it.
+res.info.level   = opts.level;
 res.chanlocs = cache(use(1).ci).chanlocs(chanIdx{1});
 
 % ── per file: crop to the common montage and time base, then reduce ──────

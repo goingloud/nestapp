@@ -57,7 +57,7 @@ if strcmpi(design, 'paired')
     mu   = mean(D, 1, 'omitnan');
     sem  = std(D, 0, 1, 'omitnan') / sqrt(n);
     df   = n - 1;                        % scalar broadcasts through tCritical
-    note = sprintf('paired, %g%% CI', level * 100);
+    note = sprintf('paired, %s', ciLabel(level));
 else
     n1 = size(A, 1);
     n2 = size(B, 1);
@@ -67,7 +67,7 @@ else
     sem = sqrt(v1 + v2);
     df  = (v1 + v2).^2 ./ (v1.^2 / max(n1 - 1, 1) + v2.^2 / max(n2 - 1, 1));
     n    = min(n1, n2);
-    note = sprintf('unpaired, %g%% CI', level * 100);
+    note = sprintf('unpaired, %s', ciLabel(level));
 end
 
 est = struct('mean', mu, 'lo', nan(size(mu)), 'hi', nan(size(mu)), ...

@@ -221,6 +221,52 @@ drawDifferenceWave(ax, res, struct('direction', 'second - first'));
 testCase.verifyEqual(lineYData(ax), absent);
 end
 
+function test_theBandFollowsTheLevelItWasGiven(testCase)
+% The level is a draw option, so a narrower one has to actually narrow the
+% band rather than being accepted and ignored.
+res = fakeRes(2, 'paired');
+
+ax = offscreenAxes(testCase);
+drawTEPOverlay(ax, res, struct('level', 0.99));
+wide = bandSpan(ax);
+
+ax = offscreenAxes(testCase);
+drawTEPOverlay(ax, res, struct('level', 0.80));
+testCase.verifyLessThan(bandSpan(ax), wide);
+end
+
+function test_theDifferenceTitleStatesTheLevelActuallyDrawn(testCase)
+% The failure this guards: a 90% band under a title reading 95%. Both halves
+% look right alone, and the figure outlives the session that made it.
+res = fakeRes(2, 'unpaired');
+ax  = offscreenAxes(testCase);
+drawDifferenceWave(ax, res, struct('level', 0.90));
+testCase.verifyTrue(contains(ax.Title.String, '90% CI'));
+testCase.verifyFalse(contains(ax.Title.String, '95% CI'));
+end
+
+function test_anAbsentLevelLeavesTheComputedBandAlone(testCase)
+res = fakeRes(2, 'paired');
+
+ax = offscreenAxes(testCase);
+drawTEPOverlay(ax, res, struct());
+absent = bandSpan(ax);
+
+ax = offscreenAxes(testCase);
+drawTEPOverlay(ax, res, struct('level', []));
+testCase.verifyEqual(bandSpan(ax), absent);
+end
+
+function s = bandSpan(ax)
+% Total vertical extent of the shaded patches - a scale-free stand-in for
+% "how wide is the band", which is all these tests compare.
+h = findall(ax, 'Type', 'patch');
+s = 0;
+for k = 1:numel(h)
+    s = s + (max(h(k).YData) - min(h(k).YData));
+end
+end
+
 function y = lineYData(ax)
 % The one visible line: the zero and baseline markers are HandleVisibility off,
 % which findobj skips and findall would not - the trap this file already

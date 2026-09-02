@@ -141,13 +141,6 @@ for k = 1:numel(files)
 end
 end
 
-function v = fieldOr(s, name, default)
-if isstruct(s) && isfield(s, name) && ~isempty(s.(name))
-    v = s.(name);
-else
-    v = default;
-end
-end
 
 function c = charOr(v, default)
 if ischar(v) && isrow(v)

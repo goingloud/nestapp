@@ -1998,9 +1998,13 @@ classdef nestapp < matlab.apps.AppBase
             mode = 'TEP';
             if ~isempty(entry) && ~isempty(entry.mode); mode = entry.mode; end
             try
+                % No 'level' here: groupCurves owns that default and records
+                % what it used in res.info.level, which is what the status
+                % line and the figure footer read. Naming 95 here made this a
+                % second place the number lived.
                 app.exploreRes = groupCurves(app.exploreCache, app.exploreEntries, ...
                     struct('roi', {app.exploreRoi}, 'mode', mode, ...
-                           'design', exploreDesign(app), 'level', 0.95));
+                           'design', exploreDesign(app)));
             catch ME
                 app.ExploreStatusLabel.Text = ME.message;
                 app.exploreRes = struct([]);
@@ -2445,13 +2449,46 @@ classdef nestapp < matlab.apps.AppBase
         function ExplorePlotOptionsButtonPushed(app, ~)
             entry = currentPlotEntry(app);
             if isempty(entry) || isempty(entry.params); return; end
+
+            % The plot follows the controls while the dialog is open, and the
+            % dialog's cancel calls back once more with the original values,
+            % so the picture is restored along with the struct.
+            apply = @(p) previewExplorePlotParams(app, entry.name, p);
             [params, accepted] = plotOptionsDialog(entry, ...
                 explorePlotParamsFor(app, entry.name), app.UIFigure, ...
-                explorePlotContext(app));
+                explorePlotContext(app), apply);
             if ~accepted; return; end
+
+            % Store again rather than trusting the preview to have done it:
+            % plotOptionsDialog defaults onApply to a no-op, so a caller that
+            % passes none must still end up with the accepted values.
+            storeExplorePlotParams(app, entry.name, params);
+
+            % The last live edit may have left a debounced repaint pending.
+            % Cancel it - the immediate repaint below supersedes it, and
+            % letting it fire would redraw the whole grid a second time from
+            % identical params, which on TEP-topo is another twelve topoplots.
+            cancelExploreRepaint(app);
+            repaintExploreNow(app);
+        end
+
+        function storeExplorePlotParams(app, name, params)
             app.explorePlotParams = upsertByName(app.explorePlotParams, ...
-                struct('name', entry.name, 'params', params));
-            renderExplorePlot(app);
+                struct('name', name, 'params', params));
+        end
+
+        function previewExplorePlotParams(app, name, params)
+        % Store, then schedule the DEBOUNCED repaint - the same coalescing the
+        % resize handler uses, so a run of quick clicks in a listbox does not
+        % queue a second of work behind each one.
+            storeExplorePlotParams(app, name, params);
+            reRenderExploreOnResize(app);
+        end
+
+        function cancelExploreRepaint(app)
+            if ~isempty(app.exploreResizeTimer) && isvalid(app.exploreResizeTimer)
+                stop(app.exploreResizeTimer);
+            end
         end
 
         function ExplorePlotDropDownValueChanged(app, ~)
@@ -2543,16 +2580,46 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         function [groups, design] = exploreCohortText(app)
-        % "odd n=5, even n=5" and "unpaired, 95% CI" - the two facts that say
+        % "odd n=5, even n=5" and "unpaired, 90% CI" - the two facts that say
         % what a picture is of. Written once because they appear both on screen
         % and in every exported figure's footer.
+        %
+        % The level is read, not asserted. It used to be a literal 95 here,
+        % which was already only true by coincidence and would have become a
+        % wrong number on a published figure the moment the level was
+        % selectable.
             res  = app.exploreRes;
             bits = cell(1, numel(res.groups));
             for g = 1:numel(res.groups)
                 bits{g} = sprintf('%s n=%d', res.groups(g).name, res.est(g).n);
             end
             groups = strjoin(bits, ', ');
-            design = sprintf('%s, 95%% CI', res.design);
+            design = char(res.design);
+            lvl    = exploreDrawnLevel(app);
+            if ~isempty(lvl)
+                design = sprintf('%s, %s', design, ciLabel(lvl));
+            end
+        end
+
+        function lvl = exploreDrawnLevel(app)
+        % The level the CURRENT plot draws its interval at, or [] for a plot
+        % that draws no interval at all.
+        %
+        % A plot declares a 'level' param exactly when it has an interval, so
+        % the registry already answers "is there one" and there is no second
+        % list to keep in step. This also fixes a standing inaccuracy: a scalp
+        % map's status line read "unpaired, 95% CI" while the picture contained
+        % no interval whatsoever.
+            lvl   = [];
+            entry = currentPlotEntry(app);
+            if isempty(entry) || isempty(entry.params); return; end
+            if ~any(strcmp({entry.params.key}, 'level')); return; end
+
+            % Unset falls back to what groupCurves recorded, not to a
+            % literal. A result computed before res.info.level existed simply
+            % has none, and then the phrase is left off rather than guessed.
+            lvl = fieldOr(fieldOr(app.exploreRes, 'info', struct()), 'level', []);
+            lvl = fieldOr(explorePlotParamsFor(app, entry.name), 'level', lvl);
         end
 
         function ExploreCsvButtonPushed(app, ~)

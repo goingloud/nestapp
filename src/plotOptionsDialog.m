@@ -1,9 +1,9 @@
 % SPDX-License-Identifier: GPL-3.0-or-later
 % Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
 % Part of nestapp; see the LICENSE file for full terms.
-function [params, accepted] = plotOptionsDialog(entry, params, anchor, context)
+function [params, accepted] = plotOptionsDialog(entry, params, anchor, context, onApply)
 % PLOTOPTIONSDIALOG  Edit one plot's settings, generated from its registry entry.
-%   [params, accepted] = PLOTOPTIONSDIALOG(entry, params, anchor, context)
+%   [params, accepted] = PLOTOPTIONSDIALOG(entry, params, anchor, context, onApply)
 %
 %   entry    one element of plotRegistry(), whose .params drives the form
 %   params   the values already set for this plot (struct, possibly empty)
@@ -11,9 +11,24 @@ function [params, accepted] = plotOptionsDialog(entry, params, anchor, context)
 %   context  optional struct supplying choices for params that declare
 %            'choicesFrom' - the windows in the table right now, say. Passed
 %            straight to paramForm; nothing here reads it.
+%   onApply  optional @(params) called on EVERY change, and again on cancel
+%            with the original values, so the plot behind the dialog follows
+%            what the controls say
 %
 %   Returns the edited params and whether the user accepted them. On cancel -
 %   including the window's X - the input is handed back untouched.
+%
+%   EVERY PLOT SETTING IS A DRAW SETTING, which is what makes applying live
+%   safe: none of them changes the estimates, so nothing here can re-run a
+%   statistic as a side effect of a marker or a colour scale being adjusted.
+%   Turning a band on and looking at a static picture is a poor way to choose,
+%   and the reason the settings were unreachable in the first place was that
+%   they were hard to evaluate.
+%
+%   If a COMPUTE setting is ever added - one that changes what groupCurves
+%   returns rather than how it is drawn - it must not ride this path: mark it
+%   in the registry and gate it behind an explicit Apply, or a colour change
+%   starts silently recomputing the cohort.
 %
 %   Nothing here knows which plot it is editing. paramForm reads the makeParam
 %   metadata and picks a control per setting, so a plot that declares a new
@@ -37,6 +52,7 @@ function [params, accepted] = plotOptionsDialog(entry, params, anchor, context)
 if nargin < 2 || isempty(params); params = struct(); end
 if nargin < 3; anchor = []; end
 if nargin < 4; context = struct(); end
+if nargin < 5 || isempty(onApply); onApply = @(~) []; end
 accepted = false;
 
 meta = entry.params;
@@ -72,8 +88,14 @@ waitfor(fig);
 % Cancel, or the X, leaves the caller with exactly what it passed in. Edits are
 % applied to the live struct as they are made - that is what keeps the controls
 % and the values in step - so the discard has to happen here.
+%
+% And because the changes were also being drawn as they were made, cancel has
+% to put the PICTURE back too, not just the struct. A dialog that discards its
+% values while leaving the plot showing them is worse than one that never
+% previewed.
 if ~accepted
     params = original;
+    onApply(params);
 end
 
     function onChange(key, value)
@@ -82,12 +104,14 @@ end
         else
             params.(key) = value;
         end
+        onApply(params);
     end
 
     function onReset()
         params = struct();
         delete(form.Children);
         paramForm(form, meta, params, @onChange, context);
+        onApply(params);
     end
 
     function onOk()
