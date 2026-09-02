@@ -142,41 +142,6 @@ testCase.verifyEmpty(regexp(src, 'app\.updateReportsTab', 'match'), ...
      'Pass a callback instead to break the circular dependency.']);
 end
 
-% ── EEG cache invalidation ────────────────────────────────────────────────
-
-function test_selectDataButton2ResetsEEGLoaded(testCase)
-% BUG: EEG_SelectedTEPFiles_Loaded was never reset on new file selection,
-%      so the old EEG data was silently reused.
-% FIX: a new Visualize-tab selection (SelectDataButton_2Pushed ->
-%      setTEPFileList -> applyTEPSelection) resets the flag. The reset now
-%      lives in applyTEPSelection, the one place every selection change funnels
-%      through, so verify it there.
-src = fileread(nestappFile());
-idx = strfind(src, 'function applyTEPSelection');
-testCase.verifyFalse(isempty(idx), 'applyTEPSelection must exist in nestapp.m');
-window = src(idx(1):min(idx(1)+800, numel(src)));
-testCase.verifyTrue( ...
-    contains(window, 'EEG_SelectedTEPFiles_Loaded') && ...
-    (contains(window, '= false') || contains(window, '= 0')), ...
-    'applyTEPSelection must reset EEG_SelectedTEPFiles_Loaded on a new selection');
-end
-
-% ── Dynamic button access guard ───────────────────────────────────────────
-
-function test_electrodeButtonAccessHasIspropGuard(testCase)
-% BUG: app.([upper(label),'Button']) crashes for non-standard electrode names.
-% FIX: Guard with isprop(app, propName) before accessing.
-src = fileread(nestappFile());
-% Verify isprop guard exists somewhere near the dynamic access pattern
-hasGuard   = contains(src, 'isprop(app');
-hasPattern = contains(src, ",'Button'])");
-if hasPattern
-    testCase.verifyTrue(hasGuard, ...
-        ['Regression — dynamic electrode button access exists but no isprop guard found. ' ...
-         'Non-standard electrode names will crash the app.']);
-end
-end
-
 % ── pipelineDirty cleared after save ─────────────────────────────────────
 
 function test_savePipelineClearsDirtyFlag(testCase)

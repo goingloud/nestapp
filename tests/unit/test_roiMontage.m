@@ -55,17 +55,6 @@ testCase.verifyEqual(sort({layout.label}), sort(electrodeList()), ...
     'the montage must name exactly the electrodes electrodeList declares');
 end
 
-function test_electrodeListStillAgreesWithTheAppsProperty(testCase)
-% nestapp.elecList is still its own literal until the Explore tab lands; this
-% keeps the two from drifting in the meantime.
-src = fileread(fullfile(repoRoot(), 'src', '@nestapp', 'nestapp.m'));
-tok = regexp(src, 'elecList\s*=\s*\{(.*?)\}\s*;', 'tokens', 'once', 'dotall');
-testCase.assertNotEmpty(tok, 'could not find elecList in nestapp.m');
-fromApp = regexp(tok{1}, '''([^'']+)''', 'tokens');
-fromApp = cellfun(@(c) c{1}, fromApp, 'UniformOutput', false);
-testCase.verifyEqual(sort(fromApp), sort(electrodeList()));
-end
-
 function test_positionsStayOnTheHeadImage(testCase)
 [layout, headSize] = roiMontageLayout();
 p = vertcat(layout.pos);

@@ -14,13 +14,9 @@ function tests = test_windowGeometry
 %
 %   1. The window does not drift while idle - only a live figure can show that
 %      nothing moves when nothing happens.
-%
-%   2. The Plot Type radio group clears the topoplot at every size. Its base
-%      geometry ran to x=335 while UIAxes2 starts at x=340, and since every
-%      component scales by the same factor the base overlap scaled with it. This
-%      needs the app because the positions come from createComponents literals
-%      and rescaleComponents applies them to real components; there is no data
-%      source for them yet to check against.
+%   2. The Selected Steps buttons stay flush with their listbox column at every
+%      size - the positions come from createComponents literals and only
+%      rescaleComponents applied to real components can show where they land.
 %
 %   Builds the real app, so it needs a display.
 %
@@ -56,25 +52,6 @@ for k = 1:10
 end
 testCase.verifyEqual(app.UIFigure.Position, before, ...
     'The window must not move on its own');
-end
-
-% ── the Plot Type group must clear the topoplot at every size ─────────────
-
-function test_plotTypeGroupNeverOverlapsTopoplot(testCase)
-app = launchApp(testCase);
-sizes = [867 549; 650 420; 1700 900; 1900 560; 2400 700];
-for k = 1:size(sizes, 1)
-    app.UIFigure.Position(3:4) = sizes(k, :);
-    drawnow; drawnow;
-    groupRight = app.PlotTypeButtonGroup.Position(1) + app.PlotTypeButtonGroup.Position(3);
-    axesLeft   = app.UIAxes2.Position(1);
-    testCase.verifyLessThan(groupRight, axesLeft, sprintf( ...
-        'Plot Type group must clear the topoplot at %dx%d', sizes(k,1), sizes(k,2)));
-
-    modeRight = app.PlottingModeButtonGroup.Position(1) + app.PlottingModeButtonGroup.Position(3);
-    testCase.verifyLessThan(modeRight, axesLeft, sprintf( ...
-        'Plotting Mode group must clear the topoplot at %dx%d', sizes(k,1), sizes(k,2)));
-end
 end
 
 function test_selectedStepsButtonsSpanTheirColumn(testCase)

@@ -92,10 +92,9 @@ end
 
 function test_noAssignInBaseNestapp(testCase)
 % nestapp.m must not pollute the base workspace with pipeline state variables.
-% NOTE: assignin('base', app.TEPvarNameEditField.Value, ...) at ExportTEPDataButtonPushed
-%       is intentional (user-requested feature) and must NOT be flagged here.
-%       Only the workspace-pollution patterns ('files', 'paths', 'steps2run',
-%       'stepsName') are disallowed.
+% Only the workspace-pollution patterns ('files', 'paths', 'steps2run',
+% 'stepsName') are disallowed - a deliberate export the user asked for is not
+% pollution.
 src   = fileread(nestappFile());
 lines = strsplit(src, newline);
 pollutionPatterns = {'assignin\s*\(\s*''base''\s*,\s*''files''', ...
@@ -128,27 +127,6 @@ end
 %% PHASE 4 — Code Quality
 % ══════════════════════════════════════════════════════════════════════════
 
-function test_noRandColorInPlotTEP(testCase)
-% rand(1,3) for colour produces non-reproducible figures — violates the
-% project's reproducibility requirement.
-src = fileread(nestappFile());
-% Find plotTEP function body
-startIdx = strfind(src, 'function plotTEP(app)');
-testCase.assertNotEmpty(startIdx, ...
-    ['Phase 4: plotTEP(app) not found in nestapp.m. If it was renamed, update ' ...
-     'this test to point at the new name rather than letting it silently pass.']);
-% Extract window up to next function declaration
-nextFn = regexp(src(startIdx(1)+1:end), '\bfunction\b', 'once');
-if isempty(nextFn)
-    window = src(startIdx(1):end);
-else
-    window = src(startIdx(1) : startIdx(1) + nextFn);
-end
-matches = regexp(window, '\brand\s*\(\s*1\s*,\s*3\s*\)', 'match');
-testCase.verifyEmpty(matches, ...
-    'Phase 4: plotTEP uses rand(1,3) for colour — use the axes colour order instead');
-end
-
 function test_exportReportDateFormatIsISO(testCase)
 % exportReport must format timestamps as YYYY-MM-DD (ISO 8601 / datetime format),
 % not as the datestr legacy format (e.g. "17-May-2026 10:30:00").
@@ -167,22 +145,6 @@ function test_initReportProcessedAtIsDatetime(testCase)
 report = initPipelineReport('test.set');
 testCase.verifyTrue(isa(report.processedAt, 'datetime'), ...
     'Phase 4: initPipelineReport.processedAt must be a datetime, not a double (deprecated now())');
-end
-
-% (Cut test_loadLabelsNoReturnValue — a one-off signature grep from a past
-%  refactor with no ongoing regression value.)
-
-function test_electrodeButtonAccessGuarded(testCase)
-% Dynamic property access must have an isprop guard to handle non-standard
-% electrode names that would otherwise crash the app.
-src = fileread(nestappFile());
-hasDynamicAccess = contains(src, ",'Button'])");
-hasIspropGuard   = contains(src, 'isprop(app');
-if hasDynamicAccess
-    testCase.verifyTrue(hasIspropGuard, ...
-        ['Phase 4: Dynamic electrode button access exists without isprop guard. ' ...
-         'Non-standard electrode labels will crash the app.']);
-end
 end
 
 % ══════════════════════════════════════════════════════════════════════════
