@@ -31,7 +31,7 @@ function drawTEPOverlay(ax, res, opts)
 %   Bands are drawn before lines and with transparency, so an overlap reads as
 %   overlap rather than as whichever group happened to be drawn last.
 %
-%   .showTraces draws res.groups(g).fileCurves - one thin line per RECORDING,
+%   .showTraces draws res.groups(g).files - one thin line per RECORDING,
 %   in the group's colour, behind everything else and out of the legend. It is
 %   the honest answer to "is that one file an outlier": a group mean cannot be
 %   asked, and the alternative was opening the file alone, which shows it
@@ -53,13 +53,16 @@ hold(ax, 'on');
 
 % Individual recordings first of all: they are the busiest thing on the axes
 % and must not sit on top of the estimate they are context for.
-% A hand-built res, or one restored from a result saved before fileCurves
-% existed, simply has nothing to draw here.
-if opts.showTraces && isfield(res.groups, 'fileCurves')
+% A hand-built res, or one restored from a result saved before .files existed,
+% simply has nothing to draw here.
+if opts.showTraces && isfield(res.groups, 'files')
     for g = 1:nG
-        fc = res.groups(g).fileCurves;
-        if isempty(fc); continue; end
-        plot(ax, time, fc.', 'Color', [opts.colors(g, :) 0.30], ...
+        f = res.groups(g).files;
+        if isempty(f); continue; end
+        % Curves are 1xT rows, so vertcat stacks to nFiles x T; the
+        % transpose gives plot() the T-by-nFiles matrix it wants - one call
+        % per GROUP, not one per file.
+        plot(ax, time, vertcat(f.curve).', 'Color', [opts.colors(g, :) 0.30], ...
              'LineWidth', 0.5, 'HandleVisibility', 'off');
     end
 end

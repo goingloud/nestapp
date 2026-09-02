@@ -284,6 +284,8 @@ classdef nestapp < matlab.apps.AppBase
         explorePlotParams = struct('name', {}, 'params', {})
         exploreFigureOpts = struct()   % remembered publicationFigure settings
         exploreResizeTimer             % coalesces a resize drag into one repaint
+        reportsResizeTimer             % same, for the Reports dashboard / QC images
+        reportsQcIndex = 1             % which QC checkpoint the image pane shows
         exploreAvailablePlots = struct([])  % registry entries + availability
 
         % Tab Analysis
@@ -1244,7 +1246,8 @@ classdef nestapp < matlab.apps.AppBase
                     || idx < 1 || idx > numel(allEntries)
                 return
             end
-            e = allEntries{idx};
+            e      = allEntries{idx};
+            isFile = isFileEntry(app, e);
             if isfield(e, 'isDashboard') && e.isDashboard
                 showReportsPane(app, 'dashboard');
                 renderDashboardPanel(app.ReportsDashboardPanel, ...
@@ -1254,13 +1257,14 @@ classdef nestapp < matlab.apps.AppBase
                         'onExport',         @() exportDashboardPNG(app, allEntries), ...
                         'onFailedRowClick', @(name) jumpToFileEntry(app, allEntries, name), ...
                         'failed',           app.lastFailed));
-            elseif app.ReportsImageViewButton.Value && isFileEntry(app, e)
+            elseif app.ReportsImageViewButton.Value && isFile
                 % Keep the chosen checkpoint across a re-render: this runs on
                 % every resize as well as on a selection change, and silently
                 % snapping back to the first image mid-drag is disorienting.
                 showReportsPane(app, 'images');
                 renderQcImages(app.ReportsImagePanel, qcFiguresOf(app, e), ...
-                    struct('selected', shownQcIndex(app), ...
+                    struct('selected', app.reportsQcIndex, ...
+                           'onSelect', @(k) setQcIndex(app, k), ...
                            'onOpen',   @(d) revealFolder(app, d)));
             else
                 showReportsPane(app, 'text');
@@ -1271,36 +1275,34 @@ classdef nestapp < matlab.apps.AppBase
 
             % The switch is meaningless on a synthetic row, which has no file
             % behind it and therefore no images.
-            app.ReportsViewGroup.Visible = matlab.lang.OnOffSwitchState(isFileEntry(app, e));
+            app.ReportsViewGroup.Visible = onOffState(isFile);
 
             % Open... is offered only when there is something to open: the
             % pipeline saved, and the file is still where it was written.
             app.OpenReportSetButton.Enable = ...
-                matlab.lang.OnOffSwitchState(~isempty(selectedReportOutput(app)));
+                onOffState(~isempty(selectedReportOutput(app, allEntries)));
         end
 
-        function i = shownQcIndex(app)
-        % Which checkpoint the image pane is currently showing, 1 when it is
-        % not built yet. renderQcImages clamps, so a stale index from a report
-        % with more images than the next one is harmless.
-            i = 1;
-            if isempty(app.ReportsImagePanel) || ~isvalid(app.ReportsImagePanel)
-                return
-            end
-            dd = findall(app.ReportsImagePanel, 'Type', 'uidropdown');
-            if ~isempty(dd) && isnumeric(dd(1).Value); i = dd(1).Value; end
+        function setQcIndex(app, k)
+        % Remember the chosen checkpoint here rather than reading it back out
+        % of the rendered panel: the pane is cleared and rebuilt on every
+        % resize and selection change, and a second dropdown in that panel
+        % would make a findall-based recovery silently pick the wrong one.
+            app.reportsQcIndex = k;
         end
 
         function showReportsPane(app, which)
         % Exactly one of the three right-hand panes is visible. Kept in one
         % place so a new pane cannot leave an old one showing underneath.
-            app.ReportsTextArea.Visible       = matlab.lang.OnOffSwitchState(strcmp(which, 'text'));
-            app.ReportsDashboardPanel.Visible = matlab.lang.OnOffSwitchState(strcmp(which, 'dashboard'));
-            app.ReportsImagePanel.Visible     = matlab.lang.OnOffSwitchState(strcmp(which, 'images'));
+            app.ReportsTextArea.Visible       = onOffState(strcmp(which, 'text'));
+            app.ReportsDashboardPanel.Visible = onOffState(strcmp(which, 'dashboard'));
+            app.ReportsImagePanel.Visible     = onOffState(strcmp(which, 'images'));
         end
 
         function ReportsViewChanged(app, ~)
-        % Text / QC images toggle - re-render the pane for the current row.
+        % Routed through the listbox callback because which pane to show is a
+        % function of the selected ROW as well as the toggle - a synthetic row
+        % has no images whatever the toggle says.
             ReportsListBoxValueChanged(app);
         end
 
@@ -1321,22 +1323,34 @@ classdef nestapp < matlab.apps.AppBase
 
 
         function reRenderReportsOnResize(app)
-        % Repaint whichever absolutely-positioned pane is showing, so its
-        % children reflow to the new panel size. Both renderers clear and
-        % re-lay-out from the parent's size, so re-rendering IS the reflow.
+        % Coalesce a drag into ONE repaint, the same restart-a-timer pattern
+        % reRenderExploreOnResize uses and for the same reason: a resize event
+        % arrives per pixel, and UIFigureSizeChanged's re-entrancy guard is a
+        % throttle, not a debounce - it drops events arriving DURING a repaint,
+        % not the ones queued behind it.
         %
-        % Two panes need this, not one: the dashboard (heatmap, table,
-        % histograms) and the QC images (dropdown + image). The text area is a
-        % single control and rescaleComponents already moves it.
-            panes = {app.ReportsDashboardPanel, app.ReportsImagePanel};
-            showing = false;
-            for k = 1:numel(panes)
-                p = panes{k};
-                if ~isempty(p) && isvalid(p) && strcmp(p.Visible, 'on')
-                    showing = true; break
-                end
+        % This became necessary when the QC image pane joined the dashboard on
+        % this path. Repainting it re-decodes a 1600x1200 PNG, so a drag was
+        % hundreds of image decodes on the UI thread.
+            if isempty(app.reportsResizeTimer) || ~isvalid(app.reportsResizeTimer)
+                app.reportsResizeTimer = timer( ...
+                    'StartDelay', 0.20, 'ExecutionMode', 'singleShot', ...
+                    'Name', 'nestappReportsResize', ...
+                    'TimerFcn', @(~, ~) repaintReportsNow(app));
             end
-            if ~showing; return; end
+            stop(app.reportsResizeTimer);
+            start(app.reportsResizeTimer);
+        end
+
+        function repaintReportsNow(app)
+        % Reflow whichever absolutely-positioned pane is showing. Both
+        % renderers clear and re-lay-out from the parent's size, so
+        % re-rendering IS the reflow. The text area is a single control and
+        % rescaleComponents already moves it.
+            if ~isvalid(app) || ~isvalid(app.UIFigure); return; end
+            panes = {app.ReportsDashboardPanel, app.ReportsImagePanel};
+            visible = @(p) ~isempty(p) && isvalid(p) && strcmp(p.Visible, 'on');
+            if ~any(cellfun(visible, panes)); return; end
             allEntries = [app.allPipelineReports, app.loadedReports];
             if app.dashboardHasContent(allEntries)
                 allEntries{end+1} = struct('isDashboard', true, ...
@@ -1580,10 +1594,12 @@ classdef nestapp < matlab.apps.AppBase
         % A listbox row backed by a real per-file report, as opposed to the
         % synthetic Session Summary / Quality Dashboard rows. Those have no
         % file, so no images and nothing for the view switch to switch.
+        %
+        % Those two are already excluded by the test below rather than by name:
+        % the summary sets report = [] and the dashboard report = struct(), so
+        % neither survives isstruct + isfield(...,'inputFile').
             tf = isstruct(e) && isfield(e, 'report') && isstruct(e.report) ...
-                 && isfield(e.report, 'inputFile') ...
-                 && ~(isfield(e, 'isSummary')   && e.isSummary) ...
-                 && ~(isfield(e, 'isDashboard') && e.isDashboard);
+                 && isfield(e.report, 'inputFile');
         end
 
         function figs = qcFiguresOf(~, e)
@@ -3456,14 +3472,9 @@ classdef nestapp < matlab.apps.AppBase
                 return
             end
 
-            % app.filePaths holds full paths and spans folders when the
-            % "Folders..." picker was used. Fall back to the single-folder
-            % join for any selection made before filePaths was populated.
-            if ~isempty(app.filePaths)
-                filePaths = app.filePaths;
-            else
-                filePaths = cellfun(@(f) fullfile(app.path, f), app.file, 'UniformOutput', false);
-            end
+            % One definition of what the queue means, shared with Browse EEG -
+            % otherwise the two could disagree about which files are selected.
+            queuePaths = cleaningQueuePaths(app);
 
             % Pre-select channel location file once if the pipeline needs it.
             app.preSelectedChanFile = '';
@@ -3510,7 +3521,7 @@ classdef nestapp < matlab.apps.AppBase
             opts.chanLocFile  = app.preSelectedChanFile;
 
             try
-                [allReports, allSummaries, failed] = runPipelineCore(app.spec, filePaths, opts);
+                [allReports, allSummaries, failed] = runPipelineCore(app.spec, queuePaths, opts);
             catch err
                 if strcmp(err.identifier, 'nestapp:cancelled')
                     return   % backed out before anything ran - nothing to say
@@ -3658,7 +3669,7 @@ classdef nestapp < matlab.apps.AppBase
             sX = newSize(1) / app.originalSize(1);
             sY = newSize(2) / app.originalSize(2);
             rescaleComponents(app, sX, sY);
-            reRenderReportsOnResize(app);  % reflow the Quality Dashboard if it's showing
+            reRenderReportsOnResize(app);  % reflow the Reports pane if one is showing
             reRenderExploreOnResize(app);  % and the Explore plot, for the same reason
         end
 
@@ -4007,19 +4018,17 @@ classdef nestapp < matlab.apps.AppBase
         % want to look at is not always the batch this session ran. Nothing
         % here depends on a cohort someone else happened to load first.
             [paths, labels] = browsableRecordings(app);
-            BROWSE = 'Browse for a file...';
 
-            if isempty(paths)
+            k = numel(paths) + 1;          % nothing queued -> straight to the browser
+            if ~isempty(paths)
+                k = pickOne('Browse EEG', 'Which recording?', ...
+                            [labels, {'Browse for a file...'}], app.UIFigure);
+                if isempty(k); return; end
+            end
+            if k > numel(paths)
                 chosen = pickSetFromDisk(app);
             else
-                k = pickOne('Browse EEG', 'Which recording?', ...
-                            [labels, {BROWSE}], app.UIFigure);
-                if isempty(k); return; end
-                if k > numel(paths)
-                    chosen = pickSetFromDisk(app);
-                else
-                    chosen = paths{k};
-                end
+                chosen = paths{k};
             end
             if isempty(chosen); return; end
             openInEegplot(app, chosen);
@@ -4045,12 +4054,15 @@ classdef nestapp < matlab.apps.AppBase
             end
         end
 
-        function p = selectedReportOutput(app)
+        function p = selectedReportOutput(app, allEntries)
         % Where the report selected on the Reports tab wrote its cleaned .set,
         % or '' when nothing is selected, the pipeline never saved, or the
         % report predates the outputFile field.
+        %
+        % Takes the entry list rather than rebuilding it: renderReportsRightPane
+        % already holds one, and this runs on every selection change.
+            if nargin < 2; allEntries = [app.allPipelineReports, app.loadedReports]; end
             p = '';
-            allEntries = [app.allPipelineReports, app.loadedReports];
             r = selectedFileReport(app, allEntries);
             if isempty(r) || ~isfield(r, 'outputFile'); return; end
             if ~isempty(r.outputFile) && isfile(r.outputFile)
@@ -4063,8 +4075,9 @@ classdef nestapp < matlab.apps.AppBase
             p = '';
             start = getpref('nestapp', 'lastDataFolder', '');
             if isempty(start) || ~isfolder(start); start = pwd; end
+            exts = dataFileExts(app);
             [f, d] = uigetfile( ...
-                {'*.set;*.vhdr;*.cnt;*.cdt', 'EEG recordings (*.set, *.vhdr, *.cnt, *.cdt)'; ...
+                {strjoin(exts, ';'), sprintf('EEG recordings (%s)', strjoin(exts, ', ')); ...
                  '*.*', 'All files'}, ...
                 'Open EEG recording', start);
             if isvalid(app.UIFigure); figure(app.UIFigure); end
@@ -4094,10 +4107,12 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         function paths = cleaningQueuePaths(app)
-        % The Cleaning tab's queue as full paths. filePaths is the source of
-        % truth and spans folders; the app.path join is the fallback for a
-        % selection made before filePaths was populated, exactly as
-        % RunAnalysisButtonPushed resolves it.
+        % The Cleaning tab's queue as full paths - the one definition of what
+        % "the selected files" means, used by both Run Analysis and Browse EEG.
+        %
+        % app.filePaths is the source of truth and spans folders when the
+        % "Folders..." picker was used; the app.path join is the fallback for a
+        % selection made before filePaths was populated.
             if ~isempty(app.filePaths)
                 paths = app.filePaths(:)';
             elseif ~isempty(app.file) && ~isempty(app.path)
@@ -4381,7 +4396,7 @@ classdef nestapp < matlab.apps.AppBase
             % Stop the timers first: a pending callback would otherwise fire
             % against a half-deleted app, and an undeleted timer outlives the
             % app in the MATLAB session, firing into nothing forever.
-            for t = [app.hoverTimer, app.exploreResizeTimer]
+            for t = [app.hoverTimer, app.exploreResizeTimer, app.reportsResizeTimer]
                 if isvalid(t); stop(t); delete(t); end
             end
 

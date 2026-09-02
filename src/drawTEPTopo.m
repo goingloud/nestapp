@@ -164,6 +164,12 @@ nMade = nMade + 1;
 axesMade(nMade) = cbAx;
 
 % ── the curve panel ─────────────────────────────────────────────────────
+% TEP-topo's registry entry deliberately offers FEWER overlay options than
+% drawTEPOverlay accepts - no showBand, no legend, no showTraces. The
+% pass-through below is not an implicit promise to expose all of them: this
+% curve panel is a sixth of the figure under a grid of scalp maps, and it is
+% the panel least able to absorb extra ink.
+%
 % opts carries .showBands and .windows straight through, and drawTEPOverlay
 % owns the shading - calling shadeTimeWindows again here painted every band,
 % boundary and label twice, stacking the alpha and overprinting the names.

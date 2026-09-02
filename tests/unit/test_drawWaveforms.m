@@ -43,19 +43,18 @@ res = struct('time', time, 'design', design, 'channelLabels', {{'F3'}}, ...
              'chanlocs', [], 'complete', {{}}, 'dropped', {{}}, ...
              'contrast', struct([]), 'info', struct());
 g = struct('name', {}, 'subjects', {}, 'curves', {}, 'chanMeans', {}, ...
-           'nFiles', {}, 'nSubjects', {}, 'fileCurves', {}, 'fileNames', {}, ...
-           'fileSubjects', {});
+           'nFiles', {}, 'nSubjects', {}, 'files', {});
 for k = 1:nGroups
     curves = sin(linspace(0, pi, numel(time))) .* (1:4)' + k;
     % Six recordings for four subjects, as a real cohort has: two people were
-    % recorded twice. That is exactly the case .fileCurves exists to show.
-    files  = [curves; curves(1:2, :) * 1.1];
+    % recorded twice. That is exactly the case .files exists to show.
+    rows  = [curves; curves(1:2, :) * 1.1];
+    files = struct('name',    {'a','b','c','d','e','f'}, ...
+                   'subject', {'s1','s2','s3','s4','s1','s2'}, ...
+                   'curve',   num2cell(rows, 2)');
     g(k) = struct('name', names{k}, 'subjects', {{'s1','s2','s3','s4'}}, ...
                   'curves', curves, 'chanMeans', mean(curves, 1), ...
-                  'nFiles', 6, 'nSubjects', 4, ...
-                  'fileCurves', files, ...
-                  'fileNames', {{'a','b','c','d','e','f'}}, ...
-                  'fileSubjects', {{'s1','s2','s3','s4','s1','s2'}});
+                  'nFiles', 6, 'nSubjects', 4, 'files', files);
 end
 res.groups   = g;
 res.est      = curveInterval({g.curves}, design);
@@ -108,11 +107,11 @@ testCase.verifyEqual(nLines(ax), 2, ...
 end
 
 function test_traceOptionIsSafeOnAResultThatPredatesIt(testCase)
-% A session saved before fileCurves existed, or any hand-built res, simply
+% A session saved before .files existed, or any hand-built res, simply
 % has nothing to draw - it must not error.
 ax = offscreenAxes(testCase);
 res = fakeRes(2, 'unpaired');
-res.groups = rmfield(res.groups, {'fileCurves', 'fileNames', 'fileSubjects'});
+res.groups = rmfield(res.groups, 'files');
 
 drawTEPOverlay(ax, res, struct('showTraces', true));
 testCase.verifyEqual(nLines(ax), 2);

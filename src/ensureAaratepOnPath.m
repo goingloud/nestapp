@@ -1,4 +1,4 @@
-function ensureAaratepOnPath()
+function ensureAaratepOnPath(action)
 % ENSUREAARATEPONPATH  Idempotent addpath for the vendored AARATEP tree.
 %   Adds third_party/aaratep and its Common subtree to the MATLAB path on
 %   first call. Subsequent calls are cheap no-ops, but re-add the tree if
@@ -23,14 +23,25 @@ function ensureAaratepOnPath()
 % test using hideFromPath, a restoredefaultpath - stops the sentinel resolving
 % and the addpath below runs again, rather than a remembered flag claiming the
 % tree is still there while every AARATEP step fails with a bare "Undefined
-% function". Tests force the FastICA resolution to re-run with
-% pathMemo('reset', 'c_TMSEEG_Preprocess_AARATEPPipeline').
-pathMemo('c_TMSEEG_Preprocess_AARATEPPipeline', @addTree);
+% function".
+%
+% ENSUREAARATEPONPATH('reset') drops the memo, which is how a test forces the
+% FastICA resolution below to run again. The sentinel's NAME stays in here:
+% a caller naming it would silently no-op if this function ever changed which
+% entry point it probes, and the tests would keep passing while inheriting a
+% warm memo from each other.
+SENTINEL = 'c_TMSEEG_Preprocess_AARATEPPipeline';
+if nargin > 0 && strcmpi(action, 'reset')
+    pathMemo(SENTINEL, []);
+    return
+end
+pathMemo(SENTINEL, @addTree);
 end
 
 % ── helpers ───────────────────────────────────────────────────────────────────
 
-function addTree()
+function ok = addTree()
+ok = true;   % pathMemo memoises a value; the work here is the side effect
 repoRoot   = fileparts(fileparts(mfilename('fullpath')));   % src/ -> repo root
 aaratepDir = fullfile(repoRoot, 'third_party', 'aaratep');
 

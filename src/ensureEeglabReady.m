@@ -38,15 +38,18 @@ function [ok, msg] = ensureEeglabReady()
 %
 %   See also: pathMemo, availableSteps, stepAvailability, loadPrefs
 
-res = pathMemo('pop_loadset', @initialise);
-ok  = res.ok;
-msg = res.msg;
+% The memo stores the MESSAGE, and ok is derived from it. A cache hit requires
+% the sentinel to resolve, so anything read back was computed on a run where
+% EEGLAB came up - a stored failure is never returned, because a miss is
+% retried. That makes ok exactly isempty(msg) at every point it is read.
+msg = pathMemo('pop_loadset', @initialise);
+ok  = isempty(msg);
 end
 
 % ── helpers ─────────────────────────────────────────────────────────────────
 
-function res = initialise()
-res = struct('ok', true, 'msg', '');
+function msg = initialise()
+msg = '';
 
 % The Preferences path is where the user points nestapp at their install; it
 % is only added if EEGLAB is not already reachable, so an eeglab the user put
@@ -59,18 +62,16 @@ if isempty(which('eeglab'))
 end
 
 if isempty(which('eeglab'))
-    res.ok  = false;
-    res.msg = ['EEGLAB was not found on the MATLAB path. Set its folder in ' ...
-               'File > Preferences; until then, steps that need EEGLAB or its ' ...
-               'plugins cannot be offered.'];
+    msg = ['EEGLAB was not found on the MATLAB path. Set its folder in ' ...
+           'File > Preferences; until then, steps that need EEGLAB or its ' ...
+           'plugins cannot be offered.'];
     return
 end
 
 try
     evalc('eeglab nogui');
 catch ME
-    res.ok  = false;
-    res.msg = sprintf(['EEGLAB could not be initialised: %s\nVerify the EEGLAB ' ...
-                       'path in File > Preferences.'], ME.message);
+    msg = sprintf(['EEGLAB could not be initialised: %s\nVerify the EEGLAB ' ...
+                   'path in File > Preferences.'], ME.message);
 end
 end

@@ -4,15 +4,14 @@
 function [value, refreshed] = pathMemo(sentinel, computeFcn)
 % PATHMEMO  Cache an answer about the MATLAB path, keyed on a sentinel function.
 %   [value, refreshed] = PATHMEMO(sentinel, computeFcn)
+%   PATHMEMO(sentinel, [])                       drop the entry
 %
 %   sentinel    name of a function whose resolution stands for "the thing this
 %               answer is about is still installed and reachable"
-%   computeFcn  @() -> value, run when the memo is cold or stale
+%   computeFcn  @() -> value, run when the memo is cold or stale. [] instead
+%               invalidates the entry and computes nothing.
 %   value       computeFcn's result, possibly from the cache
 %   refreshed   true when computeFcn actually ran
-%
-%   PATHMEMO('reset')            drops every entry
-%   PATHMEMO('reset', sentinel)  drops one entry
 %
 %   THE POLICY, IN ONE PLACE: a cached answer is valid only while its sentinel
 %   still resolves to the SAME FILE it resolved to when the answer was computed.
@@ -37,72 +36,44 @@ function [value, refreshed] = pathMemo(sentinel, computeFcn)
 %   makes "EEGLAB is not installed yet, set it in Preferences" recoverable
 %   without restarting MATLAB.
 %
-%   Reset is per-sentinel so a test can invalidate one toolchain without
-%   disturbing the others; `clear pathMemo` would drop all three at once, which
-%   is what the old per-function `clear ensureAaratepOnPath` effectively did.
+%   Invalidation is per-sentinel and is meant to be reached through the function
+%   that owns the sentinel (ensureAaratepOnPath('reset'), tesaVersion(true)),
+%   not by callers naming it themselves.
 %
 %   See also: ensureEeglabReady, ensureAaratepOnPath, tesaVersion
 
-persistent keys locs vals
+persistent memo
+if isempty(memo)
+    memo = struct('key', {}, 'loc', {}, 'val', {});
+end
 
-if isempty(keys); keys = {}; locs = {}; vals = {}; end
+sentinel = char(sentinel);
+k        = find(strcmp({memo.key}, sentinel), 1);
 
-if ischar(sentinel) && strcmp(sentinel, 'reset')
-    if nargin < 2
-        keys = {}; locs = {}; vals = {};
-    else
-        k = find(strcmp(keys, char(computeFcn)), 1);
-        if ~isempty(k)
-            keys(k) = []; locs(k) = []; vals(k) = [];
-        end
-    end
+if isempty(computeFcn)
+    if ~isempty(k); memo(k) = []; end
     value = []; refreshed = false;
     return
 end
 
-sentinel = char(sentinel);
-loc      = which(sentinel);
-k        = find(strcmp(keys, sentinel), 1);
-
 % A hit needs three things: an entry, a sentinel that still resolves, and the
 % same file behind it. Dropping any one of those is how the old caches went bad.
-if ~isempty(k) && ~isempty(loc) && strcmp(locs{k}, loc)
-    value     = vals{k};
+loc = which(sentinel);
+if ~isempty(k) && ~isempty(loc) && strcmp(memo(k).loc, loc)
+    value     = memo(k).val;
     refreshed = false;
     return
 end
 
-value     = callCompute(computeFcn);
+value     = computeFcn();
 refreshed = true;
 
 % Re-probe: computeFcn is usually what PUTS the sentinel on the path, so the
 % location to remember is the one that exists now, not the one from before.
-loc = which(sentinel);
+entry = struct('key', sentinel, 'loc', which(sentinel), 'val', {value});
 if isempty(k)
-    keys{end+1} = sentinel; locs{end+1} = loc; vals{end+1} = value;
+    memo(end+1) = entry;
 else
-    locs{k} = loc; vals{k} = value;
-end
-end
-
-% ── helpers ─────────────────────────────────────────────────────────────────
-
-function value = callCompute(computeFcn)
-% Both shapes of caller are supported deliberately. An "ensure" - putting a
-% tree on the path - has no value to return, and forcing one would mean
-% inventing a meaningless `true`; a reader like tesaVersion has a real one.
-% Ask the handle which it is rather than calling it and interpreting the
-% failure, so a genuine TooManyOutputs raised INSIDE compute still surfaces.
-try
-    n = nargout(computeFcn);
-catch
-    n = 1;      % anonymous or unresolvable: assume it returns something
-end
-
-if n == 0
-    computeFcn();
-    value = [];
-else
-    value = computeFcn();
+    memo(k) = entry;
 end
 end

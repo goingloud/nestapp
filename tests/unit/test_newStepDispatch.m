@@ -49,7 +49,7 @@ function test_ensureAaratepOnPath_doesNotShadowEEGLabForks(testCase)
 % the dir on path from prior runs).
 shadowDir = fullfile(repoRoot(), 'third_party', 'aaratep', ...
                      'Common', 'ThirdParty', 'FromEEGLab');
-pathMemo('reset', 'c_TMSEEG_Preprocess_AARATEPPipeline');
+ensureAaratepOnPath('reset');
 prePath = path;
 restorePath = onCleanup(@() path(prePath));
 
@@ -72,7 +72,7 @@ testCase.verifyFalse(shadowed, sprintf( ...
 end
 
 function test_ensureAaratepOnPath_addsCoreHelpers(testCase)
-pathMemo('reset', 'c_TMSEEG_Preprocess_AARATEPPipeline');
+ensureAaratepOnPath('reset');
 prePath = path;
 restorePath = onCleanup(@() path(prePath));
 
@@ -91,7 +91,7 @@ testCase.assumeNotEmpty(which('fastica'), ...
     'No fastica on the path - cannot verify the bundled one is not preferred.');
 fasticaDir = fullfile(repoRoot(), 'third_party', 'aaratep', ...
                       'Common', 'ThirdParty', 'FastICA');
-pathMemo('reset', 'c_TMSEEG_Preprocess_AARATEPPipeline');
+ensureAaratepOnPath('reset');
 prePath = path;
 restorePath = onCleanup(@() restoreAaratepState(prePath));
 
@@ -117,7 +117,7 @@ fid = fopen(fullfile(fakeDir, 'fastica.m'), 'w');
 fprintf(fid, 'function varargout = fastica(varargin)\n%% FastICA version 99.9\nend\n');
 fclose(fid);
 
-pathMemo('reset', 'c_TMSEEG_Preprocess_AARATEPPipeline');
+ensureAaratepOnPath('reset');
 prePath = path;
 restorePath = onCleanup(@() restoreAaratepState(prePath, fakeDir));
 addpath(fakeDir);   % addpath prepends, so the fake resolves first
@@ -143,7 +143,7 @@ testCase.assumeTrue(isfile(bundled), 'Bundled FastICA absent - cannot test fallb
 cleanupHide = hideFromPath('fastica'); %#ok<NASGU>
 testCase.assertEmpty(which('fastica'), 'Could not hide fastica from the path.');
 
-pathMemo('reset', 'c_TMSEEG_Preprocess_AARATEPPipeline');
+ensureAaratepOnPath('reset');
 prePath = path;
 restorePath = onCleanup(@() restoreAaratepState(prePath)); %#ok<NASGU>
 
@@ -160,10 +160,10 @@ end
 % ── fixtures and helpers ─────────────────────────────────────────────────────
 
 function restoreAaratepState(prePath, varargin)
-% Restore the path and reset ensureAaratepOnPath's persistent so a
+% Restore the path and drop ensureAaratepOnPath's memo so a
 % path-mutating test cannot leave later tests with a stale path state.
 path(prePath);
-pathMemo('reset', 'c_TMSEEG_Preprocess_AARATEPPipeline');
+ensureAaratepOnPath('reset');
 for i = 1:numel(varargin)
     if isfolder(varargin{i})
         try; rmdir(varargin{i}, 's'); catch; end

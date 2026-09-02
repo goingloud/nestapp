@@ -47,6 +47,12 @@ uibutton(fig, 'Text', 'Cancel', 'Position', [W-206 16 90 26], ...
 uibutton(fig, 'Text', 'Open', 'Position', [W-106 16 90 26], ...
     'ButtonPushedFcn', @(~,~) onOk());
 
+% Announce that the dialog is about to block, the same way roiPicker and
+% exploreFilesTable do. Anything driving it otherwise has to guess when the
+% wait has started, and a release issued before that point is silently a
+% no-op. This is what lets tests use driveModalDialog instead of a fixed
+% sleep long enough to hope the window exists.
+setappdata(fig, 'nestappModalReady', true);
 waitfor(fig);
 
     function onOk()

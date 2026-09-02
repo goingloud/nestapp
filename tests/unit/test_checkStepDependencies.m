@@ -180,7 +180,7 @@ function test_vendoredAaratepHelpersNotReportedMissing(testCase)
 shadowRoot = fullfile(repoRoot(), 'third_party', 'aaratep');
 prePath = path;
 restorePath = onCleanup(@() path(prePath));
-pathMemo('reset', 'c_TMSEEG_Preprocess_AARATEPPipeline');   % reset its persistent "ready" flag
+ensureAaratepOnPath('reset');   % drop its memo so the addpath runs again
 pathParts = strsplit(path, pathsep);
 toDrop = pathParts(startsWith(pathParts, shadowRoot));
 for k = 1:numel(toDrop)

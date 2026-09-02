@@ -8,6 +8,8 @@ function renderQcImages(parent, figures, opts)
 %
 %   figures  cellstr of PNG paths, as recorded on report.quality.figures
 %   opts     .selected  1-based index to show first (default 1)
+%            .onSelect  @(index) called when the user picks a different one,
+%                       so the caller can remember it across a re-render
 %            .onOpen    @(path) called when the user asks to open the folder
 %
 %   The images already exist: renderQualityFigure writes one per Quality Gate
@@ -28,7 +30,7 @@ function renderQcImages(parent, figures, opts)
 %   See also: renderQualityFigure, renderDashboardPanel, buildReportText
 
 if nargin < 3; opts = struct(); end
-opts = fillDefaults(opts, struct('selected', 1, 'onOpen', []));
+opts = fillDefaults(opts, struct('selected', 1, 'onSelect', [], 'onOpen', []));
 
 delete(parent.Children);
 
@@ -49,11 +51,8 @@ ROW_H = 26;
 
 sel = min(max(round(opts.selected), 1), numel(figures));
 
-labels = cell(1, numel(figures));
-for i = 1:numel(figures)
-    [~, base, ext] = fileparts(figures{i});
-    labels{i} = [base ext];
-end
+[~, base, ext] = fileparts(figures);   % fileparts is cellstr-aware
+labels = strcat(base, ext);
 
 img = uiimage(parent, 'Position', [6 6 W-12 H-ROW_H-14], ...
               'ScaleMethod', 'fit');
@@ -61,7 +60,7 @@ img = uiimage(parent, 'Position', [6 6 W-12 H-ROW_H-14], ...
 dd = uidropdown(parent, 'Position', [6 H-ROW_H+2 W-120 22], ...
                 'Items', labels, 'ItemsData', 1:numel(figures), 'Value', sel, ...
                 'Tooltip', 'Which checkpoint to show', ...
-                'ValueChangedFcn', @(src, ~) show(src.Value));
+                'ValueChangedFcn', @(src, ~) choose(src.Value));
 
 if ~isempty(opts.onOpen)
     uibutton(parent, 'Text', 'Open folder', ...
@@ -71,6 +70,13 @@ if ~isempty(opts.onOpen)
 end
 
 show(sel);
+
+    function choose(i)
+    % Report the choice before drawing it, so the caller's remembered index is
+    % correct even if the image itself is missing.
+        if ~isempty(opts.onSelect); opts.onSelect(i); end
+        show(i);
+    end
 
     function show(i)
         p = figures{i};

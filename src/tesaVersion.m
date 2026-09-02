@@ -31,7 +31,7 @@ function [v, source] = tesaVersion(forceRefresh)
 
 if nargin < 1, forceRefresh = false; end
 if forceRefresh
-    pathMemo('reset', 'eegplugin_tesa');
+    pathMemo('eegplugin_tesa', []);
 end
 
 res    = pathMemo('eegplugin_tesa', @readVersion);
@@ -45,34 +45,32 @@ function res = readVersion()
 v = [0 0 0];
 source = 'none';
 
+% Not installed leaves the [0 0 0] / 'none' defaults above, so the parsing is
+% guarded rather than returned around - one construction site at the end.
 pluginFile = which('eegplugin_tesa');
-if isempty(pluginFile)
-    res = struct('v', v, 'source', source);
-    return
-end
-
-% Preferred: the version the plugin declares about itself.
-try
-    txt = fileread(pluginFile);
-    tok = regexp(txt, "vers\s*=\s*'tesa([0-9]+(?:\.[0-9]+)*)'", 'tokens', 'once');
-    if ~isempty(tok)
-        v = parseVersion(tok{1});
-        source = 'vers';
+if ~isempty(pluginFile)
+    % Preferred: the version the plugin declares about itself.
+    try
+        txt = fileread(pluginFile);
+        tok = regexp(txt, "vers\s*=\s*'tesa([0-9]+(?:\.[0-9]+)*)'", 'tokens', 'once');
+        if ~isempty(tok)
+            v = parseVersion(tok{1});
+            source = 'vers';
+        end
+    catch
+        % Unreadable file - fall through to the folder name.
     end
-catch
-    % Unreadable file - fall through to the folder name.
-end
 
-% Fallback: EEGLAB installs plugins into a version-stamped directory
-% (plugins/TESA1.1.1), which survives a plugin whose vers line was edited or
-% removed.
-if isequal(v, [0 0 0])
-    folder = fileparts(pluginFile);
-    [~, leaf] = fileparts(folder);
-    tok = regexp(leaf, '^TESA[_-]?([0-9]+(?:\.[0-9]+)*)$', 'tokens', 'once', 'ignorecase');
-    if ~isempty(tok)
-        v = parseVersion(tok{1});
-        source = 'folder';
+    % Fallback: EEGLAB installs plugins into a version-stamped directory
+    % (plugins/TESA1.1.1), which survives a plugin whose vers line was edited
+    % or removed.
+    if isequal(v, [0 0 0])
+        [~, leaf] = fileparts(fileparts(pluginFile));
+        tok = regexp(leaf, '^TESA[_-]?([0-9]+(?:\.[0-9]+)*)$', 'tokens', 'once', 'ignorecase');
+        if ~isempty(tok)
+            v = parseVersion(tok{1});
+            source = 'folder';
+        end
     end
 end
 

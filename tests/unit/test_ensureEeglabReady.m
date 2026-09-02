@@ -30,11 +30,11 @@ end
 function setup(testCase) %#ok<INUSD>
 % Every test here starts from a cold memo, and leaves one behind, so no test
 % inherits a decision another made.
-pathMemo('reset', 'pop_loadset');
+pathMemo('pop_loadset', []);
 end
 
 function teardown(testCase) %#ok<INUSD>
-pathMemo('reset', 'pop_loadset');
+pathMemo('pop_loadset', []);
 end
 
 function r = repoRoot()

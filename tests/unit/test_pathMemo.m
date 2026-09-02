@@ -31,8 +31,8 @@ function setup(testCase)
 % A sentinel function nothing else on this machine could provide.
 testCase.TestData.name = sprintf('nestappMemoProbe%d', feature('getpid'));
 testCase.TestData.dirs = {};
-pathMemo('reset', testCase.TestData.name);
-testCase.addTeardown(@() pathMemo('reset', testCase.TestData.name));
+pathMemo(testCase.TestData.name, []);
+testCase.addTeardown(@() pathMemo(testCase.TestData.name, []));
 end
 
 function teardown(testCase)
@@ -162,7 +162,7 @@ provide(testCase, 'first');
 pathMemo(name,  fcnA);
 pathMemo(other, fcnB);
 
-pathMemo('reset', name);
+pathMemo(name, []);
 
 pathMemo(name,  fcnA);
 pathMemo(other, fcnB);
@@ -170,7 +170,7 @@ pathMemo(other, fcnB);
 testCase.verifyEqual(nCallsA(), 2, 'the reset entry should recompute');
 testCase.verifyEqual(nCallsB(), 1, 'an untouched entry must survive');
 
-pathMemo('reset', other);
+pathMemo(other, []);
 end
 
 function test_aFailedComputeIsRetriedNotRemembered(testCase)
