@@ -2373,18 +2373,21 @@ classdef nestapp < matlab.apps.AppBase
 
         function refreshExploreWindows(app)
         % Two views of one list in the same space. The Analysis tab showed
-        % bounds AND measures in six columns; the rail is 197 px wide, so it
+        % bounds AND measures in six columns; the rail holds four, so it
         % switches rather than dropping the measures as the first version did.
             w = app.exploreWindows;
             if strcmp(app.ExploreWindowsModeDropDown.Value, 'results')
                 showExploreWindowResults(app, w);
             else
-                app.ExploreWindowsTable.ColumnName     = {'Name'; 'T1'; 'T2'};
-                app.ExploreWindowsTable.ColumnWidth    = {70, 55, 55};
-                app.ExploreWindowsTable.ColumnEditable = [true true true];
-                data = cell(numel(w), 3);
+                app.ExploreWindowsTable.ColumnName     = {'Name'; 'T1'; 'T2'; 'Peak'};
+                app.ExploreWindowsTable.ColumnWidth    = {74, 46, 46, 62};
+                app.ExploreWindowsTable.ColumnEditable = [true true true true];
+                app.ExploreWindowsTable.ColumnFormat   = ...
+                    {'char', 'numeric', 'numeric', {'auto', 'pos', 'neg'}};
+                data = cell(numel(w), 4);
                 for i = 1:numel(w)
-                    data(i, :) = {w(i).name, w(i).winStart, w(i).winEnd};
+                    data(i, :) = {w(i).name, w(i).winStart, w(i).winEnd, ...
+                                  windowPolarity(w(i))};
                 end
                 app.ExploreWindowsTable.Data = data;
             end
@@ -2394,8 +2397,9 @@ classdef nestapp < matlab.apps.AppBase
         % Measures for the group SELECTED in the groups list - with n groups
         % there is no single "the mean", so the table names whose it is.
             app.ExploreWindowsTable.ColumnName     = {'Win'; 'Mean'; 'Peak ms'; 'Peak uV'};
-            app.ExploreWindowsTable.ColumnWidth    = {50, 48, 48, 48};
+            app.ExploreWindowsTable.ColumnWidth    = {46, 52, 66, 66};
             app.ExploreWindowsTable.ColumnEditable = [false false false false];
+            app.ExploreWindowsTable.ColumnFormat   = {'char', 'char', 'char', 'char'};
 
             [curve, gname] = exploreSelectedCurve(app);
             if isempty(curve)
@@ -2859,8 +2863,12 @@ classdef nestapp < matlab.apps.AppBase
 
         function ExploreWindowsAddButtonPushed(app, ~)
             n = numel(app.exploreWindows);
+            % 'auto' - the largest absolute deflection - rather than guessing a
+            % sign. A new window used to be born 'pos' with no way to change it,
+            % so a user-added negative component had its peak read upside down
+            % and nothing said so.
             app.exploreWindows(n + 1) = struct('name', sprintf('W%d', n + 1), ...
-                'polarity', 'pos', 'nomLatency', 100, 'winStart', 100, 'winEnd', 150);
+                'polarity', 'auto', 'nomLatency', 100, 'winStart', 100, 'winEnd', 150);
             app.ExploreWindowsModeDropDown.Value = 'define';
             refreshExploreWindows(app);
             renderExplorePlot(app);
@@ -2934,6 +2942,7 @@ classdef nestapp < matlab.apps.AppBase
                 case 1, app.exploreWindows(r).name     = char(event.NewData);
                 case 2, app.exploreWindows(r).winStart = event.NewData;
                 case 3, app.exploreWindows(r).winEnd   = event.NewData;
+                case 4, app.exploreWindows(r).polarity = char(event.NewData);
             end
             refreshExploreWindows(app);
             renderExplorePlot(app);

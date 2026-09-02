@@ -1362,10 +1362,18 @@ function createComponents(app)
             app.ExploreTab.AutoResizeChildren = 'off';
             app.ExploreTab.Title = 'Explore';
 
+            % The rail is wide enough for FOUR columns. At 197 it was not: the
+            % results view showed Win/Mean/Peak ms/Peak uV behind a horizontal
+            % scrollbar, and the define view had no room for the polarity that
+            % decides which way a peak is read. The width comes out of the
+            % canvas, which has it to spare - the right edge is unchanged.
             RAIL_X = 8;
-            RAIL_W = 197;
-            MAIN_X = 215;
-            MAIN_W = 645;
+            RAIL_W = 250;
+            MAIN_X = 268;
+            MAIN_W = 592;
+
+            HALF_W = floor((RAIL_W - 6) / 2);   % two buttons across the rail
+            THIRD_W = floor((RAIL_W - 12) / 3); % three buttons across it
 
             % -- groups --------------------------------------------------
             app.ExploreGroupsLabel = uilabel(app.ExploreTab, ...
@@ -1382,13 +1390,13 @@ function createComponents(app)
             app.ExploreAddGroupButton = uibutton(app.ExploreTab, 'push');
             app.ExploreAddGroupButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreAddGroupButtonPushed, true);
             app.ExploreAddGroupButton.Text = 'Add group...';
-            app.ExploreAddGroupButton.Position = [RAIL_X 374 96 26];
+            app.ExploreAddGroupButton.Position = [RAIL_X 374 HALF_W 26];
 
             app.ExploreRemoveGroupButton = uibutton(app.ExploreTab, 'push');
             app.ExploreRemoveGroupButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreRemoveGroupButtonPushed, true);
             app.ExploreRemoveGroupButton.Enable = 'off';
             app.ExploreRemoveGroupButton.Text = 'Remove';
-            app.ExploreRemoveGroupButton.Position = [RAIL_X + 101 374 96 26];
+            app.ExploreRemoveGroupButton.Position = [RAIL_X + HALF_W + 6 374 HALF_W 26];
 
             app.ExploreFilesButton = uibutton(app.ExploreTab, 'push');
             app.ExploreFilesButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreFilesButtonPushed, true);
@@ -1418,7 +1426,7 @@ function createComponents(app)
 
             app.ExplorePairedButton = uiradiobutton(app.ExploreDesignGroup);
             app.ExplorePairedButton.Text = 'paired';
-            app.ExplorePairedButton.Position = [86 1 78 22];
+            app.ExplorePairedButton.Position = [96 1 78 22];
             app.ExplorePairedButton.Enable = 'off';
 
             app.ExploreDesignNoteLabel = uilabel(app.ExploreTab, ...
@@ -1455,12 +1463,14 @@ function createComponents(app)
             app.ExploreWindowsModeDropDown = uidropdown(app.ExploreTab);
             app.ExploreWindowsModeDropDown.Items = {'define', 'results'};
             app.ExploreWindowsModeDropDown.ValueChangedFcn = createCallbackFcn(app, @ExploreWindowsModeChanged, true);
-            app.ExploreWindowsModeDropDown.Position = [RAIL_X + 89 148 108 22];
+            app.ExploreWindowsModeDropDown.Position = [RAIL_X + RAIL_W - 108 148 108 22];
 
             app.ExploreWindowsTable = uitable(app.ExploreTab);
-            app.ExploreWindowsTable.ColumnName = {'Name'; 'T1'; 'T2'};
-            app.ExploreWindowsTable.ColumnWidth = {70, 55, 55};
-            app.ExploreWindowsTable.ColumnEditable = [true true true];
+            app.ExploreWindowsTable.ColumnName = {'Name'; 'T1'; 'T2'; 'Peak'};
+            app.ExploreWindowsTable.ColumnWidth = {74, 46, 46, 62};
+            app.ExploreWindowsTable.ColumnEditable = [true true true true];
+            app.ExploreWindowsTable.ColumnFormat = {'char', 'numeric', 'numeric', ...
+                                                    {'auto', 'pos', 'neg'}};
             app.ExploreWindowsTable.CellEditCallback = createCallbackFcn(app, @ExploreWindowsTableCellEdit, true);
             app.ExploreWindowsTable.RowName = {};
             app.ExploreWindowsTable.Position = [RAIL_X 42 RAIL_W 104];
@@ -1468,17 +1478,17 @@ function createComponents(app)
             app.ExploreWindowsAddButton = uibutton(app.ExploreTab, 'push');
             app.ExploreWindowsAddButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreWindowsAddButtonPushed, true);
             app.ExploreWindowsAddButton.Text = 'Add';
-            app.ExploreWindowsAddButton.Position = [RAIL_X 14 60 24];
+            app.ExploreWindowsAddButton.Position = [RAIL_X 14 THIRD_W 24];
 
             app.ExploreWindowsRemoveButton = uibutton(app.ExploreTab, 'push');
             app.ExploreWindowsRemoveButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreWindowsRemoveButtonPushed, true);
             app.ExploreWindowsRemoveButton.Text = 'Remove';
-            app.ExploreWindowsRemoveButton.Position = [RAIL_X + 65 14 66 24];
+            app.ExploreWindowsRemoveButton.Position = [RAIL_X + THIRD_W + 6 14 THIRD_W 24];
 
             app.ExploreWindowsResetButton = uibutton(app.ExploreTab, 'push');
             app.ExploreWindowsResetButton.ButtonPushedFcn = createCallbackFcn(app, @ExploreWindowsResetButtonPushed, true);
             app.ExploreWindowsResetButton.Text = 'Reset';
-            app.ExploreWindowsResetButton.Position = [RAIL_X + 136 14 61 24];
+            app.ExploreWindowsResetButton.Position = [RAIL_X + 2*THIRD_W + 12 14 THIRD_W 24];
 
             % -- plot picker ---------------------------------------------
             app.ExplorePlotLabel = uilabel(app.ExploreTab, ...
