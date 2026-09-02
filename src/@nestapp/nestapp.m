@@ -2263,19 +2263,19 @@ classdef nestapp < matlab.apps.AppBase
             % A partial ROI is averaged rather than refused, so it has to be
             % said - otherwise the curve is over fewer electrodes than the
             % rail claims and nothing on screen differs.
-            miss = exploreRoiMissing(app);
-            if ~isempty(miss)
-                txt = sprintf('%s  |  ROI missing %s', txt, strjoin(miss, ' '));
+            roi = exploreRoiInfo(app);
+            if ~isempty(roi) && ~isempty(roi.missing)
+                txt = sprintf('%s  |  ROI missing %s', txt, strjoin(roi.missing, ' '));
             end
         end
 
-        function miss = exploreRoiMissing(app)
-        % ROI electrodes that were asked for and are not in the montage the
-        % curves were computed on. {} for a result that predates res.info.roi.
-            miss = {};
+        function info = exploreRoiInfo(app)
+        % res.info.roi, or [] for a result computed before the field existed.
+        % One guard, because both readers below need the same three checks.
+            info = [];
             r = app.exploreRes;
             if isempty(r) || ~isfield(r, 'info') || ~isfield(r.info, 'roi'); return; end
-            miss = r.info.roi.missing;
+            info = r.info.roi;
         end
 
         % -- callbacks ------------------------------------------------------
@@ -2389,7 +2389,8 @@ classdef nestapp < matlab.apps.AppBase
             picked = roiPicker(app.exploreRoi, exploreAvailableElectrodes(app), ...
                 struct('parent', app.UIFigure, ...
                        'availableNote', 'not on the modal cap', ...
-                       'optional', {exploreOptionalElectrodes(app)}));
+                       'optional', {partialElectrodes(app.exploreCache, ...
+                                      exploreAvailableElectrodes(app))}));
             if isempty(picked) && ~iscell(picked)
                 return          % cancelled - [] rather than {}
             end
@@ -2408,24 +2409,6 @@ classdef nestapp < matlab.apps.AppBase
                 return
             end
             labels = app.exploreRes.channelLabels;
-        end
-
-        function labels = exploreOptionalElectrodes(app)
-        % Electrodes SOME loaded file carries that the modal montage does not.
-        %
-        % groupCurves computes on the modal montage and excludes files on a
-        % different cap, so exploreAvailableElectrodes reports exactly what can
-        % be averaged - which leaves an electrode present in 30 of 32 files
-        % looking identical to one present in none. It is not: including it is
-        % a real choice about what the ROI mean is taken over. The picker
-        % offers these behind a checkbox, and needs to know which they are.
-            labels = {};
-            if isempty(app.exploreCache); return; end
-            ok = app.exploreCache([app.exploreCache.ok]);
-            if isempty(ok); return; end
-            all = unique([ok.labels], 'stable');
-            modal = exploreAvailableElectrodes(app);
-            labels = all(~ismember(lower(all), lower(modal)));
         end
 
         function ExploreRoiDropDownValueChanged(app, ~)
@@ -2512,11 +2495,11 @@ classdef nestapp < matlab.apps.AppBase
         % was asked for. Stamping the request would let a figure caption name
         % five electrodes over a mean of three.
             s = strjoin(app.exploreRoi, ' ');
-            r = app.exploreRes;
-            if isempty(r) || ~isfield(r, 'info') || ~isfield(r.info, 'roi'); return; end
-            s = strjoin(r.info.roi.matched, ' ');
-            if ~isempty(r.info.roi.missing)
-                s = sprintf('%s  (asked for %s)', s, strjoin(r.info.roi.requested, ' '));
+            roi = exploreRoiInfo(app);
+            if isempty(roi); return; end
+            s = strjoin(roi.matched, ' ');
+            if ~isempty(roi.missing)
+                s = sprintf('%s  (asked for %s)', s, strjoin(roi.requested, ' '));
             end
         end
 

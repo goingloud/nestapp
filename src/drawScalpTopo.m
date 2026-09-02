@@ -37,7 +37,7 @@ function cLim = drawScalpTopo(ax, values, chanlocs, opts)
 %   limits topoplot chose. With a symmetric CLim and a diverging map, white is
 %   exactly 0 uV and the colorbar reads directly.
 %
-%   See also: divergingColormap, popOutAxes, topoplot
+%   See also: divergingColormap, drawGroupTopo, topoplot
 
 INTRAD      = 0.55;   % EEGLAB default interpolation radius
 NUM_CONTOUR = 5;
