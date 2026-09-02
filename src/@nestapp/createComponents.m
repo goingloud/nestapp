@@ -1467,7 +1467,7 @@ function createComponents(app)
 
             app.ExploreWindowsTable = uitable(app.ExploreTab);
             app.ExploreWindowsTable.ColumnName = {'Name'; 'T1'; 'T2'; 'Peak'};
-            app.ExploreWindowsTable.ColumnWidth = {74, 46, 46, 62};
+            app.ExploreWindowsTable.ColumnWidth = exploreWindowColWidths(app);
             app.ExploreWindowsTable.ColumnEditable = [true true true true];
             app.ExploreWindowsTable.ColumnFormat = {'char', 'numeric', 'numeric', ...
                                                     {'auto', 'pos', 'neg'}};

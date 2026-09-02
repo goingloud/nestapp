@@ -2371,6 +2371,15 @@ classdef nestapp < matlab.apps.AppBase
             end
         end
 
+        function w = exploreWindowColWidths(~)
+        % One set of widths for both views of the windows table. They show the
+        % same list in the same place, so columns that jump when the mode
+        % changes read as a different table rather than another view of one -
+        % and the first column IS the same thing in both, so it is 'Name' in
+        % both rather than 'Name' here and 'Win' there.
+            w = {56, 46, 65, 65};
+        end
+
         function refreshExploreWindows(app)
         % Two views of one list in the same space. The Analysis tab showed
         % bounds AND measures in six columns; the rail holds four, so it
@@ -2380,7 +2389,7 @@ classdef nestapp < matlab.apps.AppBase
                 showExploreWindowResults(app, w);
             else
                 app.ExploreWindowsTable.ColumnName     = {'Name'; 'T1'; 'T2'; 'Peak'};
-                app.ExploreWindowsTable.ColumnWidth    = {74, 46, 46, 62};
+                app.ExploreWindowsTable.ColumnWidth    = exploreWindowColWidths(app);
                 app.ExploreWindowsTable.ColumnEditable = [true true true true];
                 app.ExploreWindowsTable.ColumnFormat   = ...
                     {'char', 'numeric', 'numeric', {'auto', 'pos', 'neg'}};
@@ -2396,8 +2405,8 @@ classdef nestapp < matlab.apps.AppBase
         function showExploreWindowResults(app, w)
         % Measures for the group SELECTED in the groups list - with n groups
         % there is no single "the mean", so the table names whose it is.
-            app.ExploreWindowsTable.ColumnName     = {'Win'; 'Mean'; 'Peak ms'; 'Peak uV'};
-            app.ExploreWindowsTable.ColumnWidth    = {46, 52, 66, 66};
+            app.ExploreWindowsTable.ColumnName     = {'Name'; 'Mean'; 'Peak ms'; 'Peak uV'};
+            app.ExploreWindowsTable.ColumnWidth    = exploreWindowColWidths(app);
             app.ExploreWindowsTable.ColumnEditable = [false false false false];
             app.ExploreWindowsTable.ColumnFormat   = {'char', 'char', 'char', 'char'};
 
