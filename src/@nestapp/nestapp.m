@@ -2677,6 +2677,14 @@ classdef nestapp < matlab.apps.AppBase
             if isempty(answer) || isempty(strtrim(answer{1})); return; end
             name = strtrim(answer{1});
 
+            % loadReducedSets reads through pop_loadset, so this is an EEGLAB
+            % entry point like Run Analysis and Browse EEG, and has to ask.
+            [ok, msg] = ensureEeglabReady();
+            if ~ok
+                uialert(app.UIFigure, msg, 'EEGLAB Not Ready', 'Icon', 'error');
+                return
+            end
+
             dlg = uiprogressdlg(app.UIFigure, 'Title', 'Adding group', ...
                 'Message', sprintf('Loading %d file(s)...', numel(paths)), ...
                 'Indeterminate', 'on');
@@ -2974,6 +2982,14 @@ classdef nestapp < matlab.apps.AppBase
             paths = {state.entries.path};
             if isempty(paths)
                 uialert(app.UIFigure, strjoin(report.notes, ' '), 'Nothing to load');
+                return
+            end
+
+            % Same EEGLAB entry point as Add group: the recordings are read
+            % back through pop_loadset.
+            [ok, msg] = ensureEeglabReady();
+            if ~ok
+                uialert(app.UIFigure, msg, 'EEGLAB Not Ready', 'Icon', 'error');
                 return
             end
 

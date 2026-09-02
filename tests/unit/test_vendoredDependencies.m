@@ -68,7 +68,7 @@ classdef test_vendoredDependencies < matlab.unittest.TestCase
                 rmpath(strjoin(aar, pathsep));
                 tc.addTeardown(@() addpath(strjoin(aar, pathsep)));
             end
-            clear ensureAaratepOnPath %#ok<CLFUNC>
+            pathMemo('reset', 'c_TMSEEG_Preprocess_AARATEPPipeline');
 
             needsVendored = {};
             for i = 1:numel(tc.registry)

@@ -12,8 +12,12 @@ function [v, source] = tesaVersion(forceRefresh)
 %   the plugin directory name), or 'none'.
 %
 %   TESAVERSION(true) re-reads instead of using the cached value. The result
-%   is cached because it is consulted for every step in the registry, and the
-%   installed plugin does not change mid-session.
+%   is cached because it is consulted for every step in the registry.
+%
+%   The cache is held by pathMemo, keyed on eegplugin_tesa, so it is discarded
+%   whenever that stops resolving OR resolves somewhere new. The old persistent
+%   was invalidated by nothing but this flag, so a plugin swapped mid-session -
+%   or a path reset - kept reporting the version that was installed first.
 %
 %   IMPORTANT - this reads the DECLARED version and never probes for
 %   functions. Feature-probing looks equivalent and is not: nestapp shipped
@@ -25,19 +29,25 @@ function [v, source] = tesaVersion(forceRefresh)
 %
 %   See also: stepAvailability, checkStepDependencies, stepRegistry
 
-persistent cachedV cachedSource
 if nargin < 1, forceRefresh = false; end
-if ~forceRefresh && ~isempty(cachedV)
-    v = cachedV; source = cachedSource;
-    return
+if forceRefresh
+    pathMemo('reset', 'eegplugin_tesa');
 end
 
+res    = pathMemo('eegplugin_tesa', @readVersion);
+v      = res.v;
+source = res.source;
+end
+
+% ── helpers ─────────────────────────────────────────────────────────────────
+
+function res = readVersion()
 v = [0 0 0];
 source = 'none';
 
 pluginFile = which('eegplugin_tesa');
 if isempty(pluginFile)
-    cachedV = v; cachedSource = source;
+    res = struct('v', v, 'source', source);
     return
 end
 
@@ -66,10 +76,9 @@ if isequal(v, [0 0 0])
     end
 end
 
-cachedV = v; cachedSource = source;
+res = struct('v', v, 'source', source);
 end
 
-% ── helpers ─────────────────────────────────────────────────────────────────
 function v = parseVersion(str)
 % '1.2' -> [1 2 0]; '1.1.1' -> [1 1 1]. Missing components are zero, so
 % comparisons against a 3-element minimum always work elementwise.

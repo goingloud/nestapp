@@ -3,9 +3,9 @@
 % Part of nestapp; see the LICENSE file for full terms.
 function [ok, msg] = ensureEeglabReady()
 % ENSUREEEGLABREADY  Put EEGLAB and its plugins on the path, once per session.
-%   [ok, msg] = ENSUREEEGLABREADY() runs eeglab('nogui') if it has not already
-%   run in this MATLAB session, and returns whether EEGLAB is now usable. msg
-%   is '' when ok, and a user-facing explanation when not.
+%   [ok, msg] = ENSUREEEGLABREADY() runs eeglab('nogui') if EEGLAB is not
+%   already reachable, and returns whether it is now usable. msg is '' when ok,
+%   and a user-facing explanation when not.
 %
 %   Why this exists: adding the EEGLAB root to the path is NOT enough. EEGLAB
 %   ships its functions in subfolders and its plugins in plugins/<name>, and
@@ -21,24 +21,32 @@ function [ok, msg] = ensureEeglabReady()
 %   and hides them the same way it hides a genuinely missing plugin, so the
 %   user is told nothing is installed when everything is.
 %
-%   Readiness is judged by the PLUGINLIST global rather than by remembering
-%   that we called eeglab: PLUGINLIST is written by the plugin scan, so it is
-%   the state we actually depend on, and it stays correct when EEGLAB was
-%   initialised by something other than us (a prior run, the console, a test).
+%   READINESS IS THE SENTINEL, NOT A FLAG. This used to return early whenever
+%   `global PLUGINLIST` was non-empty, on the reasoning that PLUGINLIST is what
+%   the plugin scan writes and therefore the state we depend on. That is right
+%   about whether the scan RAN and wrong about whether its result is still
+%   REACHABLE: nothing clears PLUGINLIST, so a restoredefaultpath, a test using
+%   hideFromPath, or a pathdef reset left this reporting ready with pop_loadset
+%   gone, and the next pop_loadset died with a bare "Undefined function".
+%   pathMemo now owns that policy - probe the function we actually need - and
+%   it still costs nothing when EEGLAB was initialised by someone else (a prior
+%   run, the console, a test), because then the sentinel simply resolves.
 %
 %   The call is silenced with evalc: eeglab('nogui') prints a banner and a
 %   line per plugin, which is noise in a GUI session and drowns the app's own
 %   startup logging.
 %
-%   See also: availableSteps, stepAvailability, loadPrefs, runPipelineCore
+%   See also: pathMemo, availableSteps, stepAvailability, loadPrefs
 
-ok  = true;
-msg = '';
-
-global PLUGINLIST %#ok<GVMIS>
-if ~isempty(PLUGINLIST)
-    return
+res = pathMemo('pop_loadset', @initialise);
+ok  = res.ok;
+msg = res.msg;
 end
+
+% ── helpers ─────────────────────────────────────────────────────────────────
+
+function res = initialise()
+res = struct('ok', true, 'msg', '');
 
 % The Preferences path is where the user points nestapp at their install; it
 % is only added if EEGLAB is not already reachable, so an eeglab the user put
@@ -51,18 +59,18 @@ if isempty(which('eeglab'))
 end
 
 if isempty(which('eeglab'))
-    ok  = false;
-    msg = ['EEGLAB was not found on the MATLAB path. Set its folder in ' ...
-           'File > Preferences; until then, steps that need EEGLAB or its ' ...
-           'plugins cannot be offered.'];
+    res.ok  = false;
+    res.msg = ['EEGLAB was not found on the MATLAB path. Set its folder in ' ...
+               'File > Preferences; until then, steps that need EEGLAB or its ' ...
+               'plugins cannot be offered.'];
     return
 end
 
 try
     evalc('eeglab nogui');
 catch ME
-    ok  = false;
-    msg = sprintf(['EEGLAB could not be initialised: %s\nVerify the EEGLAB ' ...
-                   'path in File > Preferences.'], ME.message);
+    res.ok  = false;
+    res.msg = sprintf(['EEGLAB could not be initialised: %s\nVerify the EEGLAB ' ...
+                       'path in File > Preferences.'], ME.message);
 end
 end

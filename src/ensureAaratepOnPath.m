@@ -18,19 +18,19 @@ function ensureAaratepOnPath()
 %   Vendored from chriscline/AARATEPPipeline @ be75262 under MIT license.
 %   See THIRD_PARTY_NOTICES.md.
 
-% The flag alone is not enough: anything that rmpaths part of the tree - a
-% test using hideFromPath, a restoredefaultpath - would leave it true with the
-% functions gone, and every later AARATEP step in the session would then fail
-% with a bare "Undefined function". Verify a sentinel is still resolvable.
-% (addpath here is all-or-nothing, so one sentinel stands for the whole tree.)
-%
-% The persistent is not redundant with that check: `clear ensureAaratepOnPath`
-% is how tests force the FastICA resolution below to run again.
-persistent ready
-if ~isempty(ready) && ready && exist('c_TMSEEG_Preprocess_AARATEPPipeline', 'file') == 2
-    return
+% addpath here is all-or-nothing, so one sentinel stands for the whole tree.
+% pathMemo owns the invalidation: anything that rmpaths part of the tree - a
+% test using hideFromPath, a restoredefaultpath - stops the sentinel resolving
+% and the addpath below runs again, rather than a remembered flag claiming the
+% tree is still there while every AARATEP step fails with a bare "Undefined
+% function". Tests force the FastICA resolution to re-run with
+% pathMemo('reset', 'c_TMSEEG_Preprocess_AARATEPPipeline').
+pathMemo('c_TMSEEG_Preprocess_AARATEPPipeline', @addTree);
 end
 
+% ── helpers ───────────────────────────────────────────────────────────────────
+
+function addTree()
 repoRoot   = fileparts(fileparts(mfilename('fullpath')));   % src/ -> repo root
 aaratepDir = fullfile(repoRoot, 'third_party', 'aaratep');
 
@@ -65,11 +65,7 @@ addpath(strjoin(allPaths(keep), pathsep));
 addpath(fullfile(repoRoot, 'src', 'aaratep_compat'));
 
 resolveFastICA(fullfile(thirdParty, 'FastICA'));
-
-ready = true;
 end
-
-% ── helpers ───────────────────────────────────────────────────────────────────
 
 function resolveFastICA(bundledFasticaDir)
 % Prefer the user's fastica; fall back to the bundled copy only if none

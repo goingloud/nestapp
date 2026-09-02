@@ -9,6 +9,20 @@ The version here must match `src/nestappVersion.m` and the release git tag.
 ## [Unreleased]
 
 ### Fixed
+- **Adding a group in Explore failed with `Undefined function 'pop_loadset'`.**
+  `ensureEeglabReady` judged readiness by the `PLUGINLIST` global, which the
+  plugin scan writes and nothing ever clears - so a `restoredefaultpath`, a
+  test using `hideFromPath`, or a pathdef reset left it reporting "ready" with
+  EEGLAB gone from the path. Two Explore paths also read recordings through
+  `pop_loadset` without asking whether EEGLAB was up at all.
+  Readiness is now decided by probing the function actually needed, and both
+  paths ask. This is the same failure `ensureAaratepOnPath` hit below and
+  `tesaVersion` was one path change away from, so the policy moved into a
+  shared `pathMemo`: a cached answer about the path is valid only while its
+  sentinel resolves to the same file. That also invalidates on a *swapped*
+  install - a second TESA, a repointed EEGLAB - which none of the three
+  hand-rolled caches noticed.
+
 - `ensureAaratepOnPath` trusted a persistent flag, so anything that removed
   the tree from the path after the first call - a test using `hideFromPath`,
   a `restoredefaultpath` - left it believing the tree was still there, and
