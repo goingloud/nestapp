@@ -30,7 +30,10 @@ function res = groupCurves(cache, entries, opts)
 %     .design         the design actually used
 %     .complete       subjects present in every group
 %     .dropped        subjects excluded from a paired estimate, and why
-%     .info           time-base info from commonTimeBase, plus .montage:
+%     .info           time-base info from commonTimeBase, plus .roi
+%                     (.requested .matched .missing - a partial ROI is
+%                     averaged, not refused, so the difference is recorded)
+%                     and .montage:
 %                       .uniform    true when every file has the same channels
 %                       .nChannels  size of the modal montage
 %                       .excluded   files not on it, by name
@@ -94,6 +97,17 @@ if isempty(roiIdx) && ~strcmpi(opts.mode, 'GMFP')
          'Pick electrodes that exist in every selected file.'], ...
         numel(res.channelLabels));
 end
+
+% What was ASKED FOR versus what was AVERAGED. Only a total miss errored
+% above; a partial match - three of five electrodes present - was averaged
+% silently while the status line and the exported figure's footer went on
+% naming all five. A caption that overstates the ROI is the one place this
+% does real damage, so the difference is recorded and the footer stamps
+% .matched rather than the request.
+res.info.roi = struct( ...
+    'requested', {opts.roi(:)'}, ...
+    'matched',   {res.channelLabels(roiIdx)}, ...
+    'missing',   {opts.roi(~ismember(lower(opts.roi), lower(res.channelLabels)))});
 
 for i = 1:numel(use)
     avg            = cache(use(i).ci).trialAvg(chanIdx{i}, timeIdx{i});

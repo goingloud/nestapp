@@ -2260,6 +2260,22 @@ classdef nestapp < matlab.apps.AppBase
                 txt = sprintf('%s  |  %d subject%s without a complete set', ...
                     txt, numel(res.dropped), plural(numel(res.dropped)));
             end
+            % A partial ROI is averaged rather than refused, so it has to be
+            % said - otherwise the curve is over fewer electrodes than the
+            % rail claims and nothing on screen differs.
+            miss = exploreRoiMissing(app);
+            if ~isempty(miss)
+                txt = sprintf('%s  |  ROI missing %s', txt, strjoin(miss, ' '));
+            end
+        end
+
+        function miss = exploreRoiMissing(app)
+        % ROI electrodes that were asked for and are not in the montage the
+        % curves were computed on. {} for a result that predates res.info.roi.
+            miss = {};
+            r = app.exploreRes;
+            if isempty(r) || ~isfield(r, 'info') || ~isfield(r.info, 'roi'); return; end
+            miss = r.info.roi.missing;
         end
 
         % -- callbacks ------------------------------------------------------
@@ -2472,6 +2488,19 @@ classdef nestapp < matlab.apps.AppBase
             end
         end
 
+        function s = exploreRoiText(app)
+        % What the curves were ACTUALLY averaged over, which is not always what
+        % was asked for. Stamping the request would let a figure caption name
+        % five electrodes over a mean of three.
+            s = strjoin(app.exploreRoi, ' ');
+            r = app.exploreRes;
+            if isempty(r) || ~isfield(r, 'info') || ~isfield(r.info, 'roi'); return; end
+            s = strjoin(r.info.roi.matched, ' ');
+            if ~isempty(r.info.roi.missing)
+                s = sprintf('%s  (asked for %s)', s, strjoin(r.info.roi.requested, ' '));
+            end
+        end
+
         function p = exploreProvenance(app, entry)
         % What the footer of an exported figure states. Enough to identify the
         % analysis six months later from the image alone: which plot, which
@@ -2485,7 +2514,7 @@ classdef nestapp < matlab.apps.AppBase
                 'plot',      entry.name, ...
                 'groups',    groups, ...
                 'design',    design, ...
-                'ROI',       strjoin(app.exploreRoi, ' '), ...
+                'ROI',       exploreRoiText(app), ...
                 'nestapp',   nestappVersion(), ...
                 'exported',  char(datetime('now', 'Format', 'yyyy-MM-dd')));
         end

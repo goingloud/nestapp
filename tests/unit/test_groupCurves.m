@@ -272,6 +272,26 @@ testCase.verifyEqual({pre.files.name}, {'s1_pre.set'}, ...
 testCase.verifyEqual(pre.nFiles, 1);
 end
 
+function test_aPartialRoiIsRecordedRatherThanAveragedInSilence(testCase)
+% Only a TOTAL miss errors. Three of five electrodes present is averaged over
+% three - which is defensible - but the status line and the exported figure's
+% footer used to go on naming five. The difference has to be recoverable from
+% the result, or a caption can overstate what a curve is.
+[cache, entries] = twoGroupFixture();
+res = groupCurves(cache, entries, optsTEP('roi', {'F3', 'FC3', 'NOSUCH'}));
+
+testCase.verifyEqual(sort(res.info.roi.requested), {'F3', 'FC3', 'NOSUCH'});
+testCase.verifyEqual(sort(res.info.roi.matched),   {'F3', 'FC3'});
+testCase.verifyEqual(res.info.roi.missing, {'NOSUCH'});
+end
+
+function test_aFullyMatchedRoiReportsNothingMissing(testCase)
+[cache, entries] = twoGroupFixture();
+res = groupCurves(cache, entries, optsTEP('roi', {'F3', 'FC3'}));
+testCase.verifyEmpty(res.info.roi.missing);
+testCase.verifyEqual(sort(res.info.roi.matched), {'F3', 'FC3'});
+end
+
 function test_unpairedKeepsEveryone(testCase)
 time = 0:3; labels = {'F3'};
 paths = {'s1_pre.set','s2_pre.set','s3_post.set'};
