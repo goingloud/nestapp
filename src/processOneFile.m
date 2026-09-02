@@ -234,6 +234,14 @@ for si = 1:nSteps
                 EEG = eeg_checkset(EEG);
                 [ALLEEG, EEG, CURRENTSET] = pop_newset(ALLEEG, EEG, CURRENTSET,vars{:});
 
+                % Remember where it landed. pop_saveset stamps EEG.filename /
+                % .filepath, which is authoritative because it reflects the
+                % extension and any name normalisation EEGLAB applied; the
+                % composed name is the fallback for a save that did not go
+                % through it. Without this the report describes a file it
+                % cannot point at.
+                fileReport.outputFile = savedSetPath(EEG, vars);
+
             case 'Find TMS Pulses (AARATEP)'
                 ensureAaratepOnPath();
                 fp = varinToStruct(varin);
@@ -1872,6 +1880,29 @@ function tf = savesNewSetLater(spec, si)
 % that step's .set hold the same dataset, so exactly one of them should
 % survive - and only this tells us the .set is actually coming.
 tf = any(strcmp({spec(si+1:end).name}, 'Save New Set'));
+end
+
+function p = savedSetPath(EEG, vars)
+% Where Save New Set actually wrote, '' when it did not write at all.
+%
+% Prefer what pop_saveset stamped on the dataset: it reflects the .set
+% extension it appended and any normalisation it applied, so it is the file
+% that exists rather than the name we asked for. Fall back to the composed
+% savenew value, which is still the destination when a save happened without
+% updating the struct.
+p = '';
+if isstruct(EEG) && isfield(EEG, 'filename') && ~isempty(EEG.filename) ...
+        && isfield(EEG, 'filepath') && ~isempty(EEG.filepath) ...
+        && endsWith(EEG.filename, '.set', 'IgnoreCase', true)
+    p = fullfile(EEG.filepath, EEG.filename);
+    return
+end
+
+k = find(strcmp(vars, 'savenew'), 1);
+if ~isempty(k) && numel(vars) > k && ischar(vars{k+1}) && ~isempty(vars{k+1})
+    p = vars{k+1};
+    if ~endsWith(p, '.set', 'IgnoreCase', true); p = [p '.set']; end
+end
 end
 
 function labels = channelLabelsOf(EEG)

@@ -155,6 +155,11 @@ classdef nestapp < matlab.apps.AppBase
         ReportsStatusLabel              matlab.ui.control.Label
         ReportsTextArea                 matlab.ui.control.TextArea
         ReportsDashboardPanel           matlab.ui.container.Panel
+        ReportsImagePanel               matlab.ui.container.Panel
+        OpenReportSetButton             matlab.ui.control.Button
+        ReportsViewGroup                matlab.ui.container.ButtonGroup
+        ReportsTextViewButton           matlab.ui.control.ToggleButton
+        ReportsImageViewButton          matlab.ui.control.ToggleButton
         ExportReportsCSVButton          matlab.ui.control.Button
         ExportPDFButton                 matlab.ui.control.Button
         CopyMethodsButton               matlab.ui.control.Button
@@ -1151,6 +1156,7 @@ classdef nestapp < matlab.apps.AppBase
                 app.ExportReportsCSVButton.Enable = 'off';
                 app.ExportPDFButton.Enable = 'off';
                 app.CopyMethodsButton.Enable = 'off';
+                app.OpenReportSetButton.Enable = 'off';
                 return
             end
 
@@ -1240,8 +1246,7 @@ classdef nestapp < matlab.apps.AppBase
             end
             e = allEntries{idx};
             if isfield(e, 'isDashboard') && e.isDashboard
-                app.ReportsTextArea.Visible       = 'off';
-                app.ReportsDashboardPanel.Visible = 'on';
+                showReportsPane(app, 'dashboard');
                 renderDashboardPanel(app.ReportsDashboardPanel, ...
                     collectReportStructs(allEntries), ...
                     struct( ...
@@ -1249,14 +1254,55 @@ classdef nestapp < matlab.apps.AppBase
                         'onExport',         @() exportDashboardPNG(app, allEntries), ...
                         'onFailedRowClick', @(name) jumpToFileEntry(app, allEntries, name), ...
                         'failed',           app.lastFailed));
+            elseif app.ReportsImageViewButton.Value && isFileEntry(app, e)
+                showReportsPane(app, 'images');
+                renderQcImages(app.ReportsImagePanel, qcFiguresOf(app, e), ...
+                    struct('onOpen', @(d) revealFolder(app, d)));
             else
-                app.ReportsDashboardPanel.Visible = 'off';
-                app.ReportsTextArea.Visible       = 'on';
+                showReportsPane(app, 'text');
                 if isfield(e, 'text')
                     app.ReportsTextArea.Value = e.text;
                 end
             end
+
+            % The switch is meaningless on a synthetic row, which has no file
+            % behind it and therefore no images.
+            app.ReportsViewGroup.Visible = matlab.lang.OnOffSwitchState(isFileEntry(app, e));
+
+            % Open... is offered only when there is something to open: the
+            % pipeline saved, and the file is still where it was written.
+            app.OpenReportSetButton.Enable = ...
+                matlab.lang.OnOffSwitchState(~isempty(selectedReportOutput(app)));
         end
+
+        function showReportsPane(app, which)
+        % Exactly one of the three right-hand panes is visible. Kept in one
+        % place so a new pane cannot leave an old one showing underneath.
+            app.ReportsTextArea.Visible       = matlab.lang.OnOffSwitchState(strcmp(which, 'text'));
+            app.ReportsDashboardPanel.Visible = matlab.lang.OnOffSwitchState(strcmp(which, 'dashboard'));
+            app.ReportsImagePanel.Visible     = matlab.lang.OnOffSwitchState(strcmp(which, 'images'));
+        end
+
+        function ReportsViewChanged(app, ~)
+        % Text / QC images toggle - re-render the pane for the current row.
+            ReportsListBoxValueChanged(app);
+        end
+
+        function OpenReportSetButtonPushed(app, ~)
+        % The fast path to the file a report describes: skip the "which one?"
+        % question Browse EEG asks and open this report's cleaned output.
+            p = selectedReportOutput(app);
+            if isempty(p)
+                uialert(app.UIFigure, ...
+                    ['This report does not name a saved recording. A pipeline ' ...
+                     'only produces one when it ends with a Save New Set step, ' ...
+                     'and reports written before this version did not record ' ...
+                     'where it went.'], 'Nothing to open');
+                return
+            end
+            openInEegplot(app, p);
+        end
+
 
         function reRenderReportsOnResize(app)
         % Repaint the Session Quality Dashboard after a window resize so its
@@ -1504,6 +1550,28 @@ classdef nestapp < matlab.apps.AppBase
             reports = collectReportStructs(allEntries);
             keep    = cellfun(@(r) isstruct(r) && isfield(r, 'inputFile'), reports);
             reports = reports(keep);
+        end
+
+        function tf = isFileEntry(~, e)
+        % A listbox row backed by a real per-file report, as opposed to the
+        % synthetic Session Summary / Quality Dashboard rows. Those have no
+        % file, so no images and nothing for the view switch to switch.
+            tf = isstruct(e) && isfield(e, 'report') && isstruct(e.report) ...
+                 && isfield(e.report, 'inputFile') ...
+                 && ~(isfield(e, 'isSummary')   && e.isSummary) ...
+                 && ~(isfield(e, 'isDashboard') && e.isDashboard);
+        end
+
+        function figs = qcFiguresOf(~, e)
+        % The QC image paths recorded on a report, or {} for a report that
+        % predates the field or ran without auto quality reporting.
+            figs = {};
+            if ~isstruct(e) || ~isfield(e, 'report') || ~isstruct(e.report); return; end
+            r = e.report;
+            if isfield(r, 'quality') && isstruct(r.quality) ...
+                    && isfield(r.quality, 'figures') && iscell(r.quality.figures)
+                figs = r.quality.figures;
+            end
         end
 
         function r = selectedFileReport(app, allEntries)
@@ -3907,28 +3975,81 @@ classdef nestapp < matlab.apps.AppBase
 
         % Menu selected function: Tools > Browse Raw EEG...
         function browseRawEegMenu(app, ~)
-        % Open EEGLAB's scrolling viewer on one of the files queued on the
-        % Cleaning tab. This is raw-data QC - "does this recording look like
-        % anything" - so it reads the CLEANING queue (app.filePaths), not the
-        % group comparison in Explore, and it loads the file on demand rather
-        % than depending on a cohort someone else happened to load first.
-            paths = cleaningQueuePaths(app);
+        % Open EEGLAB's scrolling viewer on a recording - raw or cleaned.
+        %
+        % It offers what the session already knows about (the Cleaning queue,
+        % and the cleaned output of the report selected on the Reports tab)
+        % and always offers the file browser as well, because the batch you
+        % want to look at is not always the batch this session ran. Nothing
+        % here depends on a cohort someone else happened to load first.
+            [paths, labels] = browsableRecordings(app);
+            BROWSE = 'Browse for a file...';
+
             if isempty(paths)
-                uialert(app.UIFigure, ...
-                    'Select data files on the Cleaning tab first.', ...
-                    'Nothing to browse');
-                return
-            end
-
-            if isscalar(paths)
-                chosen = paths{1};
+                chosen = pickSetFromDisk(app);
             else
-                labels = buildFileLabels(app, paths);
-                k = pickOne('Browse Raw EEG', 'Which recording?', labels, app.UIFigure);
+                k = pickOne('Browse EEG', 'Which recording?', ...
+                            [labels, {BROWSE}], app.UIFigure);
                 if isempty(k); return; end
-                chosen = paths{k};
+                if k > numel(paths)
+                    chosen = pickSetFromDisk(app);
+                else
+                    chosen = paths{k};
+                end
+            end
+            if isempty(chosen); return; end
+            openInEegplot(app, chosen);
+        end
+
+        function [paths, labels] = browsableRecordings(app)
+        % Everything this session can name: the Cleaning queue, plus the
+        % cleaned output of the report selected on Reports. Labelled by where
+        % they came from, because "sub-01_t1" as an input and as a cleaned
+        % output are different files with nearly the same name.
+            paths  = cleaningQueuePaths(app);
+            labels = {};
+            if ~isempty(paths)
+                labels = buildFileLabels(app, paths);
+                labels = cellfun(@(s) ['queued:  ' s], labels, 'UniformOutput', false);
             end
 
+            out = selectedReportOutput(app);
+            if ~isempty(out) && ~any(strcmpi(paths, out))
+                [~, b, e] = fileparts(out);
+                paths{end+1}  = out;
+                labels{end+1} = ['cleaned: ' b e];
+            end
+        end
+
+        function p = selectedReportOutput(app)
+        % Where the report selected on the Reports tab wrote its cleaned .set,
+        % or '' when nothing is selected, the pipeline never saved, or the
+        % report predates the outputFile field.
+            p = '';
+            allEntries = [app.allPipelineReports, app.loadedReports];
+            r = selectedFileReport(app, allEntries);
+            if isempty(r) || ~isfield(r, 'outputFile'); return; end
+            if ~isempty(r.outputFile) && isfile(r.outputFile)
+                p = r.outputFile;
+            end
+        end
+
+        function p = pickSetFromDisk(app)
+        % A plain file browser, opening where the user last worked.
+            p = '';
+            start = getpref('nestapp', 'lastDataFolder', '');
+            if isempty(start) || ~isfolder(start); start = pwd; end
+            [f, d] = uigetfile( ...
+                {'*.set;*.vhdr;*.cnt;*.cdt', 'EEG recordings (*.set, *.vhdr, *.cnt, *.cdt)'; ...
+                 '*.*', 'All files'}, ...
+                'Open EEG recording', start);
+            if isvalid(app.UIFigure); figure(app.UIFigure); end
+            if isequal(f, 0); return; end
+            p = fullfile(d, f);
+        end
+
+        function openInEegplot(app, chosen)
+        % Load one recording and hand it to EEGLAB's scrolling viewer.
             % The viewer is EEGLAB's, so this is the point at which EEGLAB
             % stops being optional.
             [ok, msg] = ensureEeglabReady();

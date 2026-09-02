@@ -53,7 +53,7 @@ function createComponents(app)
                 'MenuSelectedFcn', createCallbackFcn(app, @openPreferencesMenu, true));
 
             mTools = uimenu(app.UIFigure, 'Text', 'Tools');
-            uimenu(mTools, 'Text', 'Browse Raw EEG...', ...
+            uimenu(mTools, 'Text', 'Browse EEG...', ...
                 'MenuSelectedFcn', createCallbackFcn(app, @browseRawEegMenu, true));
 
             mHelp = uimenu(app.UIFigure, 'Text', 'Help');
@@ -1255,7 +1255,33 @@ function createComponents(app)
             app.ReportsStatusLabel.Position = [5 5 205 18];
             app.ReportsStatusLabel.Text = 'No reports loaded.';
 
-            % Reports tab - right column: report text + actions
+            % Reports tab - right column: what to show for the selected file.
+            % Text and QC images describe the same file, so they share the
+            % pane rather than competing for room in it.
+            app.ReportsViewGroup = uibuttongroup(app.ReportsTab);
+            app.ReportsViewGroup.BorderType = 'none';
+            app.ReportsViewGroup.Position = [220 470 156 24];
+            app.ReportsViewGroup.SelectionChangedFcn = createCallbackFcn(app, @ReportsViewChanged, true);
+
+            app.ReportsTextViewButton = uitogglebutton(app.ReportsViewGroup);
+            app.ReportsTextViewButton.Position = [0 0 60 24];
+            app.ReportsTextViewButton.Text = 'Text';
+            app.ReportsTextViewButton.Value = true;
+
+            app.ReportsImageViewButton = uitogglebutton(app.ReportsViewGroup);
+            app.ReportsImageViewButton.Position = [60 0 96 24];
+            app.ReportsImageViewButton.Text = 'QC images';
+            app.ReportsImageViewButton.Tooltip = ['The quality figures written during the run: ' ...
+                'channel x trial attributes, ICA components, butterfly and PSD'];
+
+            app.OpenReportSetButton = uibutton(app.ReportsTab, 'push');
+            app.OpenReportSetButton.ButtonPushedFcn = createCallbackFcn(app, @OpenReportSetButtonPushed, true);
+            app.OpenReportSetButton.Position = [382 470 68 24];
+            app.OpenReportSetButton.Text = 'Open...';
+            app.OpenReportSetButton.Tooltip = ['Open the cleaned recording this report describes ' ...
+                'in the EEG scrolling viewer'];
+            app.OpenReportSetButton.Enable = 'off';
+
             app.ExportReportsCSVButton = uibutton(app.ReportsTab, 'push');
             app.ExportReportsCSVButton.ButtonPushedFcn = createCallbackFcn(app, @ExportReportsCSVButtonPushed, true);
             app.ExportReportsCSVButton.Position = [455 470 145 24];
@@ -1297,6 +1323,14 @@ function createComponents(app)
             app.ReportsDashboardPanel.BorderType = 'none';
             app.ReportsDashboardPanel.AutoResizeChildren = 'off';
             app.ReportsDashboardPanel.Visible = 'off';
+
+            % QC images panel - same rectangle again, hidden by default.
+            % Visible when the view switch is on QC images for a file entry.
+            app.ReportsImagePanel = uipanel(app.ReportsTab);
+            app.ReportsImagePanel.Position = [220 10 637 457];
+            app.ReportsImagePanel.BorderType = 'none';
+            app.ReportsImagePanel.AutoResizeChildren = 'off';
+            app.ReportsImagePanel.Visible = 'off';
 
             % Floating hover tip for the Steps tree. Parented to the figure
             % rather than a tab so it is never clipped, and created last so it

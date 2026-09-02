@@ -36,6 +36,16 @@ function report = initPipelineReport(inputFile)
 
 report.inputFile   = inputFile;
 report.processedAt = datetime('now');
+
+% Where Save New Set wrote the cleaned recording, filled in by processOneFile
+% when that step runs. '' for a pipeline that never saves - which is a real
+% configuration, and the reason the app warns about it.
+%
+% Without this the batch's own output is undiscoverable from the report: the
+% destination is composed inside the Save New Set case from outputPaths and
+% the savenew name, and was thrown away as soon as it was used. The Reports
+% tab needs it to offer the file it is describing.
+report.outputFile = '';
 % Pipeline / template name (e.g. 'TMS-EEG / AARATEP'); set by processOneFile
 % from opts.pipelineName. Provenance metadata saved with the report. ''
 % for ad-hoc pipelines. (Citations are derived from the steps that ran, not
