@@ -79,8 +79,6 @@ classdef nestapp < matlab.apps.AppBase
         originalSize     % [w h] of UIFigure at creation - used by UIFigureSizeChanged
         isResizing = false % guards UIFigureSizeChanged against its own clamp write
         baseLayout = []  % per-component base geometry captured at startup - drives rescaleComponents
-        clickedItem = [];
-        doubleClicked = 0;
 
         % Tab Explore - the grouped-comparison workspace
         ExploreTab                      matlab.ui.container.Tab
