@@ -2388,7 +2388,8 @@ classdef nestapp < matlab.apps.AppBase
         function ExploreRoiEditButtonPushed(app, ~)
             picked = roiPicker(app.exploreRoi, exploreAvailableElectrodes(app), ...
                 struct('parent', app.UIFigure, ...
-                       'availableNote', 'not on the modal cap'));
+                       'availableNote', 'not on the modal cap', ...
+                       'optional', {exploreOptionalElectrodes(app)}));
             if isempty(picked) && ~iscell(picked)
                 return          % cancelled - [] rather than {}
             end
@@ -2407,6 +2408,24 @@ classdef nestapp < matlab.apps.AppBase
                 return
             end
             labels = app.exploreRes.channelLabels;
+        end
+
+        function labels = exploreOptionalElectrodes(app)
+        % Electrodes SOME loaded file carries that the modal montage does not.
+        %
+        % groupCurves computes on the modal montage and excludes files on a
+        % different cap, so exploreAvailableElectrodes reports exactly what can
+        % be averaged - which leaves an electrode present in 30 of 32 files
+        % looking identical to one present in none. It is not: including it is
+        % a real choice about what the ROI mean is taken over. The picker
+        % offers these behind a checkbox, and needs to know which they are.
+            labels = {};
+            if isempty(app.exploreCache); return; end
+            ok = app.exploreCache([app.exploreCache.ok]);
+            if isempty(ok); return; end
+            all = unique([ok.labels], 'stable');
+            modal = exploreAvailableElectrodes(app);
+            labels = all(~ismember(lower(all), lower(modal)));
         end
 
         function ExploreRoiDropDownValueChanged(app, ~)

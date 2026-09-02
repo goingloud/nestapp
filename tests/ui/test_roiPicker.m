@@ -130,3 +130,39 @@ testCase.verifyTrue(isnumeric(sel) && isempty(sel), ...
     'and the dialog must have closed, returning a cancel');
 testCase.verifyEmpty(pickerFigure(), 'no window may be left standing');
 end
+
+function test_anOffDiagramElectrodeSurvivesOpeningTheDialog(testCase)
+% THE REGRESSION. The accepted ROI used to be rebuilt from the diagram's 69
+% labels alone, so opening the picker on an ROI holding FT9 and pressing
+% "Use these electrodes" without touching anything DELETED FT9 - silently,
+% because the "Not on this diagram" line was computed from what the data
+% offered, never from what the ROI already held.
+isolateRoiPresets(testCase);
+pressLater(testCase, {'Use these electrodes'});
+got = roiPicker({'Cz', 'FT9'}, {'Cz', 'FT9'});
+
+testCase.verifyTrue(iscell(got), 'accept must return a cellstr');
+testCase.verifyEqual(sort(got), {'Cz', 'FT9'}, ...
+    'an electrode the diagram cannot draw is still part of the ROI');
+end
+
+function test_anOffDiagramElectrodeCanBeTurnedOff(testCase)
+% The other half: it is a real control, not a passenger the dialog carries
+% through regardless.
+isolateRoiPresets(testCase);
+driveModalDialog(testCase, @pickerFigure, @() uncheckThenAccept('FT9'));
+got = roiPicker({'Cz', 'FT9'}, {'Cz', 'FT9'});
+testCase.verifyEqual(got, {'Cz'});
+end
+
+function uncheckThenAccept(name)
+fig = pickerFigure();
+cb  = findall(fig, 'Type', 'uicheckbox');
+hit = cb(strcmp(get(cb, 'Text'), name));
+if isempty(hit)
+    error('test:controlNotFound', 'no checkbox labelled "%s"', name);
+end
+hit(1).Value = false;
+feval(hit(1).ValueChangedFcn, hit(1), []);
+press({'Use these electrodes'});
+end

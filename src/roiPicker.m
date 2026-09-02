@@ -48,6 +48,7 @@ if nargin < 3;                       opts = struct(); end
 opts = fillDefaults(opts, struct( ...
     'parent', [], 'title', 'Select ROI electrodes', ...
     'availableNote', 'not in every loaded file', ...
+    'optional', {{}}, ...
     'presets', [], 'savePreset', @saveRoiPreset));
 
 if ischar(current) || isstring(current);     current = cellstr(current);     end
@@ -56,15 +57,19 @@ if ischar(available) || isstring(available); available = cellstr(available); end
 [layout, headSize] = roiMontageLayout();
 % Every set-of-labels decision lives in roiSelectionState, which is pure and
 % unit-tested; this function is the view over it.
-st          = roiSelectionState(current, available);
+st          = roiSelectionState(current, available, opts.optional);
 labels      = st.labels;
 enabled     = st.enabled;
+partial     = st.partial;
 selected    = st.selected;
-unplaceable = st.unplaceable;
+offLabels   = st.offLabels;
+offSelected = st.offSelected;
+offEnabled  = st.offEnabled;
+includeAll  = false;    % the "not in every file" override, off by default
 accepted    = false;
 
 PAD    = 12;
-SIDE_W = 190;
+SIDE_W = 210;
 BAR_H  = 44;
 BTN_W  = 150;
 GAP    = 5;
@@ -128,6 +133,29 @@ uibutton(fig, 'Text', 'Select all available', 'Position', row(24, 4), ...
 uibutton(fig, 'Text', 'Clear all', 'Position', row(24, 4), ...
     'ButtonPushedFcn', @(~, ~) setAll(false));
 
+partialBox = uicheckbox(fig, 'Position', row(22, 8), ...
+    'Text', 'Include partial electrodes', 'Value', false, ...
+    'Tooltip', ['Offer electrodes present in some files but not all. The ROI ' ...
+                'mean is then taken over different channels in different ' ...
+                'files, so this is a methodological choice, not a display one.'], ...
+    'ValueChangedFcn', @(src, ~) setIncludeAll(src.Value));
+if ~any(partial); partialBox.Enable = 'off'; end
+
+% Electrodes with no spot on the head image. Checkboxes, not a text line:
+% they are legal ROI members, and listing them without offering them is how
+% accepting the dialog used to delete them.
+offBox = gobjects(1, numel(offLabels));
+if ~isempty(offLabels)
+    uilabel(fig, 'Text', 'Other electrodes', 'FontWeight', 'bold', ...
+            'Position', row(20, 10));
+    for i = 1:numel(offLabels)
+        offBox(i) = uicheckbox(fig, 'Position', row(20, 0), ...
+            'Text', offLabels{i}, 'Value', offSelected(i), ...
+            'Enable', offEnabled(i), ...
+            'ValueChangedFcn', @(src, ~) onOffToggle(i, src.Value));
+    end
+end
+
 countLabel = uilabel(fig, 'Position', row(46, 12), 'WordWrap', 'on', ...
                      'VerticalAlignment', 'top', 'FontColor', [0.35 0.38 0.43]);
 
@@ -157,7 +185,9 @@ catch ME
 end
 
 if accepted
-    selected = labels(selected);
+    % Diagram picks PLUS the off-diagram ones. Rebuilding from labels(selected)
+    % alone is what silently dropped FT9 from an ROI that already held it.
+    selected = currentSelection();
 else
     selected = [];        % cancelled - distinct from an empty selection
 end
@@ -171,22 +201,53 @@ if isvalid(fig); delete(fig); end
         p = [sx, y, SIDE_W, h];
     end
 
+    function sel = currentSelection()
+    % The ROI as it stands: diagram picks plus off-diagram ones. Anything that
+    % reads the selection back out must go through here - rebuilding it from
+    % labels(selected) is what silently dropped FT9 on accept and on save.
+        sel = [labels(selected), offLabels(offSelected)];
+    end
+
+    function onOffToggle(i, value)
+        offSelected(i) = value;
+        refreshCount();
+    end
+
+    function setIncludeAll(value)
+    % The override only ever ADDS what the data has; it never offers an
+    % electrode no loaded file carries.
+        includeAll = value;
+        for k = 1:numel(btns)
+            set(btns(k), 'Enable', enabled(k) || (includeAll && partial(k)));
+        end
+        refreshCount();
+    end
+
     function onToggle(i, value)
         selected(i) = value;
         refreshCount();
     end
 
     function setAll(value)
-        % "All" means all AVAILABLE: switching on an electrode the data does
-        % not have would put a channel in the ROI that cannot be averaged.
-        selected = value & enabled;
+        % "All" means all SELECTABLE: switching on an electrode no loaded file
+        % has would put a channel in the ROI that cannot be averaged. What
+        % counts as selectable widens when the partial override is on.
+        selected    = value & (enabled | (includeAll & partial));
+        offSelected = value & offEnabled;
         syncButtons();
     end
 
     function applyPreset()
         k = find(strcmp({presets.name}, presetDrop.Value), 1);
         if isempty(k); return; end
-        [selected, missing] = applyRoiPreset(labels, enabled, presets(k).labels);
+        want = presets(k).labels;
+        pickable = enabled | (includeAll & partial);
+        [selected, missing] = applyRoiPreset(labels, pickable, want);
+        % A preset may legitimately name an off-diagram electrode - FT9 is in
+        % this cohort's own recordings - so those are applied here rather than
+        % reported as missing.
+        offSelected = ismember(lower(offLabels), lower(want)) & offEnabled;
+        missing     = missing(~ismember(lower(missing), lower(offLabels(offSelected))));
         syncButtons();
         if ~isempty(missing)
             % Silently dropping part of a named ROI would change what the
@@ -201,7 +262,7 @@ if isvalid(fig); delete(fig); end
     function savePreset()
         answer = inputdlg('Name for this ROI:', 'Save ROI preset', [1 45]);
         if isempty(answer) || isempty(strtrim(answer{1})); return; end
-        opts.savePreset(strtrim(answer{1}), labels(selected));
+        opts.savePreset(strtrim(answer{1}), currentSelection());
         refreshPresets(strtrim(answer{1}));
     end
 
@@ -232,23 +293,29 @@ if isvalid(fig); delete(fig); end
         deleteBtn.Enable = ~isempty(k) && presets(k).userDefined;
     end
 
+    function syncOffBoxes()
+        for k = 1:numel(offBox)
+            if isgraphics(offBox(k)); offBox(k).Value = offSelected(k); end
+        end
+    end
+
     function syncButtons()
         for j = 1:numel(btns)
             btns(j).Value = selected(j);
         end
+        syncOffBoxes();
         refreshCount();
     end
 
     function refreshCount()
-        n    = sum(selected);
-        nOff = sum(~enabled);
+        n    = sum(selected) + sum(offSelected);
+        nOff = sum(~enabled & ~partial);
         txt  = sprintf('%d electrode%s selected', n, plural(n));
         if nOff > 0
             txt = sprintf('%s\n%d %s', txt, nOff, opts.availableNote);
         end
-        if ~isempty(unplaceable)
-            txt = sprintf('%s\nNot on this diagram: %s', txt, ...
-                          strjoin(unplaceable, ', '));
+        if any(partial)
+            txt = sprintf('%s\n%d in some files but not all', txt, sum(partial));
         end
         countLabel.Text = txt;
     end

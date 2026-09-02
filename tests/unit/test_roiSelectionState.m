@@ -71,25 +71,55 @@ s = roiSelectionState({}, {'cz'});
 testCase.verifyEqual(s.labels(s.enabled), {'Cz'});
 end
 
-% ── unplaceable channels ──────────────────────────────────────────────────
+% ── partial availability ──────────────────────────────────────────────────
 
-function test_channelsWithNoDiagramPositionAreReported(testCase)
-% FT9/FT10 are in 32 of this project's 35 recordings and Iz in the other 3;
-% none has a spot on the head image. They must be named, not dropped.
-s = roiSelectionState({}, {'Cz', 'FT9', 'FT10', 'Iz'});
-testCase.verifyEqual(sort(s.unplaceable), {'FT10', 'FT9', 'Iz'});
+function test_partialMarksWhatSomeFilesHaveAndOthersDoNot(testCase)
+% "in every file" and "in no file" are different answers. An electrode in
+% some files is a real methodological choice, so it is marked rather than
+% lumped in with the genuinely absent.
+s = roiSelectionState({}, {'Cz'}, {'Pz'});
+testCase.verifyEqual(s.labels(s.enabled),  {'Cz'});
+testCase.verifyEqual(s.labels(s.partial),  {'Pz'});
+testCase.verifyFalse(any(s.enabled & s.partial), ...
+    'an electrode cannot be both in every file and only in some');
 end
 
-function test_aFullyPlaceableMontageReportsNothing(testCase)
+function test_noOptionalSetMeansNothingIsPartial(testCase)
 s = roiSelectionState({}, {'Cz', 'Pz'});
-testCase.verifyEmpty(s.unplaceable);
+testCase.verifyFalse(any(s.partial));
 end
 
-function test_unplaceableChannelsAreNotSilentlyEnabled(testCase)
+% ── off-diagram channels ──────────────────────────────────────────────────
+
+function test_channelsWithNoDiagramPositionAreOffered(testCase)
+% FT9/FT10 are in 32 of this project's 35 recordings and Iz in the other 3;
+% none has a spot on the head image. They are legal ROI members, so they are
+% OFFERED, not merely named.
+s = roiSelectionState({}, {'Cz', 'FT9', 'FT10', 'Iz'});
+testCase.verifyEqual(sort(s.offLabels), {'FT10', 'FT9', 'Iz'});
+testCase.verifyTrue(all(s.offEnabled), 'the data carries all three');
+testCase.verifyFalse(any(s.offSelected), 'none was in the incoming ROI');
+end
+
+function test_aFullyPlaceableMontageOffersNothingExtra(testCase)
+s = roiSelectionState({}, {'Cz', 'Pz'});
+testCase.verifyEmpty(s.offLabels);
+end
+
+function test_anIncomingOffDiagramRoiIsCarriedAndPreselected(testCase)
+% THE BUG. The off-diagram list is built from `available` UNION `current`, so
+% an ROI already holding FT9 keeps it even when nothing is loaded - which is
+% what stops the dialog deleting it on accept.
+s = roiSelectionState({'Cz', 'FT9'}, {});
+testCase.verifyTrue(ismember('FT9', s.offLabels));
+testCase.verifyTrue(s.offSelected(strcmp(s.offLabels, 'FT9')));
+end
+
+function test_offDiagramChannelsAreNotSilentlyEnabledOnTheDiagram(testCase)
 s = roiSelectionState({}, {'FT9'});
 testCase.verifyFalse(any(s.enabled), ...
     'nothing on the diagram is available, and FT9 is not on it');
-testCase.verifyEqual(s.unplaceable, {'FT9'});
+testCase.verifyEqual(s.offLabels, {'FT9'});
 end
 
 % ── applyRoiPreset ────────────────────────────────────────────────────────
