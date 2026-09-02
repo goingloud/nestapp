@@ -35,116 +35,6 @@ classdef nestapp < matlab.apps.AppBase
         StepsTree                       matlab.ui.container.Tree
         StepsTipPanel                   matlab.ui.container.Panel
         StepsTipLabel                   matlab.ui.control.Label
-        VisualizingTab                  matlab.ui.container.Tab
-        TEPvarNameEditField             matlab.ui.control.EditField
-        TEPvarNameEditFieldLabel        matlab.ui.control.Label
-        ExportTEPDataButton             matlab.ui.control.Button
-        EEGDatasetDropDown              matlab.ui.control.DropDown
-        EEGDatasetDropDownLabel         matlab.ui.control.Label
-        TopoplottimeSpinner             matlab.ui.control.Spinner
-        TopoplottimeSpinnerLabel        matlab.ui.control.Label
-        TEPWindowSlider                 matlab.ui.control.RangeSlider
-        TEPWindowSliderLabel            matlab.ui.control.Label
-        ReLoadAvailableElectrodesButton  matlab.ui.control.Button
-        PO6Button                       matlab.ui.control.StateButton
-        PO1Button                       matlab.ui.control.StateButton
-        DontfindcommonelectrodesCheckBox  matlab.ui.control.CheckBox
-        SelectAllCheckBox               matlab.ui.control.CheckBox
-        AF8Button                       matlab.ui.control.StateButton
-        AF7Button                       matlab.ui.control.StateButton
-        AFZButton                       matlab.ui.control.StateButton
-        TP9Button                       matlab.ui.control.StateButton
-        TP10Button                      matlab.ui.control.StateButton
-        CB2Button                       matlab.ui.control.StateButton
-        O2Button                        matlab.ui.control.StateButton
-        OZButton                        matlab.ui.control.StateButton
-        CB1Button                       matlab.ui.control.StateButton
-        PO8Button                       matlab.ui.control.StateButton
-        PO2Button                       matlab.ui.control.StateButton
-        PO5Button                       matlab.ui.control.StateButton
-        PO7Button                       matlab.ui.control.StateButton
-        PO4Button                       matlab.ui.control.StateButton
-        POZButton                       matlab.ui.control.StateButton
-        PO3Button                       matlab.ui.control.StateButton
-        O1Button                        matlab.ui.control.StateButton
-        P6Button                        matlab.ui.control.StateButton
-        P4Button                        matlab.ui.control.StateButton
-        PZButton                        matlab.ui.control.StateButton
-        P5Button                        matlab.ui.control.StateButton
-        P7Button                        matlab.ui.control.StateButton
-        P2Button                        matlab.ui.control.StateButton
-        P1Button                        matlab.ui.control.StateButton
-        P3Button                        matlab.ui.control.StateButton
-        P8Button                        matlab.ui.control.StateButton
-        TP8Button                       matlab.ui.control.StateButton
-        CP6Button                       matlab.ui.control.StateButton
-        CP4Button                       matlab.ui.control.StateButton
-        CPZButton                       matlab.ui.control.StateButton
-        CP5Button                       matlab.ui.control.StateButton
-        TP7Button                       matlab.ui.control.StateButton
-        T7Button                        matlab.ui.control.StateButton
-        C3Button                        matlab.ui.control.StateButton
-        C5Button                        matlab.ui.control.StateButton
-        FC5Button                       matlab.ui.control.StateButton
-        FT7Button                       matlab.ui.control.StateButton
-        T8Button                        matlab.ui.control.StateButton
-        CP2Button                       matlab.ui.control.StateButton
-        CP1Button                       matlab.ui.control.StateButton
-        CP3Button                       matlab.ui.control.StateButton
-        C2Button                        matlab.ui.control.StateButton
-        CZButton                        matlab.ui.control.StateButton
-        C1Button                        matlab.ui.control.StateButton
-        FC3Button                       matlab.ui.control.StateButton
-        FCZButton                       matlab.ui.control.StateButton
-        FC1Button                       matlab.ui.control.StateButton
-        F7Button                        matlab.ui.control.StateButton
-        FT8Button                       matlab.ui.control.StateButton
-        C6Button                        matlab.ui.control.StateButton
-        C4Button                        matlab.ui.control.StateButton
-        F1Button                        matlab.ui.control.StateButton
-        FC6Button                       matlab.ui.control.StateButton
-        FC4Button                       matlab.ui.control.StateButton
-        FC2Button                       matlab.ui.control.StateButton
-        FZButton                        matlab.ui.control.StateButton
-        F3Button                        matlab.ui.control.StateButton
-        F5Button                        matlab.ui.control.StateButton
-        F2Button                        matlab.ui.control.StateButton
-        F4Button                        matlab.ui.control.StateButton
-        F6Button                        matlab.ui.control.StateButton
-        F8Button                        matlab.ui.control.StateButton
-        AF4Button                       matlab.ui.control.StateButton
-        FP2Button                       matlab.ui.control.StateButton
-        FPZButton                       matlab.ui.control.StateButton
-        FP1Button                       matlab.ui.control.StateButton
-        AF3Button                       matlab.ui.control.StateButton
-        PlottingModeButtonGroup         matlab.ui.container.ButtonGroup
-        AddtocurrentFigureButton        matlab.ui.control.RadioButton
-        NewFigureButton                 matlab.ui.control.RadioButton
-        PlotTypeButtonGroup             matlab.ui.container.ButtonGroup
-        PlotTypeTEPButton               matlab.ui.control.RadioButton
-        PlotTypeGMFPButton              matlab.ui.control.RadioButton
-        PlotTypeLMFPButton              matlab.ui.control.RadioButton
-        ExportTEPFigureButton           matlab.ui.control.Button
-        OpenTEPFigureButton             matlab.ui.control.Button
-        OpenTopoFigureButton            matlab.ui.control.Button
-        TOPOPLOTButton                  matlab.ui.control.Button
-        WindowsizefortimeaveragedTopoplotEditField  matlab.ui.control.NumericEditField
-        WindowsizeforTopoplotLabel      matlab.ui.control.Label
-        Image2                          matlab.ui.control.Image
-        FilesListBox                    matlab.ui.control.ListBox
-        FilesListBoxLabel               matlab.ui.control.Label
-        UseCurrentlyCleanedDataCheckBox  matlab.ui.control.CheckBox
-        SelectDatatoVisulaizeTEPsPanel  matlab.ui.container.Panel
-        SelectDataButton_2              matlab.ui.control.Button
-        FolderEditField_2               matlab.ui.control.EditField
-        FolderEditField_2Label          matlab.ui.control.Label
-        PLOTTEPButton                   matlab.ui.control.Button
-        ShowComponentsButton            matlab.ui.control.StateButton
-        AddWindowButton                 matlab.ui.control.Button
-        RemoveWindowButton              matlab.ui.control.Button
-        ResetWindowsButton              matlab.ui.control.Button
-        TEPComponentTable               matlab.ui.control.Table
-        UIAxes2                         matlab.ui.control.UIAxes
         UIAxes                          matlab.ui.control.UIAxes
         ReportsTab                      matlab.ui.container.Tab
         ReportsListBox                  matlab.ui.control.ListBox
@@ -164,28 +54,15 @@ classdef nestapp < matlab.apps.AppBase
         ExportPDFButton                 matlab.ui.control.Button
         CopyMethodsButton               matlab.ui.control.Button
         % Analysis tab - static elements not auto-resized by MATLAB
-        AnalysisSelPanel                matlab.ui.container.Panel
-        AnalysisCompWindowsLabel        matlab.ui.control.Label
-        AnalysisWorkspaceLabel          matlab.ui.control.Label
-        AnalysisBatchLabel              matlab.ui.control.Label
-        AnalysisBatchDescLabel          matlab.ui.control.Label
     end
 
     properties (Access = private)
         ItemNum % Index for selected Item
-        elecList = {'FPz','FP1','FP2','AF7','AF3','AFz','AF4','AF8','F7','F5','F3',...
-                'F1','F2','F4','F6','F8','Fz','FT7','FT8','FC5','FC3',...
-                'FC1','FCz','FC2','FC4','FC6','T7','T8','C5','C3','C1','Cz',...
-                'C2','C4','C6','TP7','TP8','CP5','CP3','CP1','CPz',...
-                'CP2','CP4','CP6','P7','P5','P3','P1','Pz',...
-                'P2','P4','P6','P8','PO7','PO5','PO3','PO1','POz','PO2','PO4','PO6','PO8',...
-                'CB1','O1','Oz','O2','CB2','TP9','TP10'}; % All Listed Electrodes
         path         % File Path (single-folder selection; '' when files span folders)
         file         % File Name(s) shown in the listbox (basenames, or folder/name when multi-folder)
         filePaths    % Full path of every queued data file - source of truth for Run Analysis
         spec         % PipelineStep struct array (name + typed params)
         NSelecFiles  % Number of selected files for EEG preprocessing
-        cleanedName  % Name used to rename the saved cleaned EEG data
     end
     properties (Access = public)
         % Tab Cleaning
@@ -240,25 +117,11 @@ classdef nestapp < matlab.apps.AppBase
         ExploreStatusLabel              matlab.ui.control.Label
 
         % Tab Visualizing
-        PathofSelectedFilesforTEP
-        SelectedFilesforTEP % Selected files to plot the TEP
-        Common_Labels % Commong electrod name among files
-        ROIelecsLabels % Selected electrodes as Region of Interest
-        TEPCreated = false; % true once the TEP plot has been rendered at least once
-        EEG_SelectedTEPFiles_Loaded = false;
-        EEGofAllSelectedFiles = [];
-        DefaulTEPxLim = [-50 300]; % Default xLim for time in TEP
-        SMOOTH_WIN_PTS = 5;        % moving-average window for the displayed/exported curve (~5 ms at 1 kHz)
-        EEGtime
-        TEP2Export
-        TEPDisplayCurve = [] % smoothed grand-mean curve currently shown on UIAxes (TEP/GMFP/LMFP) - measured by the Analysis-tab windows of interest
         MenuRecentFiles     % Handle to 'Recent Files' submenu - rebuilt on open
         MenuRecentPipelines % Handle to 'Recent Pipelines' submenu - rebuilt on open
         StatusBar           % uilabel pinned to bottom of UIFigure - visible on both tabs
         pipelineDirty   = false    % true when pipeline has unsaved changes
         pipelineName    = ''       % filename of last saved/loaded pipeline
-        tepPeaks        = struct([]) % struct array from tepPeakFinder; cached after each PLOT TEP
-        tepComponentDefs = struct([]) % component window definitions used by tepPeakFinder
         allPipelineReports = {}    % cell array of report entry structs from current session
         loadedReports      = {}    % cell array of report entry structs loaded from disk
         lastFailed         = struct([]) % failure records from the most recent run (for the dashboard + summary)
@@ -289,10 +152,6 @@ classdef nestapp < matlab.apps.AppBase
         exploreAvailablePlots = struct([])  % registry entries + availability
 
         % Tab Analysis
-        AnalysisTab
-        ExtractPeaksCSVButton
-        AnalysisStatusLabel
-        AnalysisSelectionLabel
     end
 
     methods (Access = private)
