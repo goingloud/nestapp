@@ -231,6 +231,68 @@ testCase.verifyEmpty(findall(panel, 'Type', 'uilistbox'));
 testCase.verifyNotEmpty(findall(panel, 'Type', 'uieditfield'));
 end
 
+% -- a derived default is not a number the field can show ----------------
+
+function m = derivedRangeParam()
+% The scalp map's real "Time window" shape: the default is the first window of
+% interest, which is not a number the registry could name.
+m = makeParam('window', 'Time window', 'ms', 't1 t2', 'desc', ...
+              'type', 'vector', 'placeholder', '(first window of interest)');
+end
+
+function test_untickingADerivedDefaultDoesNotReportZero(testCase)
+% The bug: the fields fall back to 0 because there is no number to show, and
+% handing that over replaced "the first window of interest" with the single
+% sample at 0 ms. [0 0] sits inside the epoch, so nothing downstream errored -
+% the scalp map just silently described one sample.
+[panel, lastChange] = buildWatched(testCase, derivedRangeParam(), struct());
+cb = findall(panel, 'Type', 'uicheckbox');
+testCase.assertTrue(cb.Value);
+
+cb.Value = false;
+cb.ValueChangedFcn(cb, []);
+r = lastChange();
+testCase.verifyEmpty(r.value, ...
+    'unticking alone states no number, so the setting must stay unset');
+end
+
+function test_editingAFieldOnADerivedRowDoesReportIt(testCase)
+% The other half: once a real number is typed it is a stated value.
+[panel, lastChange] = buildWatched(testCase, derivedRangeParam(), struct());
+cb = findall(panel, 'Type', 'uicheckbox');
+cb.Value = false;
+cb.ValueChangedFcn(cb, []);
+
+f = flipud(findall(panel, 'Type', 'uinumericeditfield'));
+f(1).Value = 60; f(2).Value = 90;
+f(2).ValueChangedFcn(f(2), []);
+r = lastChange();
+testCase.verifyEqual(sort(r.value), [60 90]);
+end
+
+function test_aNumericDefaultThatIsNamedStillReportsOnUnticking(testCase)
+% Unchanged behaviour where the placeholder DOES name numbers: "(-50 300)" is
+% a real default, so unticking hands over exactly what is displayed.
+[panel, lastChange] = buildWatched(testCase, rangeParam(), struct());
+cb = findall(panel, 'Type', 'uicheckbox');
+cb.Value = false;
+cb.ValueChangedFcn(cb, []);
+r = lastChange();
+testCase.verifyEqual(sort(r.value), [-50 300]);
+end
+
+function test_aStoredValueOnADerivedRowSurvivesAndIsReported(testCase)
+% A session that already set the window must not have it dropped as "untouched".
+[panel, lastChange] = buildWatched(testCase, derivedRangeParam(), ...
+                                   struct('window', [70 120]));
+cb = findall(panel, 'Type', 'uicheckbox');
+testCase.assertFalse(cb.Value);
+f = findall(panel, 'Type', 'uinumericeditfield');
+f(1).ValueChangedFcn(f(1), []);
+r = lastChange();
+testCase.verifyEqual(sort(r.value), [70 120]);
+end
+
 function test_theFormAsksForTheHeightTheListboxNeeds(testCase)
 % paramFormHeight is the one table of row heights, and the caller mints the
 % panel from it. If it under-reports, the last setting is cut off.

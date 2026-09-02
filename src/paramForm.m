@@ -53,8 +53,10 @@ function rows = paramForm(parent, meta, values, onChange, context)
 %
 %   Two kinds of row keep an explicit Default control, because there is nothing
 %   for a comparison to match against:
-%     - the numeric rows, whose defaults are DERIVED (a width-relative font
-%       size, say) rather than a number the field could be showing
+%     - the numeric rows, whose defaults may be DERIVED - "the first window of
+%       interest", "from the data" - rather than a number the field could be
+%       showing. Such a row STAYS UNSET until a field is actually edited, even
+%       once Default is unticked: see numericRow
 %     - any setting whose placeholder does not name a default, or names one
 %       outside its own choices. Then the form cannot know what unset means,
 %       and says so with a "Default" item rather than guessing.
@@ -190,12 +192,27 @@ end
 function h = numericRow(parent, y, x, m, val, onChange, n)
 % A Default checkbox governing one or two number fields. Ticking it puts the
 % setting back to absent; unticking hands over whatever the fields show.
+%
+% EXCEPT when the default is derived. A placeholder like "(first window of
+% interest)" or "(derived from the data)" names no number, so the fields have
+% nothing truthful to show and fall back to 0 - which is not the default, it is
+% the only thing a numeric field can display when there is no number. Handing
+% that 0 over on the mere act of unticking silently replaced "the first window
+% of interest" with the single sample at 0 ms, and [0 0] sits inside the epoch
+% so nothing downstream errored: the map just described one sample. A derived
+% row therefore stays UNSET until a field is genuinely edited.
+%
+% The touched flag lives in the checkbox's UserData rather than in h, because h
+% is captured BY VALUE in the callbacks below - h.auto and h.fields work only
+% because they are graphics handles, whose properties are read live. A plain
+% logical in the struct would be frozen at false forever.
 h = struct();
+[seed, derived] = defaultNumbers(m, n);
 h.auto = uicheckbox(parent, 'Position', [x y 84 22], 'Text', 'Default', ...
     'Tooltip', sprintf('%s  Default: %s', m.description, defaultText(m)), ...
-    'Value', isempty(val));
+    'Value', isempty(val), ...
+    'UserData', struct('derived', derived, 'touched', ~isempty(val)));
 
-seed = defaultNumbers(m, n);
 if ~isempty(val); seed = padTo(val(:)', n, seed); end
 
 h.fields = gobjects(1, n);
@@ -208,8 +225,17 @@ end
 
 push = @() onChange(m.key, currentValue(h, n));
 set(h.auto,   'ValueChangedFcn', @(~, ~) applyAuto(h, push));
-set(h.fields, 'ValueChangedFcn', @(~, ~) push());
+set(h.fields, 'ValueChangedFcn', @(~, ~) fieldEdited(h, push));
 applyAuto(h, @() []);   % set the initial enable state without reporting a change
+end
+
+function fieldEdited(h, push)
+% A real edit, so whatever the fields now show is a stated value even on a row
+% whose default was derived.
+st = h.auto.UserData;
+st.touched = true;
+h.auto.UserData = st;
+push();
 end
 
 function applyAuto(h, push)
@@ -218,7 +244,8 @@ push();
 end
 
 function v = currentValue(h, n)
-if h.auto.Value
+st = h.auto.UserData;
+if h.auto.Value || (st.derived && ~st.touched)
     v = [];                       % absent: the draw function's default applies
 else
     v = arrayfun(@(f) f.Value, h.fields(1:n));
@@ -319,9 +346,13 @@ s = regexprep(s, '^\(|\)$', '');
 if isempty(s); s = 'unset'; end
 end
 
-function v = defaultNumbers(m, n)
+function [v, derived] = defaultNumbers(m, n)
+% The numbers the placeholder names, and whether it named any. "(-50 300)"
+% does; "(first window of interest)" does not, and derived says so - the zeros
+% below are a display fallback, not a default anyone chose.
 v = str2num(defaultText(m)); %#ok<ST2NM>  a placeholder like "-50 300"
-if isempty(v) || ~isnumeric(v)
+derived = isempty(v) || ~isnumeric(v);
+if derived
     v = zeros(1, n);
 end
 v = padTo(v(:)', n, zeros(1, n));
