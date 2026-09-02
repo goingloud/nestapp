@@ -84,7 +84,16 @@ opts = struct( ...
     'statusBar',    [], ...
     'parallel',     false, ...
     'chanLocFile',  '', ...
-    'outputRoot',   tmpDir);   % isolate from any user outputRoot pref
+    'outputRoot',   tmpDir, ...        % isolate from any user outputRoot pref
+    'layout',       'typeBased');      % ...and from the outputLayout pref
+
+% Both isolations are needed, and only one used to exist. The path assertions
+% below are the typeBased map, so on a machine whose outputLayout pref is
+% 'perInput' this test failed five times over while the run itself was
+% perfectly correct - the artifacts were simply at the other layout's paths.
+% test_outputPaths covers both maps as unit tests; what this one checks is
+% that a real run puts things where the map says, so it states its layout
+% rather than inheriting one.
 
 % Pop a UIFigure-free dlg: runPipelineCore tolerates an empty uiFigure by
 % creating a standalone progress figure. We close it via the dlg cleanup.
@@ -104,7 +113,7 @@ pngPath = report.quality.figures{1};
 testCase.verifyTrue(exist(pngPath, 'file') == 2, ...
     sprintf('Recorded QC PNG was not written to disk: %s', pngPath));
 
-% Layout under the batch root (typeBased default):
+% Layout under the batch root (typeBased, as opts.layout above requires):
 %   <batchRoot>/qc/<stem>/NN_StepName.png
 % so fileparts(pngPath)         -> <batchRoot>/qc/<stem>
 %    fileparts(fileparts(...))  -> <batchRoot>/qc

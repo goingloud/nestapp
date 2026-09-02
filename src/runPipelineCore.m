@@ -29,6 +29,7 @@ if ~isfield(opts, 'statusBar'),    opts.statusBar    = []; end
 if ~isfield(opts, 'parallel'),     opts.parallel     = false; end
 if ~isfield(opts, 'chanLocFile'),  opts.chanLocFile  = ''; end
 if ~isfield(opts, 'outputRoot'),   opts.outputRoot   = ''; end
+if ~isfield(opts, 'layout'),       opts.layout       = ''; end
 
 persistent cachedNestappSrc cachedEeglabGenpath
 
@@ -51,9 +52,20 @@ end
 % Unified batch output: every run gets one timestamped folder.
 % Destination priority: opts.outputRoot (programmatic override, used
 % by tests) > nestapp.outputRoot pref > common parent of inputs.
-% Layout pref picks between 'typeBased' and 'perInput'. All writers
-% resolve their destinations through outputPaths(batchCtx, kind, stem).
-layout   = getpref('nestapp', 'outputLayout', 'typeBased');
+%
+% opts.layout has the SAME priority over the outputLayout pref, and exists for
+% the same reason: a test or a script must be able to state the layout it
+% expects instead of inheriting whichever one the user last picked in
+% Preferences. Only outputRoot had an override, so an integration test that
+% carefully isolated the root still asserted paths from the user's layout and
+% failed on any machine set to 'perInput'.
+%
+% Left empty here rather than defaulted: buildBatchContext validates the layout
+% and owns the fallback, so naming 'typeBased' in this file would be a second
+% place the default lived. All writers resolve through
+% outputPaths(batchCtx, kind, stem).
+layout = opts.layout;
+if isempty(layout); layout = getpref('nestapp', 'outputLayout', ''); end
 batchCtx = buildBatchContext(filePaths, opts.pipelineName, layout, opts.outputRoot);
 
 % Debug log: when the 'debugLog' pref is on, tee the full run trace to a
