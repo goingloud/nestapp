@@ -2175,25 +2175,6 @@ classdef nestapp < matlab.apps.AppBase
                 'Increment the step counter manually to skip steps, or reset to 1 to reprocess from the start.'];
             app.RunAnalysisButton.Tooltip   = 'Run the pipeline on the selected data file(s)';
             app.SelectDataButton.Tooltip    = 'Select a folder or individual files to process';
-
-            % Visualizing tab
-            app.PLOTTEPButton.Tooltip         = 'Plot TMS-evoked potential waveforms for the selected files and electrodes';
-            app.ShowComponentsButton.Tooltip          = 'Detect and overlay TEP component peaks on the TEP plot';
-            app.AddWindowButton.Tooltip    = 'Add a new window of interest to the Analysis table';
-            app.RemoveWindowButton.Tooltip = 'Remove the selected window of interest';
-            app.ResetWindowsButton.Tooltip = 'Restore the default TEP component windows (Beck et al. 2024)';
-            app.TOPOPLOTButton.Tooltip        = 'Plot a scalp topographic map at the specified time point';
-            app.ExportTEPFigureButton.Tooltip = 'Export the current TEP plot as PNG, PDF or MATLAB figure';
-            app.OpenTEPFigureButton.Tooltip   = 'Open the TEP plot in a standard MATLAB figure for hand editing';
-            app.OpenTopoFigureButton.Tooltip  = 'Open the topoplot in a standard MATLAB figure for hand editing';
-            app.ReLoadAvailableElectrodesButton.Tooltip = ...
-                'Reload the electrode list from the currently selected files';
-            app.SelectAllCheckBox.Tooltip   = 'Select all available files for TEP plotting';
-            app.UseCurrentlyCleanedDataCheckBox.Tooltip = ...
-                'Use the most recently processed output instead of selecting files manually';
-            app.DontfindcommonelectrodesCheckBox.Tooltip = ...
-                ['When checked: show all selected electrodes regardless of whether they ' ...
-                'appear in every file. When unchecked: restrict to electrodes present across all selected files.'];
         end
 
         % Code that executes after component creation
@@ -2222,8 +2203,6 @@ classdef nestapp < matlab.apps.AppBase
             % their createComponents positions here (no resize has scaled them).
             app.baseLayout        = captureBaseLayout(app);
             app.originalSize      = app.UIFigure.Position(3:4);
-            app.tepComponentDefs  = defaultTEPComponentDefs();
-            refreshAnalysisWindows(app);   % show the default windows up-front
             initExploreTab(app);
             applyTooltips(app);
             % Dwell timer for the Steps tree legend. StartDelay is restarted by
@@ -4311,9 +4290,7 @@ classdef nestapp < matlab.apps.AppBase
         % Selection changed function: TabGroup
         function TabGroupSelectionChanged(app, event)
         % Refresh a tab's contents when it becomes active.
-            if event.NewValue == app.AnalysisTab
-                updateAnalysisSelectionSummary(app);
-            elseif event.NewValue == app.ExploreTab
+            if event.NewValue == app.ExploreTab
                 % A resize while another tab was showing is skipped as wasted
                 % work, so the canvas may be sized for the old window. Repaint
                 % on the way in.
