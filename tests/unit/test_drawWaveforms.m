@@ -174,3 +174,62 @@ ax = offscreenAxes(testCase);
 drawDifferenceWave(ax, fakeRes(2, 'unpaired'), struct());
 testCase.verifyTrue(contains(ax.Title.String, 'unpaired'));
 end
+
+function test_contrastDirectionInvertsTheCurveAndTheTitleTogether(testCase)
+% The picture and the sentence above it must agree about which subtraction
+% happened - a flipped curve under an unflipped title is the worst outcome
+% available, because both look plausible on their own.
+res = fakeRes(2, 'paired');
+
+ax = offscreenAxes(testCase);
+drawDifferenceWave(ax, res, struct());
+forward = lineYData(ax);
+testCase.assertTrue(contains(ax.Title.String, 'post minus pre'));
+
+ax = offscreenAxes(testCase);
+drawDifferenceWave(ax, res, struct('direction', 'first - second'));
+testCase.verifyEqual(lineYData(ax), -forward, 'AbsTol', 1e-12);
+testCase.verifyTrue(contains(ax.Title.String, 'pre minus post'));
+end
+
+function test_flippingIsTheIntervalTheOtherContrastWouldHaveGiven(testCase)
+% Negation has to take the bounds with it. Reading lo as lo after a flip
+% would draw a band on the wrong side of the mean, which is not a cosmetic
+% error - it is an interval that excludes zero where the real one includes it.
+res = fakeRes(2, 'unpaired');
+
+ax = offscreenAxes(testCase);
+drawDifferenceWave(ax, res, struct());
+fwd = bandYData(ax);
+
+ax = offscreenAxes(testCase);
+drawDifferenceWave(ax, res, struct('direction', 'first - second'));
+testCase.verifyEqual(sort(bandYData(ax)), sort(-fwd), 'AbsTol', 1e-12);
+end
+
+function test_theDefaultDirectionIsUnchanged(testCase)
+% Every saved session and every figure already exported reads
+% second-minus-first, so an absent setting must still mean exactly that.
+res = fakeRes(2, 'paired');
+
+ax = offscreenAxes(testCase);
+drawDifferenceWave(ax, res, struct());
+absent = lineYData(ax);
+
+ax = offscreenAxes(testCase);
+drawDifferenceWave(ax, res, struct('direction', 'second - first'));
+testCase.verifyEqual(lineYData(ax), absent);
+end
+
+function y = lineYData(ax)
+% The one visible line: the zero and baseline markers are HandleVisibility off,
+% which findobj skips and findall would not - the trap this file already
+% documents for nLines.
+h = findobj(ax, 'Type', 'line');
+y = h(1).YData;
+end
+
+function y = bandYData(ax)
+h = findall(ax, 'Type', 'patch');
+y = h(1).YData(:)';
+end

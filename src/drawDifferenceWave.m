@@ -2,13 +2,28 @@
 % Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
 % Part of nestapp; see the LICENSE file for full terms.
 function drawDifferenceWave(ax, res, opts)
-% DRAWDIFFERENCEWAVE  Group 2 minus group 1, with an interval on the difference.
+% DRAWDIFFERENCEWAVE  One group minus the other, with an interval on it.
 %   DRAWDIFFERENCEWAVE(ax, res, opts) draws the contrast between exactly two
 %   groups from a groupCurves result.
 %
 %   opts:
-%     .colors  n-by-3 (only the difference colour is used; default near-black)
-%     .xlim    time limits, default [-50 300]
+%     .colors     n-by-3 (only the difference colour is used; default near-black)
+%     .xlim       time limits, default [-50 300]
+%     .direction  'second - first' (default) or 'first - second'
+%
+%   WHICH WAY ROUND IS A CHOICE, not a consequence of the order the groups were
+%   added. A difference wave inverted is the same result reported upside down,
+%   and which sign a reader finds natural depends on the question - "what did
+%   the intervention add" is not the same sentence as "what did it take away".
+%   Left alone it stays second-minus-first, so nothing that already reads this
+%   plot changes; the setting exists so the insertion order does not decide it.
+%
+%   Flipping is exact negation of the stored estimate, not a recomputation:
+%   the bounds are mean -/+ t*sem, so negating the mean and swapping lo with hi
+%   gives precisely the interval the other contrast would have produced. The
+%   paired normalisation inside .sem is symmetric under negation, so there is
+%   nothing left to redo - which is why this is a DRAW option and needs no trip
+%   back through groupCurves.
 %
 %   The estimate arrives as res.contrast, computed by groupCurves at the run's
 %   confidence level, exactly as drawTEPOverlay renders res.est. Deriving it
@@ -28,16 +43,27 @@ if numel(res.groups) ~= 2
 end
 
 opts = fillDefaults(opts, struct('xlim', [-50 300], 'colors', groupColors(1), ...
-                                 'showBands', false, 'windows', []));
+                                 'showBands', false, 'windows', [], ...
+                                 'direction', 'second - first'));
 
 A = res.groups(1);
 B = res.groups(2);
 % groupCurves computed this at the run's confidence level; deriving it here
 % would silently ignore that level, as this function used to.
 est = res.contrast;
-d   = est.mean;
-lo  = est.lo;
-hi  = est.hi;
+
+if isFirstMinusSecond(opts.direction)
+    % Negate, and swap the bounds with it: lo = mean - t*sem becomes the upper
+    % bound of the negated estimate. Swapping the group handles too keeps the
+    % legend, title and picture describing the same subtraction.
+    est.mean = -est.mean;
+    [est.lo, est.hi] = deal(-est.hi, -est.lo);
+    [A, B] = deal(B, A);
+end
+
+d  = est.mean;
+lo = est.lo;
+hi = est.hi;
 
 time = res.time;
 cla(ax, 'reset');
@@ -66,4 +92,10 @@ ylabel(ax, 'Difference (\muV)');
 title(ax, sprintf('%s minus %s  (%s)', B.name, A.name, est.note));
 box(ax, 'off');
 legend(ax, 'Location', 'northeast', 'Box', 'off');
+end
+
+function tf = isFirstMinusSecond(direction)
+% Tolerant of spacing and of the hyphen the registry writes, so a value typed
+% into a saved .mat by hand is not silently read as the default.
+tf = strcmpi(regexprep(char(direction), '[\s-]+', ''), 'firstsecond');
 end
