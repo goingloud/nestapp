@@ -10,7 +10,9 @@ function out = exploreResults(res, entries, opts)
 %   out fields:
 %     .time        1xT common time base (ms)
 %     .groups      per group: name, subjects, curves (nSubj x T), chanMeans,
-%                  nFiles, nSubjects
+%                  nFiles, nSubjects, and the individual recordings behind
+%                  the subject collapse - fileCurves (nFiles x T), fileNames,
+%                  fileSubjects
 %     .est         the interval per group, as drawn
 %     .contrast    the two-group difference estimate, when there is one
 %     .channels    the montage the curves were computed on, plus chanlocs

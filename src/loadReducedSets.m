@@ -31,7 +31,7 @@ function [cache, warnings] = loadReducedSets(paths, opts)
 %   drawing a third curve on top of the old one.
 %
 %   Options:
-%     .loadFcn      @(path)->EEG, default pop_loadset. Overridable for tests.
+%     .loadFcn      @(path)->EEG, default loadEegFile. Overridable for tests.
 %     .progressFcn  @(i, n, path) called before each file.
 %
 %   A file that fails to load is reported in warnings and marked ok=false
@@ -72,8 +72,10 @@ end
 % ── helpers ─────────────────────────────────────────────────────────────────
 
 function EEG = defaultLoad(p)
-[fp, nm, ex] = fileparts(p);
-EEG = pop_loadset('filename', [nm ex], 'filepath', fp);
+% loadEegFile, not a bare pop_loadset: Explore is normally pointed at cleaned
+% .set files, but nothing here requires that, and the format dispatch already
+% exists in one place. This is the same reader the pipeline uses.
+EEG = loadEegFile(p);
 end
 
 function [avg, nTrials] = reduce(EEG)

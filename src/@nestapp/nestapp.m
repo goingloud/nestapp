@@ -1255,9 +1255,13 @@ classdef nestapp < matlab.apps.AppBase
                         'onFailedRowClick', @(name) jumpToFileEntry(app, allEntries, name), ...
                         'failed',           app.lastFailed));
             elseif app.ReportsImageViewButton.Value && isFileEntry(app, e)
+                % Keep the chosen checkpoint across a re-render: this runs on
+                % every resize as well as on a selection change, and silently
+                % snapping back to the first image mid-drag is disorienting.
                 showReportsPane(app, 'images');
                 renderQcImages(app.ReportsImagePanel, qcFiguresOf(app, e), ...
-                    struct('onOpen', @(d) revealFolder(app, d)));
+                    struct('selected', shownQcIndex(app), ...
+                           'onOpen',   @(d) revealFolder(app, d)));
             else
                 showReportsPane(app, 'text');
                 if isfield(e, 'text')
@@ -1273,6 +1277,18 @@ classdef nestapp < matlab.apps.AppBase
             % pipeline saved, and the file is still where it was written.
             app.OpenReportSetButton.Enable = ...
                 matlab.lang.OnOffSwitchState(~isempty(selectedReportOutput(app)));
+        end
+
+        function i = shownQcIndex(app)
+        % Which checkpoint the image pane is currently showing, 1 when it is
+        % not built yet. renderQcImages clamps, so a stale index from a report
+        % with more images than the next one is harmless.
+            i = 1;
+            if isempty(app.ReportsImagePanel) || ~isvalid(app.ReportsImagePanel)
+                return
+            end
+            dd = findall(app.ReportsImagePanel, 'Type', 'uidropdown');
+            if ~isempty(dd) && isnumeric(dd(1).Value); i = dd(1).Value; end
         end
 
         function showReportsPane(app, which)
@@ -1305,14 +1321,22 @@ classdef nestapp < matlab.apps.AppBase
 
 
         function reRenderReportsOnResize(app)
-        % Repaint the Session Quality Dashboard after a window resize so its
-        % absolute-positioned children (heatmap, table, histograms) reflow to
-        % the new panel size. No-op unless the dashboard is the visible pane;
-        % renderDashboardPanel itself clears and re-lays-out from parent size.
-            if isempty(app.ReportsDashboardPanel) || ~isvalid(app.ReportsDashboardPanel)
-                return
+        % Repaint whichever absolutely-positioned pane is showing, so its
+        % children reflow to the new panel size. Both renderers clear and
+        % re-lay-out from the parent's size, so re-rendering IS the reflow.
+        %
+        % Two panes need this, not one: the dashboard (heatmap, table,
+        % histograms) and the QC images (dropdown + image). The text area is a
+        % single control and rescaleComponents already moves it.
+            panes = {app.ReportsDashboardPanel, app.ReportsImagePanel};
+            showing = false;
+            for k = 1:numel(panes)
+                p = panes{k};
+                if ~isempty(p) && isvalid(p) && strcmp(p.Visible, 'on')
+                    showing = true; break
+                end
             end
-            if ~strcmp(app.ReportsDashboardPanel.Visible, 'on'); return; end
+            if ~showing; return; end
             allEntries = [app.allPipelineReports, app.loadedReports];
             if app.dashboardHasContent(allEntries)
                 allEntries{end+1} = struct('isDashboard', true, ...
