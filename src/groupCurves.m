@@ -22,6 +22,8 @@ function res = groupCurves(cache, entries, opts)
 %     .chanlocs       locations for those electrodes, for scalp maps
 %     .groups         1xG struct: .name .subjects .curves (nSubj x T)
 %                     .chanMeans (C x T, subject-averaged) .nFiles .nSubjects
+%                     .fileCurves (nFiles x T) .fileNames .fileSubjects -
+%                     the individual recordings, BEFORE the subject collapse
 %     .est            1xG from curveInterval, aligned with .groups
 %     .contrast       differenceInterval for groups(2) minus groups(1) when
 %                     there are exactly two groups; struct([]) otherwise
@@ -60,7 +62,9 @@ opts = fillDefaults(opts, struct('roi', {{}}, 'mode', 'TEP', ...
 
 res = struct('time', [], 'channelLabels', {{}}, 'chanlocs', [], ...
              'groups', struct('name', {}, 'subjects', {}, 'curves', {}, ...
-                              'chanMeans', {}, 'nFiles', {}, 'nSubjects', {}), ...
+                              'chanMeans', {}, 'nFiles', {}, 'nSubjects', {}, ...
+                              'fileCurves', {}, 'fileNames', {}, ...
+                              'fileSubjects', {}), ...
              'est', struct([]), 'contrast', struct([]), ...
              'design', opts.design, 'complete', {{}}, ...
              'dropped', {{}}, 'info', struct());
@@ -124,6 +128,17 @@ for g = 1:G
     groups(g).chanMeans = chanMeans / max(numel(subs), 1);
     groups(g).nFiles    = numel(block);
     groups(g).nSubjects = numel(subs);
+
+    % The per-FILE curves, kept rather than discarded. They were already
+    % computed above and thrown away with `use`, so retaining them costs one
+    % assignment and nothing in the reduction. They answer "is that one
+    % recording an outlier" - a question a group mean cannot be asked, and
+    % which previously needed the old Add-to-current-Figure gesture.
+    % Rows are FILES here, deliberately: .curves is subjects, and the point
+    % of these is to see the recordings the subject collapse hid.
+    groups(g).fileCurves   = reshape([block.curve], numel(res.time), []).';
+    groups(g).fileNames    = {block.label};
+    groups(g).fileSubjects = {block.subject};
 end
 
 % ── intervals ────────────────────────────────────────────────────────────
@@ -262,6 +277,15 @@ for g = 1:numel(groups)
     groups(g).subjects  = groups(g).subjects(keep);
     groups(g).curves    = groups(g).curves(keep, :);
     groups(g).nSubjects = numel(keep);
+
+    % The per-file rows have to follow, or a traces overlay would draw
+    % recordings belonging to subjects this estimate just excluded - the
+    % picture would disagree with the interval drawn on top of it.
+    keepFile = ismember(groups(g).fileSubjects, groups(g).subjects);
+    groups(g).fileCurves   = groups(g).fileCurves(keepFile, :);
+    groups(g).fileNames    = groups(g).fileNames(keepFile);
+    groups(g).fileSubjects = groups(g).fileSubjects(keepFile);
+    groups(g).nFiles       = sum(keepFile);
 end
 dropped = unique(dropped);
 end

@@ -19,6 +19,8 @@ function drawTEPOverlay(ax, res, opts)
 %     .legend    draw the legend, default true
 %     .showBands shade the windows of interest, default false
 %     .windows   window structs for .showBands, default none
+%     .showTraces draw each individual recording behind the means, default
+%                 false - see below
 %
 %   The band is the confidence interval curveInterval computed, not a decorative
 %   spread. The app previously shaded mean +/- SEM/2 with no label, which is not
@@ -28,6 +30,14 @@ function drawTEPOverlay(ax, res, opts)
 %
 %   Bands are drawn before lines and with transparency, so an overlap reads as
 %   overlap rather than as whichever group happened to be drawn last.
+%
+%   .showTraces draws res.groups(g).fileCurves - one thin line per RECORDING,
+%   in the group's colour, behind everything else and out of the legend. It is
+%   the honest answer to "is that one file an outlier": a group mean cannot be
+%   asked, and the alternative was opening the file alone, which shows it
+%   without the context that makes it look odd in the first place. Rows are
+%   files rather than subjects deliberately - the point is to see what the
+%   subject collapse hid.
 %
 %   See also: groupCurves, curveInterval, groupColors, drawDifferenceWave
 
@@ -41,7 +51,20 @@ nG   = numel(res.groups);
 time = res.time;
 hold(ax, 'on');
 
-% Bands first, so every mean line sits above every band.
+% Individual recordings first of all: they are the busiest thing on the axes
+% and must not sit on top of the estimate they are context for.
+% A hand-built res, or one restored from a result saved before fileCurves
+% existed, simply has nothing to draw here.
+if opts.showTraces && isfield(res.groups, 'fileCurves')
+    for g = 1:nG
+        fc = res.groups(g).fileCurves;
+        if isempty(fc); continue; end
+        plot(ax, time, fc.', 'Color', [opts.colors(g, :) 0.30], ...
+             'LineWidth', 0.5, 'HandleVisibility', 'off');
+    end
+end
+
+% Bands next, so every mean line sits above every band.
 if opts.showBand
     for g = 1:nG
         e = res.est(g);
@@ -95,7 +118,7 @@ function opts = withDefaults(opts, res)
 nG   = numel(res.groups);
 opts = fillDefaults(opts, struct('mode', 'TEP', 'xlim', [-50 300], ...
     'colors', groupColors(nG), 'showBand', true, 'legend', true, ...
-    'showBands', false, 'windows', []));
+    'showBands', false, 'windows', [], 'showTraces', false));
 % A caller may pass a palette sized for a different group count.
 if size(opts.colors, 1) < nG
     opts.colors = groupColors(nG);

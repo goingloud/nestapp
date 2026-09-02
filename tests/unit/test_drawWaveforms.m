@@ -43,12 +43,19 @@ res = struct('time', time, 'design', design, 'channelLabels', {{'F3'}}, ...
              'chanlocs', [], 'complete', {{}}, 'dropped', {{}}, ...
              'contrast', struct([]), 'info', struct());
 g = struct('name', {}, 'subjects', {}, 'curves', {}, 'chanMeans', {}, ...
-           'nFiles', {}, 'nSubjects', {});
+           'nFiles', {}, 'nSubjects', {}, 'fileCurves', {}, 'fileNames', {}, ...
+           'fileSubjects', {});
 for k = 1:nGroups
     curves = sin(linspace(0, pi, numel(time))) .* (1:4)' + k;
+    % Six recordings for four subjects, as a real cohort has: two people were
+    % recorded twice. That is exactly the case .fileCurves exists to show.
+    files  = [curves; curves(1:2, :) * 1.1];
     g(k) = struct('name', names{k}, 'subjects', {{'s1','s2','s3','s4'}}, ...
                   'curves', curves, 'chanMeans', mean(curves, 1), ...
-                  'nFiles', 4, 'nSubjects', 4);
+                  'nFiles', 6, 'nSubjects', 4, ...
+                  'fileCurves', files, ...
+                  'fileNames', {{'a','b','c','d','e','f'}}, ...
+                  'fileSubjects', {{'s1','s2','s3','s4','s1','s2'}});
 end
 res.groups   = g;
 res.est      = curveInterval({g.curves}, design);
@@ -79,6 +86,36 @@ ax = offscreenAxes(testCase);
 drawTEPOverlay(ax, fakeRes(3, 'unpaired'), struct());
 testCase.verifyEqual(nLines(ax), 3);
 testCase.verifyEqual(nBands(ax), 3, 'one confidence band per group');
+end
+
+function test_overlayDrawsOneTraceLinePerRecordingWhenAsked(testCase)
+% The traces are HandleVisibility off - they belong behind the estimate and
+% out of the legend - so findall is the only way to count them, and the
+% legend must not grow.
+ax = offscreenAxes(testCase);
+res = fakeRes(2, 'unpaired');
+
+drawTEPOverlay(ax, res, struct('showTraces', false));
+without = numel(findall(ax, 'Type', 'Line'));
+
+drawTEPOverlay(ax, res, struct('showTraces', true));
+with = numel(findall(ax, 'Type', 'Line'));
+
+testCase.verifyEqual(with - without, sum([res.groups.nFiles]), ...
+    'one thin line per RECORDING, not per subject');
+testCase.verifyEqual(nLines(ax), 2, ...
+    'traces must stay out of the legend, which names groups');
+end
+
+function test_traceOptionIsSafeOnAResultThatPredatesIt(testCase)
+% A session saved before fileCurves existed, or any hand-built res, simply
+% has nothing to draw - it must not error.
+ax = offscreenAxes(testCase);
+res = fakeRes(2, 'unpaired');
+res.groups = rmfield(res.groups, {'fileCurves', 'fileNames', 'fileSubjects'});
+
+drawTEPOverlay(ax, res, struct('showTraces', true));
+testCase.verifyEqual(nLines(ax), 2);
 end
 
 function test_overlayLegendStatesN(testCase)

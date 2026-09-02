@@ -215,6 +215,64 @@ testCase.verifyEqual(res.dropped, {'s2'}, 'the exclusion must be reportable');
 testCase.verifyEqual([res.groups.nSubjects], [1 1]);
 end
 
+function test_perFileCurvesSurviveTheSubjectCollapse(testCase)
+% The curves were always computed per file and then thrown away with `use`.
+% They are what an "individual recordings" overlay draws, and they have to be
+% FILES - one row per recording, not per subject - or the overlay shows the
+% same averaging it exists to see behind.
+[cache, entries] = twoGroupFixture();
+res = groupCurves(cache, entries, optsTEP('roi', {'F3'}));
+
+for g = 1:numel(res.groups)
+    gr = res.groups(g);
+    testCase.verifySize(gr.fileCurves, [gr.nFiles numel(res.time)]);
+    testCase.verifyNumElements(gr.fileNames, gr.nFiles);
+    testCase.verifyNumElements(gr.fileSubjects, gr.nFiles);
+end
+
+% This fixture has one file per subject, so the two must agree - anything
+% else would mean the rows are not what they claim.
+testCase.verifyEqual(res.groups(1).fileCurves, res.groups(1).curves, ...
+    'AbsTol', 1e-12);
+end
+
+function test_repeatSessionsGiveMoreFileRowsThanSubjectRows(testCase)
+% The case the overlay exists for: two recordings of one person. .curves
+% collapses them to one row; .fileCurves must keep both.
+time = 0:3; labels = {'F3'};
+paths = {'s1_a.set', 's1_b.set'};
+map = containers.Map(paths, {fakeEEG(labels,time,10,1), fakeEEG(labels,time,10,5)});
+cache   = loadReducedSets(paths, struct('loadFcn', loaderFor(map)));
+entries = struct('path', paths, 'subject', {'s1','s1'}, 'group', {'pre','pre'});
+
+res = groupCurves(cache, entries, optsTEP('roi', {'F3'}));
+testCase.verifySize(res.groups(1).curves,     [1 numel(res.time)]);
+testCase.verifySize(res.groups(1).fileCurves, [2 numel(res.time)]);
+testCase.verifyEqual(sort(res.groups(1).fileNames), {'s1_a.set', 's1_b.set'});
+end
+
+function test_aPairedRestrictionDropsTheFileRowsToo(testCase)
+% s2 is excluded from a paired estimate. If the per-file rows did not follow,
+% a traces overlay would draw s2's recording underneath an interval that
+% excludes them - a picture disagreeing with the statistics drawn on it.
+time = 0:3; labels = {'F3'};
+paths = {'s1_pre.set','s2_pre.set','s1_post.set'};
+map = containers.Map(paths, ...
+    {fakeEEG(labels,time,10,1), fakeEEG(labels,time,10,2), fakeEEG(labels,time,10,3)});
+cache   = loadReducedSets(paths, struct('loadFcn', loaderFor(map)));
+entries = struct('path', paths, 'subject', {'s1','s2','s1'}, ...
+                 'group', {'pre','pre','post'});
+
+res = groupCurves(cache, entries, optsTEP('roi', {'F3'}, 'design', 'paired'));
+
+testCase.assertEqual(res.dropped, {'s2'});
+pre = res.groups(strcmp({res.groups.name}, 'pre'));
+testCase.verifyEqual(pre.fileNames, {'s1_pre.set'}, ...
+    'the dropped subject''s recording must not still be drawable');
+testCase.verifyEqual(pre.nFiles, 1);
+testCase.verifySize(pre.fileCurves, [1 numel(res.time)]);
+end
+
 function test_unpairedKeepsEveryone(testCase)
 time = 0:3; labels = {'F3'};
 paths = {'s1_pre.set','s2_pre.set','s3_post.set'};
