@@ -96,12 +96,3 @@ if ~isempty(out)
 end
 end
 
-% -- small helpers --------------------------------------------------------
-
-function v = getOr(s, field, default)
-if isfield(s, field) && ~isempty(s.(field))
-    v = s.(field);
-else
-    v = default;
-end
-end

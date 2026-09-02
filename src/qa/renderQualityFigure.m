@@ -517,9 +517,9 @@ function s = buildSuperTitle(EEG, opts, metrics)
 parts = {};
 if ~isempty(opts.stepLabel), parts{end+1} = opts.stepLabel; end
 if ~isempty(opts.title),     parts{end+1} = opts.title;     end
-nbchan  = getOr(EEG, 'nbchan', size(EEG.data,1));
-nTrials = getOr(EEG, 'trials', max(size(EEG.data,3),1));
-srate   = getOr(EEG, 'srate', NaN);
+nbchan  = fieldOr(EEG, 'nbchan', size(EEG.data,1));
+nTrials = fieldOr(EEG, 'trials', max(size(EEG.data,3),1));
+srate   = fieldOr(EEG, 'srate', NaN);
 parts{end+1} = sprintf('nbchan=%d trials=%d srate=%g Hz', nbchan, nTrials, srate);
 
 % Append ICA kept/rejected counts when available - source aware.
@@ -614,13 +614,6 @@ for k = 1:n
 end
 end
 
-function v = getOr(s, field, default)
-if isfield(s, field) && ~isempty(s.(field))
-    v = s.(field);
-else
-    v = default;
-end
-end
 
 function closeFigSafely(fig)
 if ishandle(fig)
