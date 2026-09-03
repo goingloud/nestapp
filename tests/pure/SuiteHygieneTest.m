@@ -202,17 +202,26 @@ classdef SuiteHygieneTest < NestappTestCase
         % while the text still matched. check-ignore is the resolver git itself
         % uses when deciding what to add, so it is the only answer that cannot
         % be wrong.
+        % EVERY TRACKED FOLDER UNDER tests/, not the four suite folders. The
+        % first version checked only those, and the cutover walked straight
+        % through the gap it left: tests/golden/ was created by a git mv, so
+        % its ten files stayed tracked because they were already in the index -
+        % but a NEW golden would have been ignored silently, and this rule was
+        % green. Derived from what git actually tracks, so a folder added later
+        % is covered without anyone remembering to list it here.
             missing = {};
-            for k = 1:numel(tc.SuiteFolders)
-                rel = sprintf('tests/%s/ZZHygieneProbeTest.m', tc.SuiteFolders{k});
+            folders = trackedTestFolders();
+            tc.assertNotEmpty(folders, 'git reports no tracked folders under tests/');
+            for k = 1:numel(folders)
+                rel = sprintf('%s/ZZHygieneProbe%s', folders{k}, probeExt(folders{k}));
                 if tc.gitIgnores(rel)
                     missing{end+1} = rel; %#ok<AGROW>
                 end
             end
             tc.verifyEmpty(missing, sprintf( ...
-                ['git would not add a new test in %d suite folder(s), so files ' ...
-                 'there are silently untracked. Whitelist in .gitignore: %s'], ...
-                numel(missing), strjoin(missing, ', ')));
+                ['git would not add a new file in %d tracked tests/ folder(s), ' ...
+                 'so anything put there is silently untracked. Whitelist in ' ...
+                 '.gitignore: %s'], numel(missing), strjoin(missing, ', ')));
 
         % Positive control, in the same test because it is the same fact: a
         % folder nobody whitelisted MUST come back ignored. Without it a probe
@@ -384,6 +393,23 @@ note = '';
 if ~ok
     note = sprintf(' (in %s/, needs %s/)', f.folder, want);
 end
+end
+
+function folders = trackedTestFolders()
+% Every distinct folder under tests/ that git currently tracks a file in.
+[status, out] = system(sprintf('git -C "%s" ls-files tests', addNestappPath()));
+if status ~= 0 || isempty(strtrim(out)); folders = {}; return; end
+paths   = strtrim(strsplit(strtrim(out), newline));
+folders = unique(cellfun(@(p) fileparts(p), paths, 'UniformOutput', false));
+folders = folders(~cellfun('isempty', folders));
+folders = strrep(folders, filesep, '/');
+end
+
+function ext = probeExt(folder)
+% Ask about the kind of file that folder holds: the goldens are whitelisted as
+% *.json and everything else as *.m, so probing with the wrong extension would
+% report a false positive.
+if endsWith(folder, 'golden'); ext = '.json'; else; ext = '.m'; end
 end
 
 function h = readHelpers(dir_)

@@ -38,15 +38,20 @@
 !src/aaratep_compat/
 !src/aaratep_compat/*.m
 
-# Tests (develop branch only)
+# Tests
 #
-# NOTE: line 3 ignores every directory, so a test folder that is not named
-# here is silently untracked - `git add` reports nothing and the commit looks
-# clean. That is exactly what happened when tests/pure/ was first created: two
-# test files were written, run green, and left out of the commit without a
-# word. Any new suite folder must be added below.
+# NOTE: line 3 ignores every directory, so a folder under tests/ that is not
+# named here is SILENTLY untracked - `git add` reports nothing and the commit
+# looks clean. That has now happened twice: when tests/pure/ was created (two
+# test files written, run green, left out of the commit without a word), and
+# again at the cutover, when tests/golden/ was not added here and only the
+# already-indexed goldens stayed tracked - a NEW golden would have vanished.
+#
+# tests/pure/SuiteHygieneTest.m asks `git check-ignore` whether a new file in
+# each tracked tests/ folder would be added, so a third occurrence fails a
+# test instead of being discovered later. Adding a folder here is still manual.
 !tests/
-# The new suite: folders named for what a test NEEDS (EEGLAB, a display).
+# Suites: folders named for what a test NEEDS (EEGLAB, a display).
 !tests/pure/
 !tests/pure/*.m
 !tests/eeglab/
@@ -55,22 +60,11 @@
 !tests/gui/*.m
 !tests/eeglab_gui/
 !tests/eeglab_gui/*.m
-# The old suite, until the rewrite's cutover deletes it.
-!tests/unit/
-!tests/unit/*.m
-!tests/integration/
-!tests/integration/*.m
-!tests/regression/
-!tests/regression/*.m
-!tests/ui/
-!tests/ui/*.m
 !tests/helpers/
 !tests/helpers/*.m
-!tests/characterization/
-!tests/characterization/*.m
 # Recorded step behaviour. JSON so a changed golden is readable in a diff.
-!tests/characterization/golden/
-!tests/characterization/golden/*.json
+!tests/golden/
+!tests/golden/*.json
 !tests/*.m
 
 # CI & community health (CONTRIBUTING / CODE_OF_CONDUCT / SECURITY +
