@@ -62,6 +62,24 @@ classdef SuiteHygieneTest < NestappTestCase
         % Runs after NestappTestCase's own TestClassSetup has fixed the path.
             tc.Files = struct('path', {}, 'name', {}, 'folder', {}, 'code', {});
             root = fullfile(addNestappPath(), 'tests');
+
+            % Every suite folder goes on the path for the duration, because
+            % everyTestClassInheritsTheBase resolves classes by reflection and
+            % meta.class.fromName cannot see a class MATLAB cannot load. Only
+            % the folder being RUN is on the path otherwise, so the rule would
+            % report every file in the other three as not inheriting the base -
+            % which it did, the moment tests/gui gained its first file.
+            %
+            % A PathFixture rather than addpath: it restores itself, and it is
+            % not the bare addpath call this file's own rules ban elsewhere.
+            present = {};
+            for k = 1:numel(tc.SuiteFolders)
+                d = fullfile(root, tc.SuiteFolders{k});
+                if isfolder(d); present{end+1} = d; end %#ok<AGROW>
+            end
+            if ~isempty(present)
+                tc.applyFixture(matlab.unittest.fixtures.PathFixture(present));
+            end
             for k = 1:numel(tc.SuiteFolders)
                 folder = tc.SuiteFolders{k};
                 d = fullfile(root, folder);
