@@ -42,7 +42,7 @@ end
 
 function ok = addTree()
 ok = true;   % pathMemo memoises a value; the work here is the side effect
-repoRoot   = fileparts(fileparts(mfilename('fullpath')));   % src/ -> repo root
+repoRoot   = nestappRoot();
 
 % The search order lives in aaratepRelease so the installer and the loader
 % cannot disagree about where a tree may be - the same reason goldenFileStem

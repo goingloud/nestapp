@@ -79,8 +79,7 @@ function s = collectNestapp()
 s.version = nestappVersion();
 s.gitCommit = '';
 try
-    root = fileparts(fileparts(mfilename('fullpath')));   % src/ -> repo root
-    [st, out] = system(sprintf('git -C "%s" rev-parse --short HEAD', root));
+    [st, out] = system(sprintf('git -C "%s" rev-parse --short HEAD', nestappRoot()));
     if st == 0
         s.gitCommit = strtrim(out);
     end

@@ -13,9 +13,9 @@ function buildTemplates()
 %
 %   See also: stepRegistry, nestapp
 
-addpath(fileparts(mfilename('fullpath')));  % ensure src/ is on path
+addpath(genpath(fullfile(nestappRoot(), 'src')));  % ensure src/ is on path
 reg    = stepRegistry();
-outDir = fullfile(fileparts(mfilename('fullpath')), 'templates');
+outDir = fullfile(nestappRoot(), 'src', 'templates');
 if ~exist(outDir, 'dir')
     mkdir(outDir);
 end

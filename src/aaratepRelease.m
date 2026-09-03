@@ -69,7 +69,6 @@ if ispref('nestapp', 'aaratepPath')
     end
 end
 
-srcDir = fileparts(mfilename('fullpath'));
-dirs{end+1} = fullfile(fileparts(srcDir), 'third_party', 'aaratep');
+dirs{end+1} = fullfile(nestappRoot(), 'third_party', 'aaratep');
 dirs{end+1} = fullfile(prefdir, 'nestapp', 'aaratep');
 end

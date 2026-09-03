@@ -14,7 +14,7 @@ function createComponents(app)
 % All layout edits belong in this file.
 
             % Get the file path for locating images
-            pathToMLAPP = fileparts(fileparts(mfilename('fullpath')));
+            imageDir = fullfile(nestappRoot(), 'src');
 
             % Create UIFigure and hide until all components are created
             app.UIFigure = uifigure('Visible', 'off');
@@ -225,7 +225,7 @@ function createComponents(app)
             % Create Image
             app.Image = uiimage(app.CleaningTab);
             app.Image.Position = [653 453 203 44];
-            app.Image.ImageSource = fullfile(pathToMLAPP, 'LogoNest.jpg');
+            app.Image.ImageSource = fullfile(imageDir, 'LogoNest.jpg');
 
             % Create NESTAPPLabel
             app.NESTAPPLabel = uilabel(app.CleaningTab);

@@ -331,5 +331,5 @@ end
 function p = headImagePath()
 % Head.png sits in src/, alongside this file. createComponents reaches the same
 % file as fileparts(fileparts(mfilename)) from inside @nestapp.
-p = fullfile(fileparts(mfilename('fullpath')), 'Head.png');
+p = fullfile(nestappRoot(), 'src', 'Head.png');
 end

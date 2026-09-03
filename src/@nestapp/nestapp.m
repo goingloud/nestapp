@@ -753,8 +753,7 @@ classdef nestapp < matlab.apps.AppBase
         function selfTestMenu(app, ~)
         % SELFTESTMENU  Help action: run the fast test suite to verify the
         %   install, reporting pass/fail. Best-effort: needs tests/ present.
-            repo = fileparts(fileparts(which('nestappVersion')));
-            runner = fullfile(repo, 'tests', 'run_tests.m');
+            runner = fullfile(nestappRoot(), 'tests', 'run_tests.m');
             if ~isfile(runner)
                 uialert(app.UIFigure, ['The test suite (tests/) is not present ' ...
                     'in this installation, so the self-test cannot run.'], ...
