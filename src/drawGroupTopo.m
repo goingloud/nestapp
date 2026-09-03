@@ -51,13 +51,6 @@ function clim = drawGroupTopo(axList, res, opts)
 if nargin < 3; opts = struct(); end
 opts = fillDefaults(opts, struct('scale', 'shared', 'climit', [], ...
                                 'markers', [], 'contours', []));
-% Zero names no scale - a symmetric range of zero width - so it is read as
-% "derive one" rather than pinning every map to a +/-1 uV clip that hides all
-% of the data. That is exactly the state left behind by unticking the form's
-% Default checkbox without yet typing a number, so it has to be harmless.
-if ~isempty(opts.climit) && (~isfinite(opts.climit(1)) || opts.climit(1) == 0)
-    opts.climit = [];
-end
 % markers and contours stay EMPTY when unset rather than being defaulted
 % here: drawScalpTopo owns those defaults, and fillDefaults reads empty as
 % absent, so passing [] through leaves them in exactly one place.
@@ -86,22 +79,15 @@ for g = 1:nG
     vals{g} = mean(res.groups(g).chanMeans(:, sel), 2, 'omitnan');
 end
 
-perMap = matchesChoice(opts.scale, 'per map') ...
-         && isempty(opts.climit) ...
-         && isempty(fieldOr(opts, 'clim', []));
-
-if isfield(opts, 'clim') && ~isempty(opts.clim)
-    clim = opts.clim;
-elseif ~isempty(opts.climit)
-    m    = abs(opts.climit(1));
-    clim = [-m m];
-elseif perMap
-    clim = [];       % nothing shared to report, and nothing for one bar to say
-else
-    m    = max(cellfun(@(v) max(abs(v)), vals));
-    if ~isfinite(m) || m == 0; m = 1; end
-    clim = [-m m];
-end
+% One map per group is a single ROW, so this plot's "per map" is the same
+% operation as TEP-topo's "per window": one limit per column. topoColourScale
+% owns the precedence (an explicit pair beats a pinned magnitude beats the
+% mode) and the symmetry, and is unit-tested without drawing anything.
+override = fieldOr(opts, 'clim', opts.climit);
+mode     = 'shared';
+if matchesChoice(opts.scale, 'per map'); mode = 'per column'; end
+[perMapClim, clim] = topoColourScale(vals, mode, override);
+perMap = isempty(clim);
 
 % No bars on the maps. A bar shrinks the axes it attaches to, so putting one on
 % the last map alone left that group's head smaller than its siblings - in a
@@ -114,7 +100,7 @@ end
 showBar = ~isfield(opts, 'colorbar') || opts.colorbar;
 mapOpts = struct('markers', opts.markers, 'contours', opts.contours);
 for g = 1:nG
-    mapOpts.clim     = clim;
+    mapOpts.clim     = perMapClim{g};
     mapOpts.colorbar = perMap || (showBar && g == nG);
     drawScalpTopo(axList(g), vals{g}, res.chanlocs, mapOpts);
     if isfield(opts, 'titles') && numel(opts.titles) >= g

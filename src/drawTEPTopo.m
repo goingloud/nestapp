@@ -109,22 +109,14 @@ for k = 1:nW
         end
     end
 end
-perWindow = matchesChoice(opts.mapScale, 'per window');
-if perWindow
-    % One symmetric limit per column, across the groups in it.
-    colClim = cell(1, nW);
-    for k = 1:nW
-        m = max(cellfun(@(v) max(abs(v)), vals(:, k)));
-        if ~isfinite(m) || m == 0; m = 1; end
-        colClim{k} = [-m m];
-    end
-    info.clim = [];   % nothing shared for a caller to label
-else
-    m = max(cellfun(@(v) max(abs(v)), vals(:)));
-    if ~isfinite(m) || m == 0; m = 1; end
-    info.clim = [-m m];
-    colClim   = repmat({info.clim}, 1, nW);
-end
+% Shared by default; 'per window' gives each column its own limit across the
+% groups in it. topoColourScale decides both, and returns an EMPTY shared limit
+% under 'per window' so nothing downstream can hang one colour bar over columns
+% that no longer share a scale.
+mode = 'shared';
+if matchesChoice(opts.mapScale, 'per window'); mode = 'per column'; end
+[colClim, info.clim] = topoColourScale(vals, mode);
+perWindow = isempty(info.clim);
 
 % ── geometry ────────────────────────────────────────────────────────────
 % Maps are SQUARE and sized by whichever budget binds - the width available per
