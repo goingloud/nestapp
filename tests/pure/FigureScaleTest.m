@@ -107,9 +107,19 @@ classdef FigureScaleTest < NestappTestCase
         end
 
         function anExplicitPairWinsOutright(tc)
-            [perCol, shared] = topoColourScale({[1 2]', [3 4]'}, true, [-9 9]);
-            tc.verifyEqual(shared, [-9 9]);
-            tc.verifyEqual(perCol{2}, [-9 9]);
+        % AN ASYMMETRIC PAIR, deliberately. This test used [-9 9], and mutation
+        % testing showed that deleting the explicit-pair branch outright killed
+        % NO test: with the branch gone a symmetric pair falls through to the
+        % scalar-pin path, which computes [-abs(-9), abs(-9)] - the same answer.
+        % The test named the branch without ever exercising it.
+        %
+        % [-2 8] is the case the pair form exists for: a caller that has
+        % already computed limits and is passing them through unchanged, which
+        % is the only way an off-centre range can reach the colormap at all.
+            [perCol, shared] = topoColourScale({[1 2]', [3 4]'}, true, [-2 8]);
+            tc.verifyEqual(shared, [-2 8], ...
+                'an explicit pair is passed through, not re-derived as a magnitude');
+            tc.verifyEqual(perCol{2}, [-2 8]);
         end
 
         function anAllZeroMapStillGetsAUsableRange(tc)
