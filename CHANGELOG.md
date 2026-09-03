@@ -8,6 +8,39 @@ The version here must match `src/nestappVersion.m` and the release git tag.
 
 ## [Unreleased]
 
+### Changed
+- **The test suite has been replaced rather than trimmed.** 916 cases /
+  11,201 executable lines across 116 files became 210 / 1,644 across 15 (plus
+  19 shared helpers); the test-to-source ratio went 0.72 to 0.106 and a full
+  run 174.5 s to 35.3 s. The reason for replacing rather than pruning was that
+  nothing consumed the old suite: `run_tests` counted skipped tests and then
+  ignored them, so a run in which 100% of tests skipped exited green; 125 of
+  916 cases were executed by no automated job at all; and 11 files in the
+  documented "no EEGLAB, no GUI" fast suite needed one or the other, so its
+  stated contract was false.
+
+  Suites are now **folders**, encoding the only two things that gate a test —
+  EEGLAB and a display — as a cross-product: `tests/pure/`, `tests/eeglab/`,
+  `tests/gui/`, `tests/eeglab_gui/`. A test's requirements are visible in its
+  path, so it cannot be misfiled unnoticed. Three rules are enforced: **a skip
+  is a failure** (there are now zero `assumeFail` sites, down from 38), an
+  empty or missing suite is a failure, and the path is restored on exit.
+
+  The conventions are executable rather than documented — `SuiteHygieneTest`
+  holds nine of them, including that every test sits in the folder its
+  dependencies require, that no test rolls its own path setup or temp
+  directory, that source-scraping is opt-in with a named exception list, and
+  that every shared helper has a caller.
+
+  The 10 step characterization goldens were carried across unchanged (now in
+  `tests/golden/`) and never re-recorded during the work; re-recording one to
+  make a red test green would discard the only protection the step layer has.
+  Every regression the old `regression/` cases and `docs/param-audit-findings.md`
+  pinned was converted to a behavioural test, and each was verified by
+  reintroducing the defect and requiring the suite to go red. See
+  `docs/test-rewrite-ledger.md`, which also records two known gaps and the
+  mutation-testing results behind them.
+
 ### Fixed
 - **Adding a group in Explore failed with `Undefined function 'pop_loadset'`.**
   `ensureEeglabReady` judged readiness by the `PLUGINLIST` global, which the
