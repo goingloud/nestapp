@@ -167,6 +167,63 @@ would be silent if they did.
 
 ---
 
+## Progress — which rows are now pinned
+
+The new suite as it stands: **pure 151 · gui 17 · eeglab 12+** across 10 files.
+
+| Ledger row | Pinned by |
+|---|---|
+| A1.1 Save New Set discarded the renamed filename | *not yet* — T5 |
+| A1.2/A1.3 `input()` blocking a batch | `DispatchContractTest/noStepFlaggedNonInteractiveOpensADialog` |
+| A1.4 methods text claimed full retention | `ReportOutputTest/theMethodsTextDisclosesWhatWasRemovedAndInterpolated` |
+| A1.5 `assignin('base',…)` leaking pipeline vars | *not yet* — T5 |
+| A1.6 circular dependency back into the app class | *not yet* — T5 |
+| A1.7 `uisave` never cleared pipelineDirty | *not yet* — T6 |
+| A1.8/A1.10 EEG.history provenance + timestamp | *not yet* — T5 |
+| A2.1 cold-start hid 32 of 54 steps | *not yet* — T6 (`eeglab_gui`) |
+| A3.1–A3.8 the window clamp, as one table | *not yet* — T6 |
+| A3.9 resize re-entrancy guard | *not yet* — T6 |
+| A3.10 tabs excluded by TYPE not by name | *not yet* — T6 |
+| B0 rank always saw full rank | `QualityGateTest/rankIsComputedAtTheDataOwnPrecision` |
+| B1 CleanLine cleaned the wrong channels | `ParamConversionTest/theCleanlineRangeBecomesExplicitIndices…` |
+| B2 tmslabel/pairlabel dropped on casing | `ParamConversionTest/aRenamedKeyKeepsItsValueAndItsPlace` |
+| B3 TEP Peak Output discarded its result | `StepGoldenTest` (TEP Peak Output golden) |
+| B4/B7/B8 steps offering values upstream rejects | `RegistryContractTest`, three negative pins + a positive control |
+| B6 fromASR / DDWiener threshold | `StepGoldenTest` + `DispatchContractTest` |
+| B9/B11/B15 dispatch argument handling | `DispatchContractTest/everyOfferedStepReachesAnImplementation` |
+| B10 numeric param defaulting to empty text | `RegistryContractTest/noStepDeclaresAnEmptyStringAsAScalarDefault` |
+| B14 Quality Gate QG-1…QG-4 | `QualityGateTest`, two rule tables |
+| B16 `'off'` unreachable for 5 criteria | `ParamConversionTest/offReachesEveryCriterionThatAcceptsIt` |
+| C1 derived default reported 0 | `ParamFormTest/unTickingADerivedDefaultStatesNothing` |
+| C2 Window bars read a literal level | `IntervalTest` + `CohortCurvesTest/theLevelUsedIsRecordedOnTheResult` |
+| C3 three drifted enum comparisons | `ParamConversionTest` (via `matchesChoice`) |
+| C4 shared colour bar over unshared scales | `FigureScaleTest/anEmptySharedLimitIsTheContract…` |
+| C5 `opts.layout` override | `DispatchContractTest/theLayoutOverrideBeatsTheUserPreference` |
+
+**23 of 37 PIN rows are pinned.** The remainder are T5/T6 — source-check
+regressions that become behavioural, and the GUI rows.
+
+### Vacuous tests caught while writing these
+
+Three, all mine, all found by asking whether a passing test *could* fail:
+
+1. `stepOffers` named a step that does not exist (`'Reject Continuous Data'`
+   for what is really `'Automatic Continuous Rejection'`), so four B8
+   assertions passed while asserting nothing. Fixed by making a missing step an
+   assertion failure, plus a positive control.
+2. `everyTestClassInheritsTheBase` resolved classes by reflection and silently
+   reported every file outside the running folder as non-inheriting.
+3. `everyOfferedStepReachesAnImplementation` tested for `nestapp:unknownStep`,
+   which `processOneFile` never raises — it rethrows as `nestapp:stepFailed`.
+   The coverage check would have passed for a registry in which *every* step
+   was unimplemented.
+
+The third is the one worth remembering: it is exactly the failure mode this
+rewrite exists to remove, written fresh, and only the habit of asking for a
+positive control caught it.
+
+---
+
 ## Open item
 
 `docs/param-audit-findings.md` rows B5, B12, B13 and B17 are all "the description string is wrong".
