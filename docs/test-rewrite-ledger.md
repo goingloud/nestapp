@@ -201,17 +201,17 @@ The new suite as it stands: **pure 151 · gui 17 · eeglab 12+** across 10 files
 
 | Ledger row | Pinned by |
 |---|---|
-| A1.1 Save New Set discarded the renamed filename | *not yet* — T5 |
+| A1.1 Save New Set discarded the renamed filename | `BatchRunContractTest/theSavedFileIsActuallyRenamed` + `theRenameKeepsTheNameRecognisable` |
 | A1.2/A1.3 `input()` blocking a batch | `DispatchContractTest/noStepFlaggedNonInteractiveOpensADialog` |
 | A1.4 methods text claimed full retention | `ReportOutputTest/theMethodsTextDisclosesWhatWasRemovedAndInterpolated` |
-| A1.5 `assignin('base',…)` leaking pipeline vars | *not yet* — T5 |
-| A1.6 circular dependency back into the app class | *not yet* — T5 |
-| A1.7 `uisave` never cleared pipelineDirty | *not yet* — T6 |
-| A1.8/A1.10 EEG.history provenance + timestamp | *not yet* — T5 |
-| A2.1 cold-start hid 32 of 54 steps | *not yet* — T6 (`eeglab_gui`) |
-| A3.1–A3.8 the window clamp, as one table | *not yet* — T6 |
-| A3.9 resize re-entrancy guard | *not yet* — T6 |
-| A3.10 tabs excluded by TYPE not by name | *not yet* — T6 |
+| A1.5 `assignin('base',…)` leaking pipeline vars | `BatchRunContractTest/theRunLeaksNothingIntoTheBaseWorkspaceButEEG` + exemption control |
+| A1.6 circular dependency back into the app class | `BatchRunContractTest` — established by construction (run with `uiFigure=[]`, no app), one assertion that it got somewhere |
+| A1.7 `uisave` never cleared pipelineDirty | `AppStartupTest/savingAPipelineClearsTheUnsavedMarker` + the cancel branch |
+| A1.8/A1.10 EEG.history provenance + timestamp | `BatchRunContractTest/everyStepRunIsRecordedInTheHistory` + `theHistoryStampCarriesARealTimestamp` |
+| A2.1 cold-start hid 32 of 54 steps | `AppStartupTest/aColdStartOffersEveryInstalledStep` — the cold state is **reproduced**, not grepped |
+| A3.1–A3.8 the window clamp, as one table | `WindowClampTest` — 8 input rows × 4 invariants |
+| A3.9 resize re-entrancy guard | `AppStartupTest/aResizeBelowTheMinimumSettlesInsteadOfRecursing` + `aSecondResizeIsStillHonouredAfterTheFirst` |
+| A3.10 tabs excluded by TYPE not by name | `AppStartupTest/noTabIsCapturedForRescaling` |
 | B0 rank always saw full rank | `QualityGateTest/rankIsComputedAtTheDataOwnPrecision` |
 | B1 CleanLine cleaned the wrong channels | `ParamConversionTest/theCleanlineRangeBecomesExplicitIndices…` |
 | B2 tmslabel/pairlabel dropped on casing | `ParamConversionTest/aRenamedKeyKeepsItsValueAndItsPlace` |
@@ -228,8 +228,51 @@ The new suite as it stands: **pure 151 · gui 17 · eeglab 12+** across 10 files
 | C4 shared colour bar over unshared scales | `FigureScaleTest/anEmptySharedLimitIsTheContract…` |
 | C5 `opts.layout` override | `DispatchContractTest/theLayoutOverrideBeatsTheUserPreference` |
 
-**23 of 37 PIN rows are pinned.** The remainder are T5/T6 — source-check
-regressions that become behavioural, and the GUI rows.
+**All 37 PIN rows are pinned.** Every one of the 14 that remained was a SOURCE
+check in the old suite — a grep for `assignin`, `datetime`, `uiputfile`, a
+method name, an ordering of three calls, an exact assignment string — and every
+one is now behavioural.
+
+The suite as it stands: **pure 162 · eeglab 25 · gui 17 · eeglab_gui 6 = 210
+cases**, 0 failed, 0 skipped, 38.6 s all in.
+
+### T6 verified by replay, not by assertion
+
+Three of the four T6 defects were reintroduced in the real source and the suite
+was required to go red. Each caught exactly the right tests and no others:
+
+| Regression put back | Failed |
+|---|---|
+| clamp anchors `bottom` instead of the top edge | 5 — the 4 height-growing rows + the stream |
+| `startupFcn` builds the tree before `initEeglab` | 1 — `aColdStartOffersEveryInstalledStep` |
+| rename result discarded + a base-workspace leak | 3 — both rename tests + the leak test |
+
+The cold-start replay is the one worth noting: `everyOfferedStepIsOneThePreFlightWillAccept`
+(since folded away) passed *with the bug present*, because a warm session cannot
+see it. That is the exact blindness the old test documented in its own header as
+the reason it grepped instead — and the reason reproducing the cold state was
+worth the work.
+
+### Junk caught in T6, on a mid-work review
+
+Asked directly whether the new tests were any good, four things did not survive
+the question. **WindowClampTest went 26 cases → 11 with identical detection** —
+the same 5 failures under replay — which is the proof the other 15 were
+ceremony, not coverage.
+
+1. `anUnchangedWindowIsHandedBackByteForByte` was parameterised over all 8 rows
+   and opened `if mustGrow; return; end` — **6 cases passing by doing nothing**.
+   Now selects the 2 rows that have something to say.
+2. Idempotence was 8 parameterised cases × 50 iterations. It is *one rule*, so
+   it is one case now, and 3 applications prove what 50 did.
+3. `theRunNeedsNoAppAndOpensNoWindow` asserted `~any(strcmp(WrittenSets,''))` —
+   `dir()` never yields an empty name, so it **could not fail** — beside a
+   figure-leak check that duplicates `NestappTestCase`'s universal teardown.
+   Reduced to the one assertion that carries the fact.
+4. `theRulesActuallyRejectTheHistoricalBug` reproduced the old buggy clamp
+   inside the test file to prove the invariants discriminate. Dropped: it
+   checked its *own* copy of the rules, so deleting rule 1 from the real test
+   would have left it green. The 5.2 replay above is the honest version.
 
 ### Vacuous tests caught while writing these
 
