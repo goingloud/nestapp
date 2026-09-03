@@ -193,7 +193,7 @@ classdef AppStartupTest < NestappTestCase
         % which does not return one, so the save appeared to fail and
         % pipelineDirty was never cleared - the app kept warning about unsaved
         % changes to a pipeline that was on disk.
-            tc.isolatePipelinePrefs();
+            isolatePrefs(tc, {'lastPipelineFolder', 'recentPipelines'});
             outDir = scratchDir(tc);
             shadowFunction(tc, 'uiputfile', {'saved_pipeline.mat', outDir});
 
@@ -216,7 +216,7 @@ classdef AppStartupTest < NestappTestCase
         % The branch that must NOT clear the flag, and the reason the fix is
         % about reading the dialog's answer rather than about clearing the flag
         % unconditionally. uiputfile returns 0 for a cancel.
-            tc.isolatePipelinePrefs();
+            isolatePrefs(tc, {'lastPipelineFolder', 'recentPipelines'});
             shadowFunction(tc, 'uiputfile', {0, 0});
 
             app = launchApp(tc);
@@ -259,22 +259,6 @@ classdef AppStartupTest < NestappTestCase
             tc.assertEmpty(which('pop_saveset'), 'could not hide EEGLAB');
         end
 
-        function isolatePipelinePrefs(tc)
-        % The save handler writes two real user preferences. Snapshot and
-        % restore them, or running the suite quietly edits the user's recent
-        % pipelines and last-used folder.
-            keys = {'lastPipelineFolder', 'recentPipelines'};
-            for k = 1:numel(keys)
-                key = keys{k};
-                if ispref('nestapp', key)
-                    old = getpref('nestapp', key);
-                    tc.addTeardown(@() setpref('nestapp', key, old));
-                else
-                    tc.addTeardown(@() rmprefIfPresent('nestapp', key));
-                end
-            end
-        end
-
         function makePipelineDirty(tc, app)
         % Through the real mutation path rather than by writing the flag: the
         % test should not be able to pass against an app that never sets it.
@@ -312,8 +296,4 @@ end
 function restorePath(saved)
 path(saved);
 rehash;
-end
-
-function rmprefIfPresent(group, key)
-if ispref(group, key); rmpref(group, key); end
 end

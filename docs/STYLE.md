@@ -50,7 +50,19 @@ governs the project as a whole.
 
 ## Tests
 
-- Mirror the patterns in `tests/unit/` (see `test_newStepDispatch.m`):
-  `setupOnce` adds `src/` to the path; integration tests `assumeFail` when
-  EEGLAB/TESA are absent rather than failing.
-- Add a regression test with every bug fix.
+- Write `classdef ... < NestappTestCase`. The base class puts `src/` on the
+  path and fails any test that leaks a figure, so no test does either by hand.
+- Put the file in the folder its dependencies require: `tests/pure/`,
+  `tests/eeglab/`, `tests/gui/`, `tests/eeglab_gui/`. **Never skip** — a skip
+  is a failure, because the folder already declares what the test needs.
+- Use the shared helpers (`scratchDir`, `charFixture`, `fakeEeg`,
+  `fakeReducedCache`, `saveFixtureSet`, `isolatePrefs`, `waitFor`) rather than
+  a private copy. The old suite had eleven local fake-EEG builders and five
+  temp-dir idioms; `tests/pure/SuiteHygieneTest.m` now fails on both.
+- Prefer a table (`TestParameter`) to hand-unrolled cases when one rule covers
+  many inputs — but only when the rows genuinely differ. A parameterised test
+  that returns early for most rows is worse than no test.
+- Test behaviour, not source text. Scraping a file to assert how code is
+  *written* survives a reformat and cannot tell a call from a comment.
+- Add a regression test with every bug fix, and make it fail before the fix —
+  a test that cannot fail is the one failure mode worth hunting for.

@@ -49,12 +49,8 @@
 %
 %   DURING THE REWRITE this runner also serves the OLD suite under its old
 %   names (unit, regression, integration, ui, characterization, and 'fast'
-%   meaning unit+regression). Those are marked LEGACY below and are deleted at
-%   cutover, at which point 'fast' becomes an alias for 'pure'. They are kept
-%   because the new suite must be green BEFORE the old one is removed, and
-%   renaming the old suite out of existence first would leave a window with no
-%   tests at all. Legacy suites do not get rule 1 - the old tests skip by
-%   design, 38 of them - so enforcing it there would just report the disease.
+%   meaning unit+regression); it is now an alias for 'pure', so the dormant CI
+%   workflow that calls it still resolves to a real suite.
 %
 %   See also: NestappTestCase, addNestappPath, scratchDir
 
@@ -110,7 +106,7 @@ for i = 1:numel(spec.folders)
     results = [results, runner.run(s)]; %#ok<AGROW>
 end
 
-report(results, suite, spec.strictSkips);
+report(results, suite);
 
 % A SKIP THROWS EVEN WHEN THE CALLER CAPTURES RESULTS. Failures are
 % nargout-gated, because a caller may legitimately want to collect and triage
@@ -120,7 +116,7 @@ report(results, suite, spec.strictSkips);
 % and asserted on [results.Failed] alone, which is exactly how 125 skipped
 % cases went unnoticed for months. Gating skips on nargout would rebuild it.
 nSkip = sum([results.Incomplete]);
-if spec.strictSkips && nSkip > 0
+if nSkip > 0
     error('nestapp:testsSkipped', ...
           ['run_tests: %d test(s) skipped in a strict suite. A skip is a ' ...
            'fault here - the folder already declares what a test needs.'], nSkip);
@@ -136,12 +132,12 @@ end
 function spec = resolveSuite(suite, testRoot)
 % .folders  where the tests are
 % .needs    {} | {'eeglab'} | {'display'} | {'eeglab','display'}
-% .strictSkips  true when a skip is a failure (rule 1). False only for the
-%               legacy suites, whose tests skip by design.
+% A skip is always a failure (rule 1): the folder already declares what a test
+% needs, so no test has any business deciding it cannot run.
 % fullfile returns a CELLSTR when handed one, so at('a','b') gives a 2-element
 % cell of paths and at('a') a 1-element cell - which is what .folders wants.
 at = @(varargin) fullfile(testRoot, varargin);
-spec = struct('folders', {{}}, 'needs', {{}}, 'strictSkips', true);
+spec = struct('folders', {{}}, 'needs', {{}});
 
 switch suite
     case 'pure'
@@ -156,37 +152,19 @@ switch suite
         spec.folders = at('pure', 'eeglab', 'gui', 'eeglab_gui');
         spec.needs   = {'eeglab', 'display'};
 
-    % ---- LEGACY: delete this block at cutover -------------------------------
-    % The old suite, under its old names, so it stays runnable while the new
-    % one is being written. strictSkips is false here because these tests skip
-    % by design (38 assumeFail sites) - holding them to rule 1 would report the
-    % disease rather than protect anything. At cutover this block goes and
-    % 'fast' becomes an alias for 'pure', which is what
-    % .github/workflows/tests.yml:43 calls.
+    % 'fast' is what .github/workflows/tests.yml calls. It named the old
+    % unit+regression suite; now it is simply 'pure'. Kept as an alias because
+    % renaming a suite out from under a workflow turns a DORMANT job into a
+    % BROKEN one, and the breakage would only surface whenever someone revives
+    % it. CI has not run since 2026-05-31; a one-line alias keeps that door
+    % open at no cost.
     case 'fast'
-        spec.folders = at('unit', 'regression');  spec.strictSkips = false;
-    case 'unit'
-        spec.folders = at('unit');                spec.strictSkips = false;
-    case 'regression'
-        spec.folders = at('regression');          spec.strictSkips = false;
-    case 'integration'
-        spec.folders = at('integration');         spec.strictSkips = false;
-    case 'ui'
-        spec.folders = at('ui');                  spec.strictSkips = false;
-    case 'characterization'
-        spec.folders = at('characterization');    spec.strictSkips = false;
-    case 'legacy-all'
-        spec.folders = at('unit', 'regression', 'integration', 'ui', ...
-                          'characterization');
-        spec.strictSkips = false;
-    % ---- end LEGACY ---------------------------------------------------------
+        spec.folders = at('pure');
 
     otherwise
         error('nestapp:unknownSuite', ...
               ['run_tests: unknown suite "%s". Valid: pure (default), ' ...
-               'eeglab, gui, eeglab_gui, all.\n(Legacy, until the rewrite ' ...
-               'lands: fast, unit, regression, integration, ui, ' ...
-               'characterization, legacy-all.)'], suite);
+               'eeglab, gui, eeglab_gui, all, fast (= pure).'], suite);
 end
 end
 
@@ -216,7 +194,7 @@ end
 
 % ── reporting ────────────────────────────────────────────────────────────────
 
-function report(results, suite, strictSkips)
+function report(results, suite)
 nPass = sum([results.Passed]);
 nFail = sum([results.Failed]);
 nSkip = sum([results.Incomplete]);
@@ -235,12 +213,9 @@ fprintf('==============================================\n\n');
 % you what. The old runner printed failure names but only a skip COUNT, which
 % is how skips stayed invisible.
 printNames(results, [results.Failed], 'Failed');
-skipHeading = 'Skipped (legacy suite - skips tolerated)';
-if strictSkips
-    skipHeading = ['Skipped (a skip is a FAULT - the folder already ' ...
-                   'declares what a test needs)'];
-end
-printNames(results, [results.Incomplete], skipHeading);
+printNames(results, [results.Incomplete], ...
+    ['Skipped (a skip is a FAULT - the folder already declares what a ' ...
+     'test needs)']);
 end
 
 function s = marker(n)

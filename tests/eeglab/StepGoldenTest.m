@@ -27,13 +27,6 @@ classdef StepGoldenTest < NestappTestCase
 %   That list is part of the contract too: it says what this file does not
 %   cover, so nobody assumes it covers everything.
 
-    properties (Constant)
-        % Where the recordings live. One constant because the cutover moves
-        % this folder out of the legacy tree, and that should be a one-line
-        % change rather than a search.
-        GoldenDir = fullfile('tests', 'characterization', 'golden')
-    end
-
     properties (TestParameter)
         % Built from the shared case table, so this file cannot drift from
         % what recordGoldens records. The parameter name is the step name,
@@ -58,8 +51,7 @@ classdef StepGoldenTest < NestappTestCase
     methods (Test)
 
         function theStepStillDoesWhatItWasRecordedDoing(tc, goldenCase)
-            gf = fullfile(addNestappPath(), tc.GoldenDir, ...
-                          [goldenFileStem(goldenCase.name) '.json']);
+            gf = fullfile(goldenDir(), [goldenFileStem(goldenCase.name) '.json']);
             tc.assertTrue(isfile(gf), sprintf( ...
                 ['no golden for "%s". Record one deliberately with ' ...
                  'recordGoldens(''%s'') - never as a reaction to a red test.'], ...
@@ -76,7 +68,7 @@ classdef StepGoldenTest < NestappTestCase
         % An orphaned golden is a step that stopped being characterized without
         % anyone noticing - the file stays, nothing reads it, and the step is
         % silently unprotected.
-            d      = dir(fullfile(addNestappPath(), tc.GoldenDir, '*.json'));
+            d      = dir(fullfile(goldenDir(), '*.json'));
             onDisk = strrep({d.name}, '.json', '');
             rows   = characterizationCases();
             named  = cellfun(@goldenFileStem, rows(:, 1), 'UniformOutput', false);

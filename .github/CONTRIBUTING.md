@@ -27,12 +27,28 @@ first — it maps what each module does and where to make common changes.
 5. **Run the tests** (from the repo root):
    ```matlab
    cd tests
-   run_tests              % fast: unit + regression, no EEGLAB, no GUI
-   run_tests('ui')        % launches the app - takes the mouse for ~20 s
-   run_tests('all')       % adds integration + ui (EEGLAB/TESA; takes the mouse)
+   run_tests                 % pure: no EEGLAB, no display, ~4 s
+   run_tests('eeglab')       % needs EEGLAB (includes the step goldens)
+   run_tests('gui')          % needs a display - opens windows
+   run_tests('eeglab_gui')   % needs both - launches the app
+   run_tests('all')          % everything, ~40 s
    ```
-   `run_tests` prints a summary and errors on any failure. Integration tests
-   `assumeFail` (skip) gracefully when EEGLAB/TESA are absent.
+   Folders are the suites, and they encode the only two things that gate a
+   test: **does it need EEGLAB, does it need a display.** Both are binary, so
+   the cross-product is four folders and nothing else is needed to select
+   tests. A test's requirements are visible in its path, so it cannot be
+   misfiled unnoticed - `tests/pure/SuiteHygieneTest.m` checks that, and eight
+   other conventions, executably.
+
+   `run_tests` enforces three rules the old harness did not:
+
+   - **A skip is a failure.** The folder already declares what a test needs, so
+     no test has any business deciding it cannot run. There are zero
+     `assumeFail` sites; if you find yourself wanting one, the test is in the
+     wrong folder.
+   - **An empty or missing suite is a failure.** A typo'd folder used to pass.
+   - **The path is restored** on the way out, so runs don't leak into each
+     other.
 
 ## Branching & commits
 
@@ -45,11 +61,14 @@ first — it maps what each module does and where to make common changes.
 
 ## Pull requests
 
-- Ensure `run_tests` passes. CI runs the fast suite (unit + regression) on a
-  GitHub-hosted runner — no setup required. The integration suite needs
-  EEGLAB/TESA, which CI does not provide, so **run `run_tests('all')`
-  locally** when your change touches pipeline execution or anything
-  EEGLAB-dependent.
+- Ensure `run_tests('all')` passes. **CI is not a safety net here**: the
+  workflow has not run since 2026-05-31, and EEGLAB is untracked so a runner
+  could not execute the `eeglab` suite anyway. Running the suites locally is
+  the only gate that actually exists.
+- When you add a test, put it in the folder its dependencies require and let
+  the suite run with no skips. When you add a *helper*, make sure something
+  calls it — an unused helper is a second thing to keep in step, and the
+  hygiene test will fail on it.
 - Add or update tests for the behaviour you change. When fixing a bug, add a
   regression test that fails before your fix (the "if you liked it, put a test
   on it" rule).
@@ -99,7 +118,11 @@ Steps are data-driven. To add one (worked detail in
    to the switch that maps the step to its implementation.
 3. **(Optional) Use it in a template** — edit `src/buildTemplates.m`, then
    regenerate: run `buildTemplates()` and commit the updated `src/templates/*.mat`.
-4. Add a test under `tests/unit/` (see `test_newStepDispatch.m` for the pattern).
+4. Add a test. A step's dispatch is covered by `tests/eeglab/DispatchContractTest.m`
+   automatically — it sweeps the whole registry — so what a new step needs is
+   a *behavioural* test of what it does. If its output is worth pinning
+   exactly, add a case to `tests/helpers/characterizationCases.m` and record a
+   golden with `recordGoldens('Your Step Name')`.
 
 ## Diagnosing environment problems
 

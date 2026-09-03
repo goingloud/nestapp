@@ -300,3 +300,150 @@ positive control caught it.
 `docs/param-audit-findings.md` rows B5, B12, B13 and B17 are all "the description string is wrong".
 Eight of the 17 findings in that audit were wording, not behaviour — worth knowing when judging
 whether the param surface is in good shape, and worth *not* attempting to test.
+
+---
+
+## Cutover (Phase 4) — done
+
+The old suite is deleted: **115 files / 10,642 executable lines**, plus the 36
+untracked `.mat` files `exportReport` had left in `tests/unit` and
+`tests/regression`. `exportReport` was NOT changed — falling back to `pwd` when
+handed `''` is reasonable production behaviour, and the litter existed only
+because tests called it that way.
+
+| | Before | Target | After |
+|---|---|---|---|
+| test cases | 916 | ~180 | **210** |
+| test files | 116 | ~30 | **15** (+19 helpers) |
+| exec test lines | 11,201 | ~2,000 | **1,644** (2,369 with helpers) |
+| test : src ratio | 0.72 | ~0.13 | **0.106** (0.153 with helpers) |
+| `assumeFail` sites | 38 | 0 | **0** |
+| cases run by no gate | 125 | 0 | **0** |
+| wall clock, all suites | 174.5 s | — | **35.3 s** |
+| `pure` wall clock | 57.6 s (`fast`) | < 20 s | **4.3 s** |
+
+Every budget target met except the case count, which came in at 210 against a
+~180 forecast. The plan called that a forecast and not a cap, and the metric it
+named instead was cases per distinct asserted fact — see the mutation results
+below, which is the first evidence this project has had on that question.
+
+### Also done at cutover
+
+- `tests/characterization/golden` → **`tests/golden`**, and `recordGoldens.m`
+  up one level out of the deleted tree. Both the recorder and the checker now
+  get the path from one `goldenDir()` helper, for the same reason
+  `goldenFileStem` exists: if they ever disagree about *where*, every golden
+  looks missing at once and the obvious next move is to re-record — which
+  discards the only protection the step layer has.
+- `run_tests`: the LEGACY suite block is gone and `strictSkips` with it, since
+  a skip is now unconditionally a failure. **`fast` stays as an alias for
+  `pure`** — `.github/workflows/tests.yml` calls it, and renaming a suite out
+  from under a dormant workflow turns it into a broken one.
+- **Five helpers deleted** (`assumeDesktop`, `driveModalDialog`, `fakeRegistry`,
+  `hideFromPath`, `isolateRoiPresets`) — every caller was in the old suite.
+  `isolateRoiPresets` was first generalised into `isolatePrefs(testCase, keys)`,
+  because the `eeglab_gui` tests had grown a private second copy of it for two
+  different preference keys.
+- `docs/architecture.md`, `site/docs/architecture.md`, `docs/STYLE.md` and
+  `.github/CONTRIBUTING.md` rewritten for the folder suites, the no-skips rule,
+  and the executable conventions.
+
+### The helper-uptake rule, generalised
+
+`theHelpersAreActuallyShared` named **two** helpers (`fakeEeg`,
+`fakeGroupResult`). That is the same hardcoded-list failure mode as ledger row
+A3.10, and it cost the same thing: five helpers had no callers left and the
+rule was green throughout. It is now `everyHelperHasACaller`, over every file
+in `tests/helpers/`.
+
+Two bugs in it, both found by planting a deliberate orphan rather than by
+reading it:
+
+1. `sprintf` ate the `\w` and `\s` in the pattern and handed `regexp`
+   something that matched nothing — so it reported all 19 helpers as orphans.
+2. Once that was fixed it reported none, because the search corpus included
+   each helper's own source, and a helper's own `function <name>(` line matches
+   the call pattern. Every helper was its own caller.
+
+The first failure is loud. The second is the dangerous one — a green rule
+asserting nothing — and only the orphan probe distinguished them.
+
+---
+
+## Mutation testing — the first real evidence on redundancy
+
+23 mutations were applied to the real source, running `pure` (and `eeglab`
+where the step layer was involved) against each. This is the only measurement
+here that speaks to whether cases are earning their place.
+
+**Where a subject was actually mutated, the tests earn it.** `FigureScaleTest`'s
+12 `topoColourScale` cases: 11 of 12 were killed by some mutation. The one that
+was not — `anExplicitPairWinsOutright` — was **vacuous, not redundant**: it
+passed `[-9 9]`, and deleting the entire explicit-pair branch changed nothing
+because a symmetric pair falls through to the scalar-pin path and computes the
+same answer. Fixed to use `[-2 8]`, and verified: removing the branch now fails
+exactly that test.
+
+**Six mutations survived. Five are gaps, and three of those are serious:**
+
+| Mutation | Tests that noticed |
+|---|---|
+| Morey's √(J/(J−1)) correction removed | **0** |
+| SEM not divided by √n | **0** |
+| `df = n` instead of `n − 1` | **0** |
+| `groupCurves` group mean not divided by n | **0** |
+| `computeWindowMeasures`' own window ordering | **0** |
+| `n < 2` guard removed | 0 — equivalent mutant, not a gap |
+
+The first three are all in `curveInterval`, which is the arithmetic behind
+every error bar that reaches a figure. The cause is structural: **every
+interval assertion in `IntervalTest` is either self-consistency
+(`stored.lo == fresh.lo`) or relative (`narrower than`)**, and both sides of
+every comparison move together under any mutation. Not one test pins an actual
+confidence bound. So the √n divisor, Morey's correction and the degrees of
+freedom can all be wrong while 13 cases stay green.
+
+The last row is instructive too: `theWindowIsOrderIndependent` asserts only on
+`.mean`, which `computeWindowMeasures` **delegates** to `computeWindowMean` —
+so the function's own `min`/`max` normalisation, which is what `.area` and
+`.peak` use, is unasserted.
+
+**Recommended next work, not done here:** close the three `curveInterval` gaps
+with ~3 cases asserting one hand-computed bound against an independently
+derived number. That kills all three surviving mutations at once, and it is the
+wrong-number class this suite was built for.
+
+Caveats on the numbers: the mutations covered `pure/` subjects only, so the 44
+cases in `eeglab`/`gui`/`eeglab_gui` are unmeasured by this method, and
+`SuiteHygieneTest`/`RegistryContractTest` are meta-tests that source mutations
+cannot reach by design.
+
+---
+
+## Replay (verification 5.2) — final
+
+Ten historical defects were reintroduced in the real source and the suite was
+required to go red.
+
+| Defect | Caught by |
+|---|---|
+| clamp anchors `bottom` instead of the top edge (A3.3) | 5 cases |
+| `startupFcn` builds the tree before `initEeglab` (A2.1) | 1 |
+| Save New Set discards the rename (A1.1) | 2 |
+| `assignin('base', …)` leak (A1.5) | 1 |
+| QG rank upcast single→double (B0) | 1 |
+| `'off'` unreachable for the criteria (B16) | 6 |
+| level provenance hardcoded (C2) | 3 |
+| shared colour bar over unshared maps (C4) | 4 |
+| `opts.layout` override ignored (C5) | 9 |
+| explicit-pair colour branch removed | 1 (after the fix above) |
+
+**Two missed, and deliberately not closed:** the `pop_rmbase` argument order
+(B9) and the CleanLine `chanlist` call site (B1). Both were pinned in the old
+suite by `test_removeBaselineDispatch.m` and `test_cleanlineChanList.m`, and
+both of those were re-read before deleting: the first is a `contains(src,
+'pop_rmbase(EEG, timerange, pointrange, chanlist)')` source grep, and its
+companion case calls `pop_rmbase` directly with no nestapp code in it at all —
+which is the "asserting that EEGLAB works" category the plan excluded by name.
+Neither was coverage worth carrying forward. Recorded here so the gap is known
+rather than lost.

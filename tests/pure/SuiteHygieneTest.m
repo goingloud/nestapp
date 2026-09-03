@@ -224,23 +224,55 @@ classdef SuiteHygieneTest < NestappTestCase
                  'came back tracked, so the check above proves nothing']);
         end
 
-        function theHelpersAreActuallyShared(tc)
-        % charFixture and fakeRegistry both existed in the old suite and both
-        % failed to take: charFixture had ZERO callers in unit/ while nine
-        % local EEG builders lived there, and fakeRegistry had one caller
-        % against four private reimplementations. A shared fixture with no
-        % uptake is worse than none - it is a second thing to keep in step.
-            names = {'fakeEeg', 'fakeGroupResult'};
-            for k = 1:numel(names)
-                pattern = ['(^|[^.\w])' names{k} '\s*\('];
-                used = arrayfun(@(f) ~isempty(regexp(f.code, pattern, 'once')), ...
-                                tc.Files);
-                tc.verifyTrue(any(used), sprintf( ...
-                    ['helpers/%s.m has no callers. Either it is not the right ' ...
-                     'abstraction, or tests are rolling their own - both are ' ...
-                     'faults, and the second is how the old suite got eleven ' ...
-                     'fake-EEG builders.'], names{k}));
+        function everyHelperHasACaller(tc)
+        % A shared fixture with no uptake is worse than none - it is a second
+        % thing to keep in step, and nobody knows it is dead. Not theoretical:
+        % charFixture had ZERO callers in the old unit/ while nine local EEG
+        % builders lived beside it, and fakeRegistry had one caller against
+        % four private reimplementations.
+        %
+        % EVERY HELPER, not a list of names. This rule used to name two
+        % ('fakeEeg', 'fakeGroupResult'), which is the same list-of-names
+        % failure mode that ledger row A3.10 is about - a hardcoded list only
+        % covers what someone remembered to add. It cost exactly what that
+        % costs: at the cutover, FIVE helpers turned out to have no callers
+        % left (assumeDesktop, driveModalDialog, fakeRegistry, hideFromPath,
+        % isolateRoiPresets), and this rule was green throughout.
+        %
+        % Deleting an unused helper is not a loss - git has it, and `git show`
+        % brings it back the day a test needs it. What is a loss is a helpers/
+        % folder where a reader cannot tell which files are live.
+            helpers = readHelpers(fullfile(addNestappPath(), 'tests', 'helpers'));
+            % Everything that may count as a caller EXCEPT the helpers
+            % themselves - those are added per-helper below, minus the one
+            % being judged. A helper's own file necessarily contains
+            % "function <name>(", which matches the call pattern, so including
+            % it makes every helper its own caller and the rule vacuous. It
+            % did exactly that in the first version, and only planting a
+            % deliberate orphan showed it.
+            fixed = strjoin([{tc.Files.code}, ...
+                {stripComments(fullfile(addNestappPath(), 'tests', 'run_tests.m'))}], ...
+                newline);
+
+            orphans = {};
+            for k = 1:numel(helpers)
+                nm = helpers(k).name;
+                % A call, or a superclass clause - NestappTestCase is only ever
+                % named by "< NestappTestCase", never called.
+                % Concatenated, not sprintf'd: sprintf eats \w and \s as format
+                % escapes and hands regexp a mangled pattern that matches
+                % nothing - which reported all 19 helpers as orphans.
+                pattern = ['(^|[^.\w])' nm '\s*[({]|<\s*' nm '\>'];
+                % Every OTHER helper, plus the fixed corpus above.
+                others = strjoin({helpers([1:k-1, k+1:end]).code}, newline);
+                if isempty(regexp([others newline fixed], pattern, 'once'))
+                    orphans{end+1} = nm; %#ok<AGROW>
+                end
             end
+            tc.verifyEmpty(orphans, sprintf( ...
+                ['%d helper(s) have no callers: %s. Either delete them (git ' ...
+                 'keeps them) or they are the wrong abstraction.'], ...
+                numel(orphans), strjoin(orphans, ', ')));
         end
     end
 

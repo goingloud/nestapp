@@ -112,8 +112,20 @@ same `spec` the GUI builds, driven from a script.
 
 ## Tests
 
-`tests/run_tests.m` is the harness: `run_tests` (fast: unit + regression -
-no GUI), `run_tests('ui')` (launches the app; takes the mouse, so opt-in),
-`run_tests('all')` (adds integration, needs EEGLAB/TESA). Unit tests avoid
-EEGLAB; integration tests `assumeFail` (skip) when it's absent. See
-`tests/unit/test_newStepDispatch.m` for the conventions.
+`tests/run_tests.m` is the harness. Suites are FOLDERS, encoding the two
+things that actually gate a test - EEGLAB and a display - as a cross-product:
+`pure/` (neither, ~4 s), `eeglab/` (EEGLAB, includes the step goldens),
+`gui/` (a display), `eeglab_gui/` (both). `run_tests('all')` runs the lot in
+~40 s.
+
+Three rules: a skip is a failure (there are zero `assumeFail` sites - the
+folder already declares what a test needs), an empty or missing suite is a
+failure, and the path is restored on exit.
+
+The conventions are executable rather than documented: `tests/pure/SuiteHygieneTest.m`
+holds nine of them, including that every test sits in the folder its
+dependencies require, that no test rolls its own path setup or temp dir, that
+source-scraping is opt-in with a named exception list, and that every helper
+in `tests/helpers/` has a caller. `tests/golden/` holds the 10 step
+characterization recordings; re-recording one is a decision, not a chore - see
+`tests/recordGoldens.m`.

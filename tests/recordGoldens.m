@@ -7,7 +7,7 @@ function recordGoldens(varargin)
 %   recordGoldens()          record every step listed in the case table
 %   recordGoldens('Step A')  record only the named step(s)
 %
-%   Writes tests/characterization/golden/<step>.json, one per step, holding
+%   Writes tests/golden/<step>.json, one per step, holding
 %   the eegDigest of that step's output on its fixture.
 %
 %   Recording is a DECISION, not a chore. A golden changing means a step's
@@ -27,8 +27,8 @@ addpath(root);
 addpath(genpath(fullfile(root, 'src')));
 addpath(fullfile(root, 'tests', 'helpers'));
 
-goldenDir = fullfile(here, 'golden');
-if ~exist(goldenDir, 'dir'); mkdir(goldenDir); end
+gdir = goldenDir();
+if ~exist(gdir, 'dir'); mkdir(gdir); end
 
 global EEG ALLEEG CURRENTSET ALLCOM %#ok<GVMIS>
 evalc('[ALLEEG, EEG, CURRENTSET, ALLCOM] = eeglab(''nogui'');');
@@ -54,7 +54,7 @@ for i = 1:size(cases, 1)
     try
         d = runOne(name, kind, ov, reg, tmpDir, pre);
         txt = jsonencode(d, 'PrettyPrint', true);
-        fid = fopen(fullfile(goldenDir, [safeName(name) '.json']), 'w');
+        fid = fopen(fullfile(gdir, [safeName(name) '.json']), 'w');
         fwrite(fid, txt); fclose(fid);
         fprintf('  OK    %-36s ch=%d pnts=%d trials=%d std=%.6g\n', ...
             name, d.nbchan, d.pnts, d.trials, d.dataStd);
@@ -64,7 +64,7 @@ for i = 1:size(cases, 1)
     end
 end
 
-fprintf('\nrecorded %d golden(s) into %s\n', nOK, goldenDir);
+fprintf('\nrecorded %d golden(s) into %s\n', nOK, gdir);
 if ~isempty(failed)
     fprintf('\ncould NOT run (%d):\n', numel(failed));
     fprintf('  %s\n', failed{:});
