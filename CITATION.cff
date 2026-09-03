@@ -9,8 +9,8 @@ type: software
 version: 2.1.0
 date-released: "2026-09-03"
 license: GPL-3.0-or-later
-repository-code: "https://github.com/goingloud/nestapp"
-url: "https://github.com/goingloud/nestapp"
+repository-code: "https://github.com/arefpz/nestapp"
+url: "https://github.com/arefpz/nestapp"
 keywords:
   - EEG
   - TMS-EEG

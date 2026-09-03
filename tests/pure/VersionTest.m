@@ -82,7 +82,10 @@ classdef VersionTest < NestappTestCase
         % published v2.0 sorted above a later 1.0.0, so a file that lists its
         % releases out of order is the same fault written down.
             changelog = fileread(fullfile(addNestappPath(), 'CHANGELOG.md'));
-            vers = regexp(changelog, '(?m)^## \[(\d+\.\d+\.\d+)\]', 'tokens');
+            % Brackets optional: a version that was released but never tagged
+            % on GitHub carries no link reference, so it is written unbracketed
+            % (1.0.0). It still has to be in order.
+            vers = regexp(changelog, '(?m)^## \[?(\d+\.\d+\.\d+)\]?', 'tokens');
             vers = cellfun(@(c) c{1}, vers, 'UniformOutput', false);
             tc.assertNotEmpty(vers, 'CHANGELOG.md lists no released versions');
 
@@ -101,7 +104,7 @@ classdef VersionTest < NestappTestCase
         % The first `## [x.y.z] - date` heading in the file.
             changelog = fileread(fullfile(addNestappPath(), 'CHANGELOG.md'));
             tok = regexp(changelog, ...
-                '(?m)^## \[(\d+\.\d+\.\d+)\]\s*-\s*([\d-]+)', 'tokens', 'once');
+                '(?m)^## \[?(\d+\.\d+\.\d+)\]?\s*-\s*([\d-]+)', 'tokens', 'once');
             tc.assertNotEmpty(tok, ...
                 'CHANGELOG.md has no `## [x.y.z] - YYYY-MM-DD` section');
             ver     = tok{1};

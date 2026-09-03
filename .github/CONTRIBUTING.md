@@ -23,7 +23,7 @@ first. It maps what each module does and where to make common changes.
    "version unknown" rather than assumed to be the pin.
 4. **Clone and launch**:
    ```bash
-   git clone https://github.com/goingloud/nestapp.git
+   git clone https://github.com/arefpz/nestapp.git
    ```
    ```matlab
    run_nestapp            % launches the app

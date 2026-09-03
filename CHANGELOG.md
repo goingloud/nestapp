@@ -286,7 +286,7 @@ this file as what it was: the open-source re-baseline of the 2.x application.
   a one-time warning (`nestapp:aaratepFastICAMismatch`) is printed when the
   user's FastICA version differs from the one AARATEP was tested with.
 
-## [1.0.0] - 2026-05-29
+## 1.0.0 - 2026-05-29
 
 First public open-source release.
 
@@ -319,4 +319,3 @@ First public open-source release.
 
 [Unreleased]: https://github.com/goingloud/nestapp/compare/v2.1.0...HEAD
 [2.1.0]: https://github.com/goingloud/nestapp/releases/tag/v2.1.0
-[1.0.0]: https://github.com/goingloud/nestapp/releases/tag/v1.0.0
