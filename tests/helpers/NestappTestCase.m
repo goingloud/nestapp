@@ -42,7 +42,22 @@ classdef (Abstract) NestappTestCase < matlab.unittest.TestCase
 %   calling eeglab('nogui') with no teardown, polluting the path for every
 %   test that ran after it.
 %
+%   ONE THING IT DOES ENFORCE: no test may leak a graphics object. That is a
+%   runtime check rather than another source rule, and deliberately so - the
+%   source scan in SuiteHygieneTest can only see a figure opened by the test
+%   file ITSELF, and is blind to one opened two call frames down inside a src/
+%   helper. This catches it however it was produced, and applies to every
+%   folder: a gui test may open windows, it just has to close them.
+%
+%   findall, not findobj: findobj skips HandleVisibility 'off', which is most
+%   of what the app creates, and a leak check that cannot see the leak is
+%   worse than none.
+%
 %   See also: addNestappPath, scratchDir, run_tests
+
+    properties (Access = private)
+        FiguresBefore double
+    end
 
     methods (TestClassSetup)
         function nestappIsOnThePath(~)
@@ -50,6 +65,25 @@ classdef (Abstract) NestappTestCase < matlab.unittest.TestCase
         % done" from the path itself rather than caching it, so a test that
         % calls restoredefaultpath does not break every class after it.
             addNestappPath();
+        end
+    end
+
+    methods (TestMethodSetup)
+        function countGraphicsBefore(tc)
+            tc.FiguresBefore = numel(findall(0, 'Type', 'figure'));
+        end
+    end
+
+    methods (TestMethodTeardown)
+        function noGraphicsAreLeaked(tc)
+        % Runs AFTER the test's own addTeardown callbacks (verified: MATLAB
+        % orders addTeardown before TestMethodTeardown), so a test that cleans
+        % up properly is not reported.
+            leaked = numel(findall(0, 'Type', 'figure')) - tc.FiguresBefore;
+            tc.verifyEqual(leaked, 0, sprintf( ...
+                ['%d figure(s) left open. Close what the test opens - ' ...
+                 'testCase.addTeardown(@() delete(fig)) - or the next test ' ...
+                 'inherits them.'], leaked));
         end
     end
 end

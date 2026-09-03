@@ -39,7 +39,23 @@
 !src/aaratep_compat/*.m
 
 # Tests (develop branch only)
+#
+# NOTE: line 3 ignores every directory, so a test folder that is not named
+# here is silently untracked - `git add` reports nothing and the commit looks
+# clean. That is exactly what happened when tests/pure/ was first created: two
+# test files were written, run green, and left out of the commit without a
+# word. Any new suite folder must be added below.
 !tests/
+# The new suite: folders named for what a test NEEDS (EEGLAB, a display).
+!tests/pure/
+!tests/pure/*.m
+!tests/eeglab/
+!tests/eeglab/*.m
+!tests/gui/
+!tests/gui/*.m
+!tests/eeglab_gui/
+!tests/eeglab_gui/*.m
+# The old suite, until the rewrite's cutover deletes it.
 !tests/unit/
 !tests/unit/*.m
 !tests/integration/

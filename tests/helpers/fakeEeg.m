@@ -1,7 +1,7 @@
 % SPDX-License-Identifier: GPL-3.0-or-later
 % Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
 % Part of nestapp; see the LICENSE file for full terms.
-function EEG = fakeEeg(varargin)
+function EEG = fakeEeg(o)
 % FAKEEEG  A minimal, deterministic EEG struct for tests that do not need EEGLAB.
 %   EEG = FAKEEEG()
 %   EEG = FAKEEEG('nbchan', 8, 'pnts', 500, 'trials', 4, 'srate', 1000, ...)
@@ -33,9 +33,23 @@ function EEG = fakeEeg(varargin)
 %   what stops either from growing into the other, which is how eleven builders
 %   happened.
 %
+%   Options are a native arguments block rather than a hand-rolled parser:
+%   MATLAB then enforces the pair count, rejects an unknown name and validates
+%   each type for free, and tests/helpers/fakeRegistry.m already establishes
+%   the idiom next door. The hand-rolled version had been copy-pasted into
+%   fakeGroupResult, which is how a shared fixture starts becoming two.
+%
 %   See also: charFixture, fakeGroupResult, NestappTestCase
 
-o = parse(varargin);
+arguments
+    o.nbchan (1,1) double {mustBePositive} = 8
+    o.pnts   (1,1) double {mustBePositive} = 500
+    o.trials (1,1) double {mustBePositive} = 1
+    o.srate  (1,1) double {mustBePositive} = 1000
+    o.labels cell = {}
+    o.xmin   (1,1) double = -0.1
+    o.events (1,1) double {mustBeNonnegative} = 0
+end
 
 prev = rng(42, 'twister');
 restore = onCleanup(@() rng(prev));
@@ -75,17 +89,3 @@ EEG.etc        = struct();
 EEG.history    = '';
 end
 
-function o = parse(args)
-o = struct('nbchan', 8, 'pnts', 500, 'trials', 1, 'srate', 1000, ...
-           'labels', {{}}, 'xmin', -0.1, 'events', 0);
-if mod(numel(args), 2) ~= 0
-    error('nestapp:fakeEeg:oddArgs', 'Name-value arguments must come in pairs.');
-end
-for i = 1:2:numel(args)
-    key = lower(char(args{i}));
-    if ~isfield(o, key)
-        error('nestapp:fakeEeg:unknownOpt', 'Unknown option "%s".', args{i});
-    end
-    o.(key) = args{i+1};
-end
-end

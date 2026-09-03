@@ -1,7 +1,7 @@
 % SPDX-License-Identifier: GPL-3.0-or-later
 % Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
 % Part of nestapp; see the LICENSE file for full terms.
-function res = fakeGroupResult(varargin)
+function res = fakeGroupResult(o)
 % FAKEGROUPRESULT  A groupCurves-shaped result, for the plot and measure layers.
 %   res = FAKEGROUPRESULT()
 %   res = FAKEGROUPRESULT('groups', 2, 'subjects', 4, 'design', 'paired', ...)
@@ -31,15 +31,28 @@ function res = fakeGroupResult(varargin)
 %   convertlocs montage block was byte-for-byte identical in two of them. Any
 %   change to what groupCurves returns meant finding all four.
 %
-%   The chanlocs option is off by default because building it calls convertlocs,
-%   which is EEGLAB - so a pure test must not ask for it, and asking is what
-%   moves a test into tests/eeglab. That the flag is explicit rather than
-%   automatic is deliberate: it keeps the EEGLAB dependency visible at the call
-%   site instead of hidden in a fixture.
+%   The chanlocs montage is built with plain trigonometry, NOT with EEGLAB's
+%   convertlocs. An earlier version called convertlocs, which quietly defeated
+%   the rule the whole folder split rests on: a test in tests/pure calling
+%   fakeGroupResult('chanlocs', true) contains no EEGLAB token of its own, so
+%   SuiteHygieneTest's folder check - which scans the TEST file - would pass it
+%   while it called an EEGLAB function one level down. Tracking that dependency
+%   would have meant teaching the scanner which helpers are contaminated;
+%   removing it means there is nothing to track. The five lines of spherical-
+%   to-cartesian below are the whole of what convertlocs was providing.
 %
 %   See also: fakeEeg, charFixture, groupCurves, NestappTestCase
 
-o = parse(varargin);
+arguments
+    o.groups   (1,1) double {mustBePositive} = 2
+    o.subjects (1,1) double {mustBePositive} = 4
+    o.names    cell = {}
+    o.time     (1,:) double = -50:2:300
+    o.gain     (1,1) double = 1
+    o.design   char {mustBeMember(o.design, {'paired', 'unpaired'})} = 'unpaired'
+    o.chanlocs (1,1) logical = false
+    o.level    (1,1) double = 0.95
+end
 
 prev = rng(7, 'twister');
 restore = onCleanup(@() rng(prev));
@@ -53,6 +66,19 @@ res = struct('time', o.time, 'channelLabels', {labels}, 'chanlocs', [], ...
 
 names = o.names;
 if isempty(names); names = {'pre', 'post', 'sham', 'other'}; end
+if o.groups > numel(names)
+    % Better to say so than to hand back two groups sharing a name, which
+    % would make a comparison between them meaningless in a way no assertion
+    % would catch.
+    error('nestapp:fakeGroupResult:tooFewNames', ...
+          'Asked for %d groups but only %d names are available; pass ''names''.', ...
+          o.groups, numel(names));
+end
+
+% Loop-invariant: the subject list and the repeat count are the same for every
+% group, so they are built once.
+subj    = arrayfun(@(i) sprintf('s%d', i), 1:o.subjects, 'UniformOutput', false);
+nRepeat = min(2, o.subjects);
 
 g = struct('name', {}, 'subjects', {}, 'curves', {}, 'chanMeans', {}, ...
            'nFiles', {}, 'nSubjects', {}, 'files', {});
@@ -62,17 +88,14 @@ for k = 1:o.groups
     amp    = (1:o.subjects)' * (1 + (k == 2) * (o.gain - 1));
     curves = shape .* amp + k;
 
-    subj = arrayfun(@(i) sprintf('s%d', i), 1:o.subjects, ...
-                    'UniformOutput', false);
-
     % Two subjects recorded twice: .files must out-number .subjects, or the
     % fixture cannot exercise the subject-first collapse at all.
-    rows      = [curves; curves(1:min(2, o.subjects), :) * 1.1];
-    fileSubj  = [subj, subj(1:min(2, o.subjects))];
+    rows      = [curves; curves(1:nRepeat, :) * 1.1];
+    fileSubj  = [subj, subj(1:nRepeat)];
     fileNames = arrayfun(@(i) sprintf('%s_r%d', fileSubj{i}, i), ...
                          1:numel(fileSubj), 'UniformOutput', false);
 
-    g(k) = struct('name', names{min(k, numel(names))}, 'subjects', {subj}, ...
+    g(k) = struct('name', names{k}, 'subjects', {subj}, ...
                   'curves', curves, 'chanMeans', repmat(mean(curves, 1), ...
                                                         numel(labels), 1), ...
                   'nFiles', numel(fileSubj), 'nSubjects', o.subjects, ...
@@ -95,28 +118,19 @@ end
 end
 
 function locs = montage(labels)
-% EEGLAB's convertlocs, so a caller asking for this has declared an EEGLAB
-% dependency and belongs in tests/eeglab.
+% Spherical polar to cartesian, EEGLAB's convention, done here so the fixture
+% needs no EEGLAB. topoplot accepts theta/radius directly; X/Y/Z are filled in
+% because chanlocs consumers vary in which they read.
 theta  = linspace(-90, 90, numel(labels));
 radius = repmat(0.35, 1, numel(labels));
-locs = struct('labels', labels(:)', 'theta', num2cell(theta), ...
-              'radius', num2cell(radius));
-locs = convertlocs(locs, 'topo2all');
+sphPhi = 90 - radius * 180;
+
+locs = struct('labels', labels(:)', ...
+              'theta',  num2cell(theta), 'radius', num2cell(radius), ...
+              'sph_theta', num2cell(theta), 'sph_phi', num2cell(sphPhi), ...
+              'sph_radius', num2cell(ones(1, numel(labels))), ...
+              'X', num2cell(cosd(sphPhi) .* cosd(theta)), ...
+              'Y', num2cell(cosd(sphPhi) .* sind(theta)), ...
+              'Z', num2cell(sind(sphPhi)));
 end
 
-function o = parse(args)
-o = struct('groups', 2, 'subjects', 4, 'names', {{}}, 'time', -50:2:300, ...
-           'gain', 1, 'design', 'unpaired', 'chanlocs', false, 'level', 0.95);
-if mod(numel(args), 2) ~= 0
-    error('nestapp:fakeGroupResult:oddArgs', ...
-          'Name-value arguments must come in pairs.');
-end
-for i = 1:2:numel(args)
-    key = lower(char(args{i}));
-    if ~isfield(o, key)
-        error('nestapp:fakeGroupResult:unknownOpt', ...
-              'Unknown option "%s".', args{i});
-    end
-    o.(key) = args{i+1};
-end
-end

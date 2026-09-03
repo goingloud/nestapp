@@ -80,6 +80,18 @@ logFile = fullfile(tempdir, 'nestapp_test_progress.log');
 if exist(logFile, 'file'); delete(logFile); end
 fprintf('Per-test progress log: %s\n\n', logFile);
 
+% A FILE THAT DOES NOT COMPILE MUST NOT BE SILENTLY DROPPED. TestSuite.fromFolder
+% only WARNS when a file fails to parse, excludes it, and carries on - so a
+% syntax error in a test class removes every one of its cases while the run
+% still reports green. That happened here: a broken string literal in
+% SuiteHygieneTest silently took eight rules out of the suite and it passed.
+%
+% This is the same disease as rules 1 and 2, arriving by a third route: the
+% suite quietly gets smaller and nothing says so. Promoting the warning to an
+% error is the whole fix.
+warnState = warning('error', 'MATLAB:unittest:TestSuite:FileExcluded');
+restoreWarn = onCleanup(@() warning(warnState));
+
 runner = matlab.unittest.TestRunner.withTextOutput;
 runner.addPlugin(TestProgressLogger(logFile));
 
@@ -100,14 +112,22 @@ end
 
 report(results, suite, spec.strictSkips);
 
-nBad = sum([results.Failed]);
-if spec.strictSkips
-    nBad = nBad + sum([results.Incomplete]);
+% A SKIP THROWS EVEN WHEN THE CALLER CAPTURES RESULTS. Failures are
+% nargout-gated, because a caller may legitimately want to collect and triage
+% them - but a skip in a strict suite is not a test outcome, it is the suite
+% being misconfigured, and there is no reading of that a caller should be
+% allowed to swallow. This is the hole the old setup had: CI captured results
+% and asserted on [results.Failed] alone, which is exactly how 125 skipped
+% cases went unnoticed for months. Gating skips on nargout would rebuild it.
+nSkip = sum([results.Incomplete]);
+if spec.strictSkips && nSkip > 0
+    error('nestapp:testsSkipped', ...
+          ['run_tests: %d test(s) skipped in a strict suite. A skip is a ' ...
+           'fault here - the folder already declares what a test needs.'], nSkip);
 end
-if nBad > 0 && nargout == 0
-    error('nestapp:testsFailed', ...
-          'run_tests: %d failed, %d skipped.', ...
-          sum([results.Failed]), sum([results.Incomplete]));
+if sum([results.Failed]) > 0 && nargout == 0
+    error('nestapp:testsFailed', 'run_tests: %d test(s) failed.', ...
+          sum([results.Failed]));
 end
 end
 
@@ -118,6 +138,8 @@ function spec = resolveSuite(suite, testRoot)
 % .needs    {} | {'eeglab'} | {'display'} | {'eeglab','display'}
 % .strictSkips  true when a skip is a failure (rule 1). False only for the
 %               legacy suites, whose tests skip by design.
+% fullfile returns a CELLSTR when handed one, so at('a','b') gives a 2-element
+% cell of paths and at('a') a 1-element cell - which is what .folders wants.
 at = @(varargin) fullfile(testRoot, varargin);
 spec = struct('folders', {{}}, 'needs', {{}}, 'strictSkips', true);
 
@@ -213,12 +235,12 @@ fprintf('==============================================\n\n');
 % you what. The old runner printed failure names but only a skip COUNT, which
 % is how skips stayed invisible.
 printNames(results, [results.Failed], 'Failed');
+skipHeading = 'Skipped (legacy suite - skips tolerated)';
 if strictSkips
-    printNames(results, [results.Incomplete], ...
-        'Skipped (a skip is a FAULT - the folder already declares what a test needs)');
-else
-    printNames(results, [results.Incomplete], 'Skipped (legacy suite - skips tolerated)');
+    skipHeading = ['Skipped (a skip is a FAULT - the folder already ' ...
+                   'declares what a test needs)'];
 end
+printNames(results, [results.Incomplete], skipHeading);
 end
 
 function s = marker(n)
