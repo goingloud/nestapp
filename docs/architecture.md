@@ -26,7 +26,7 @@ nestapp has two halves that share one engine:
    (tests,  └──────────────┬──────────────┘
    scripts)                │ switch over step name → EEGLAB / TESA / helpers
                            ▼
-                 EEGLAB / TESA / FastICA / vendored AARATEP
+         EEGLAB / TESA / plugins / vendored AARATEP helpers
 ```
 
 The same `spec` (a struct array of `{name, params}`) drives both the GUI run
@@ -34,31 +34,56 @@ button and headless callers like `runPipelineCore` and the test suite.
 
 ## Module map (`src/`)
 
-| Area | Files | Responsibility |
-|---|---|---|
-| **GUI** | `@nestapp/nestapp.m`, `@nestapp/createComponents.m`, `@nestapp/rescaleComponents.m` | The App Designer class. `nestapp.m` holds all state, callbacks, and tab logic. `createComponents`/`rescaleComponents` build and lay out the UI. **Edit `nestapp.m` directly — never the `.mlapp`.** |
-| **Step registry** | `stepRegistry.m`, `makePipelineStep.m`, `checkStepDependencies.m` | The catalogue of pipeline steps: each step's name, default params, UI metadata, and dependency requirements. The single source of truth for "what steps exist." |
-| **Execution** | `runPipelineCore.m`, `processOneFile.m`, `paramsToVarin.m`, `varinToStruct.m`, `stripVarinKeys.m`, `stripEmptyVarin.m`, `nestLog.m` | The batch engine and the per-file dispatch `switch`. Each step name maps to an EEGLAB/TESA call or a nestapp helper here. |
-| **Templates** | `buildTemplates.m`, `templates/*.mat`, `templateCitation.m`, `specFromSaved.m` | Built-in pipelines. `buildTemplates.m` is the source; the `.mat` files are **generated artifacts** (see gotchas). |
-| **Step helpers** | `aaratepMuscleClassifier.m`, `artist*.m`, `ensureAaratepOnPath.m`, `computeICAActivation.m`, `tepPeakFinder.m`, `tepFieldCurve.m`, `tepWindowTable.m`, `computeWindowMeasures.m`, `defaultTEPComponentDefs.m` | Algorithm implementations behind specific steps and analyses. |
-| **Quality control** | `qa/*.m` | Quality Gate scoring, batch verdicts, QC images, dashboard, attribute matrices. |
-| **Reporting / IO** | `buildReportText.m`, `initPipelineReport.m`, `exportReport.m`, `summarizeReports.m`, `buildHistoryEntry.m`, `io/*.m` | Per-file reports, methods paragraphs, provenance, and output-path layout. |
-| **Version** | `nestappVersion.m` | Single source of truth for the app version (SemVer). |
-| **Diagnostics** | `nestappDoctor.m`, `describePipeline.m`, `nestDebugLog.m`, `saveErrorBundle.m`, `collectSupportBundle.m` | `nestappDoctor` validates the environment (Help → Copy Diagnostics); `describePipeline` renders the current pipeline (File → Copy Pipeline Description); `nestDebugLog` tees the run trace to a file when the `debugLog` pref is on; `saveErrorBundle` writes a metadata-only bundle on a step failure; `collectSupportBundle` is the on-demand version (Help → Collect Support Bundle). |
+**The folders are the map.** `src/` used to hold 146 loose `.m` files, so this
+section was a hand-maintained table of individual filenames - which drifted:
+it listed `artist*.m` and `templateCitation.m`, neither of which exists. A
+folder is checkable by `ls`, so a new file lands in a documented area by
+construction rather than by someone remembering to add a row here.
+
+| Folder | Responsibility |
+|---|---|
+| `@nestapp/` | The App Designer class. `nestapp.m` holds all state, callbacks and tab logic; `createComponents`/`rescaleComponents` build and lay out the UI. **Edit `nestapp.m` directly — there is no `.mlapp`.** |
+| `registry/` | The catalogue: what steps and plots exist, their params and defaults, their dependency requirements, and what is available on this machine. The single source of truth for "what steps exist". |
+| `params/` | Turning registry params into what an EEGLAB call wants, and back: type conversion, name/value assembly, key renaming, enable/disable rules, and the parameter form. |
+| `plot/` | Everything that draws: the `draw*` functions, colour scales, shared colour bars, publication figure sizing, and the plot-options dialogs. |
+| `analysis/` | Explore's arithmetic: group curves, confidence intervals, window measures, TEP peaks, and the cohort/subject bookkeeping behind *n*. |
+| `roi/` | Region-of-interest selection, presets, montage layout, and channel/electrode validation. |
+| `ica/` | ICA engines, component classification and marking, activation, and rank/variance decisions. |
+| `report/` | Per-file reports, methods prose, citations, provenance strings, and failure summaries. |
+| `qa/` | Quality Gate scoring, batch verdicts, QC images, attribute matrices. |
+| `io/` | Output-path layout and results-root resolution. |
+| `env/` | The environment: bringing EEGLAB and plugins up, plugin versions, the AARATEP pin/installer, logging, and `nestappDoctor`. |
+| `util/` | Small shared helpers with no domain of their own, plus `buildTemplates`. |
+| `aaratep_compat/` | Shims for the vendored AARATEP tree. |
+| `templates/` | Built-in pipelines as `.mat` — **generated artifacts** (see gotchas); `util/buildTemplates.m` is the source. |
+
+Four files stay at `src/` root because they are entry points or cross-cutting,
+not members of an area:
+
+| File | |
+|---|---|
+| `runPipelineCore.m` | the batch engine (serial / parallel) |
+| `processOneFile.m` | the per-file dispatch `switch` |
+| `nestappVersion.m` | single source of truth for the version (SemVer) |
+| `nestappRoot.m` | resolves the install root by walking up to `run_nestapp.m`, so nothing else has to know its own depth in the tree |
+
+`src/` and every subfolder go on the path via `genpath` (`run_nestapp.m`,
+`addNestappPath` in the tests, and the packaged toolbox all do this), so a
+function's folder never affects whether it resolves.
 
 ## "If you want to change X, edit Y"
 
 | Goal | Where | Notes |
 |---|---|---|
-| Add a processing step | `stepRegistry.m` (register) + `processOneFile.m` (dispatch `case`) | Recipe in [CONTRIBUTING.md](../.github/CONTRIBUTING.md#adding-a-pipeline-step). |
-| Change/add a built-in template | `buildTemplates.m`, then run `buildTemplates()` and commit the regenerated `templates/*.mat` | The `.mat` is generated — never edit it directly. |
-| Add a citation for a template | `templateCitation.m` | Logged per run by `runPipelineCore.m`. |
-| Change a Quality Gate metric | `qa/qualityGate.m` (+ `qa/finalizeBatchVerdicts.m` for batch mode) | Step params live in `stepRegistry.m`. |
-| Change TEP peak detection | `tepPeakFinder.m` (TESA detection) / `computeWindowMeasures.m` (mean, area, fallback peak) | Explore's results table prefers `tepPeakFinder` so it agrees with what an overlay would draw, and falls back to `computeWindowMeasures` when TESA is absent. |
+| Add a processing step | `registry/stepRegistry.m` (register) + `processOneFile.m` (dispatch `case`) | Recipe in [CONTRIBUTING.md](../.github/CONTRIBUTING.md#adding-a-pipeline-step). |
+| Change/add a built-in template | `util/buildTemplates.m`, then run `buildTemplates()` and commit the regenerated `templates/*.mat` | The `.mat` is generated — never edit it directly. |
+| Add a citation for a template | `registry/stepCitations.m` | Logged per run by `runPipelineCore.m`. |
+| Change a Quality Gate metric | `qa/qualityGate.m` (+ `qa/aggregateGateVerdicts.m` for batch mode) | Step params live in `registry/stepRegistry.m`. |
+| Change TEP peak detection | `analysis/tepPeakFinder.m` (TESA detection) / `analysis/computeWindowMeasures.m` (mean, area, fallback peak) | Explore's results table prefers `tepPeakFinder` so it agrees with what an overlay would draw, and falls back to `computeWindowMeasures` when TESA is absent. |
 | Change a tab's UI/behaviour | `@nestapp/nestapp.m` (callbacks) + `@nestapp/createComponents.m` (layout) | Plain-text class; diffable. |
-| Change report contents | `buildReportText.m`, `initPipelineReport.m` | |
-| Bump the version | `nestappVersion.m` + `CHANGELOG.md` (+ git tag) | A CI check keeps the three in sync. |
-| Add an environment/diagnostic check | `nestappDoctor.m` (`diagnose` + collectors) | Surfaced via Help → Copy Diagnostics; dependency list derives from `stepRegistry`. |
+| Change report contents | `report/buildReportText.m`, `report/initPipelineReport.m` | |
+| Bump the version | `nestappVersion.m` + `CHANGELOG.md` + `CITATION.cff` (+ git tag) | `tests/pure/VersionTest.m` keeps them in sync, including the README badge. |
+| Add an environment/diagnostic check | `env/nestappDoctor.m` (`diagnose` + collectors) | Surfaced via Help → Check My Install; dependency list derives from `registry/stepRegistry`. |
 
 ## Data flow of a run
 

@@ -58,12 +58,17 @@ not global:
   parameter, but it is **not** wired to `impelec`; the two are separate
   parameters today. Protecting via ASR is therefore achievable natively (no fork
   of EEGLAB) by routing `impelec` into `Channels_ignore`.
-- **Remove Bad Channels (ARTIST)** (`artistBadChannelsRansac.m`): in-house RANSAC
-  wrapper. It has **no** keep-list — it computes `badChannels` and
-  `pop_select`s them. Protecting here would require extending our wrapper to drop
+- **Detect Bad Channels (RANSAC)** (dispatched in `processOneFile.m`, wrapping
+  `clean_channels` from clean_rawdata): has **no** keep-list — it computes
+  `badChannels` and `pop_select`s them. Protecting here would require dropping
   protected indices from `badChannels` before `pop_select`. That changes our
-  removal step, not ARTIST's detection, so it does not deviate from the published
-  ARTIST algorithm — but it is an extension we would own.
+  removal step, not clean_rawdata's detection, so it does not deviate from the
+  published algorithm — but it is an extension we would own.
+
+  *(This bullet previously named a step "Remove Bad Channels (ARTIST)" and a
+  file `artistBadChannelsRansac.m`; neither exists. The detector is a
+  clean_channels wrapper, and the real ARTIST classifier was never available -
+  see the note in the audit findings.)*
 
 ### Recommendation (deferred — counting/naming was the agreed scope)
 

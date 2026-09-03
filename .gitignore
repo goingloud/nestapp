@@ -23,20 +23,19 @@
 !tools/*.m
 
 # Source files
+#
+# RECURSIVE, not one entry per folder. Line 3 (`*/`) ignores every directory,
+# so a whitelist naming folders individually means a NEW subfolder is silently
+# untracked - `git add` reports nothing and the commit looks clean. That has
+# now happened four times in this repo (tests/pure, tests/golden, and every
+# folder of the src/ reorganisation). `!src/**/` un-ignores directories at any
+# depth, so src/ no longer needs maintaining here.
 !src/
-!src/*.m
-!src/*.png
-!src/*.jpg
-!src/templates/
-!src/templates/*.mat
-!src/@nestapp/
-!src/@nestapp/*.m
-!src/qa/
-!src/qa/*.m
-!src/io/
-!src/io/*.m
-!src/aaratep_compat/
-!src/aaratep_compat/*.m
+!src/**/
+!src/**/*.m
+!src/**/*.png
+!src/**/*.jpg
+!src/**/*.mat
 
 # Tests
 #

@@ -35,7 +35,7 @@ p.parse(varargin{:});
 outDir = char(p.Results.OutputDir);
 
 root = fileparts(fileparts(mfilename('fullpath')));
-addpath(fullfile(root, 'src'));
+addpath(genpath(fullfile(root, 'src')));   % genpath: src/ has subfolders
 version = nestappVersion();
 
 % ── the file list, from git ───────────────────────────────────────────────────
