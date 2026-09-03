@@ -43,14 +43,29 @@ end
 function ok = addTree()
 ok = true;   % pathMemo memoises a value; the work here is the side effect
 repoRoot   = fileparts(fileparts(mfilename('fullpath')));   % src/ -> repo root
-aaratepDir = fullfile(repoRoot, 'third_party', 'aaratep');
 
-if ~isfolder(aaratepDir)
+% The search order lives in aaratepRelease so the installer and the loader
+% cannot disagree about where a tree may be - the same reason goldenFileStem
+% and goldenDir are each one definition. This previously composed
+% third_party/aaratep itself, which is the only location a developer checkout
+% has and the wrong one for an installed toolbox, where writing into the
+% toolbox's own folder would be erased by the next upgrade.
+rel        = aaratepRelease();
+aaratepDir = '';
+for k = 1:numel(rel.searchDirs)
+    if isfile(fullfile(rel.searchDirs{k}, [rel.sentinel '.m']))
+        aaratepDir = rel.searchDirs{k};
+        break
+    end
+end
+
+if isempty(aaratepDir)
     error('ensureAaratepOnPath:Missing', ...
-        ['AARATEP vendored tree not found at %s. ' ...
-         'Re-run: cd third_party && git clone --depth 1 ' ...
-         'https://github.com/chriscline/AARATEPPipeline.git aaratep'], ...
-        aaratepDir);
+        ['The AARATEP helper functions are not installed.\n\n' ...
+         'Install them from the app with  Help > Install AARATEP Helpers...\n' ...
+         'or at the MATLAB prompt with:\n\n    installAaratep\n\n' ...
+         'Looked in:\n  %s'], ...
+        strjoin(rel.searchDirs, sprintf('\n  ')));
 end
 
 % Drop the bundled-fork subtrees from genpath so they do not shadow the

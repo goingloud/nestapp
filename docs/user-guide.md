@@ -180,6 +180,7 @@ issue.
 
 | Symptom | Usually |
 |---|---|
+| An AARATEP step is unavailable | The helper functions are not installed — **Help → Install AARATEP Helpers...** |
 | A step is greyed out in the picker | Its plugin is missing or older than the step needs — **Check My Install** names it |
 | `Undefined function 'pop_...'` | EEGLAB's folder is not set in **Settings → Preferences** |
 | A saved pipeline will not run | The pre-flight found an unavailable step; the message names it |

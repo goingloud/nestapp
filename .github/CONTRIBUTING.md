@@ -12,11 +12,11 @@ first — it maps what each module does and where to make common changes.
    template additionally needs the Curve Fitting Toolbox.
 2. **EEGLAB**, **TESA**, **FastICA** — install per the [README](../README.md#requirements).
    These are *not* bundled with the repo.
-3. **AARATEP helpers** (only if working on that template) — clone into
-   `third_party/aaratep/`:
-   ```bash
-   cd third_party && git clone --depth 1 https://github.com/chriscline/AARATEPPipeline.git aaratep
-   ```
+3. **AARATEP helpers** (only if working on that template) — run
+   `installAaratep` at the MATLAB prompt, which fetches the pinned release into
+   `third_party/aaratep/`. A `git clone` of the same tag works too; the
+   installer stamps the version it wrote, so a hand-cloned tree is reported as
+   "version unknown" rather than assumed to be the pin.
 4. **Clone and launch**:
    ```bash
    git clone https://github.com/goingloud/nestapp.git

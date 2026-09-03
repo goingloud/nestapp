@@ -33,7 +33,7 @@ Every processed file carries its full pipeline — steps, parameters, timestamp 
 |---|---|
 | Curve Fitting Toolbox | the `Remove Decay Artifact` step (AARATEP template) |
 | `bva-io`, `loadcnt`, `curry` | reading BrainVision `.vhdr`, Neuroscan `.cnt`, Curry `.cdt` |
-| [AARATEP helpers](https://github.com/chriscline/AARATEPPipeline) | the AARATEP template — see [installing AARATEP](#installing-the-aaratep-helpers) |
+| [AARATEP helpers](https://github.com/chriscline/AARATEPPipeline) | the AARATEP template — installed from inside the app, see below |
 
 nestapp only ever *offers* a step whose dependencies are actually installed, and the pre-flight check blocks a run that references a missing one and tells you what to install. You do not have to get this list right up front.
 
@@ -60,14 +60,28 @@ which reports your MATLAB version, which plugins it can find, their versions, an
 
 ### Installing the AARATEP helpers
 
-The AARATEP pipeline's helper functions are not redistributable with this repository. From the nestapp folder:
+Only needed for the `TMS-EEG / AARATEP` template. Its helper functions are a
+separate project that nestapp cannot redistribute, so the app fetches them:
 
-```bash
-cd third_party
-git clone --depth 1 https://github.com/chriscline/AARATEPPipeline.git aaratep
+**Help → Install AARATEP Helpers...** — about a second, no other tools needed.
+
+Or at the MATLAB prompt:
+
+```matlab
+installAaratep
 ```
 
-nestapp puts this tree on the path automatically when an AARATEP step runs. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the pinned commit and licensing.
+nestapp installs a **pinned release** (currently v2.1.1), not whatever is
+newest, so that the same template produces the same result for everyone.
+If a newer AARATEP exists you are told, but upgrading is a deliberate change.
+See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the pinned commit
+and licensing.
+
+Already have your own clone? Point nestapp at it instead:
+
+```matlab
+setpref('nestapp', 'aaratepPath', '/path/to/AARATEPPipeline')
+```
 
 ---
 

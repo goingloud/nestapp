@@ -712,6 +712,44 @@ classdef nestapp < matlab.apps.AppBase
                 'Support Bundle', 'Icon', 'success');
         end
 
+        function installAaratepMenu(app, ~)
+        % INSTALLAARATEPMENU  Help action: download the AARATEP helper functions.
+        %   The AARATEP template needs a ~300-file tree that nestapp may not
+        %   redistribute, and the documented alternative is a git clone from a
+        %   terminal - which assumes git, a shell, and knowing where to put the
+        %   result. This does it in about a second with no tools installed.
+            rel = aaratepRelease();
+
+            dlg = uiprogressdlg(app.UIFigure, 'Title', 'AARATEP', ...
+                'Message', 'Starting...', 'Indeterminate', 'off');
+            closeDlg = onCleanup(@() close(dlg));
+            % dlg is a handle, so the closure updates the live dialog.
+            onProgress = @(frac, msg) set(dlg, 'Value', frac, 'Message', msg);
+
+            result = installAaratep('Progress', onProgress);
+            clear closeDlg   % the alerts below must not sit behind the dialog
+
+            if ~result.installed
+                uialert(app.UIFigure, result.message, 'AARATEP Install Failed', ...
+                    'Icon', 'error');
+                return
+            end
+
+            % A newer upstream release is reported, never installed - the pin
+            % is what keeps two people running one template on one pipeline.
+            % See aaratepRelease.
+            extra = '';
+            if ~isempty(result.newerTag)
+                extra = sprintf(['\n\nNote: AARATEP %s has since been released. ' ...
+                    'nestapp pins %s so that a template produces the same result ' ...
+                    'for everyone; upgrading is a deliberate change.'], ...
+                    result.newerTag, rel.tag);
+            end
+
+            uialert(app.UIFigure, [result.message extra], 'AARATEP', ...
+                'Icon', 'success');
+        end
+
         function selfTestMenu(app, ~)
         % SELFTESTMENU  Help action: run the fast test suite to verify the
         %   install, reporting pass/fail. Best-effort: needs tests/ present.

@@ -65,6 +65,8 @@ function createComponents(app)
                 'MenuSelectedFcn', createCallbackFcn(app, @collectSupportBundleMenu, true));
             uimenu(mHelp, 'Text', 'Check My Install', ...
                 'MenuSelectedFcn', createCallbackFcn(app, @selfTestMenu, true));
+            uimenu(mHelp, 'Text', 'Install AARATEP Helpers...', 'Separator', 'on', ...
+                'MenuSelectedFcn', createCallbackFcn(app, @installAaratepMenu, true));
 
             % Create status bar - pinned to bottom of UIFigure, visible on both tabs
             app.StatusBar = uilabel(app.UIFigure);
