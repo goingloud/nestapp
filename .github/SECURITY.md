@@ -3,13 +3,17 @@
 ## Supported versions
 
 nestapp follows semantic versioning. Fixes are applied to the latest released
-minor version. There is no long-term support for older lines during the 1.x
-series.
+minor version only; there is no long-term support for older lines.
 
 | Version | Supported |
 |---------|-----------|
-| 1.0.x   | yes       |
-| < 1.0   | no        |
+| 2.1.x   | yes       |
+| 2.0 and earlier | no |
+| 1.0.0   | no — superseded by 2.1.0, see [CHANGELOG](../CHANGELOG.md) |
+
+`1.0.0` was the open-source re-baseline of an application already released as
+`v1.01`-`v2.0`. Numbering continues from the 2.x line so that the newest release
+is unambiguously the newest code; 1.0.0 is not a supported line.
 
 ## Scope
 
@@ -21,9 +25,18 @@ does not handle credentials. The most relevant concerns are therefore:
   when loaded.
 - The `Manual Command` pipeline step, which executes user-supplied MATLAB code
   by design — only run pipelines you trust.
-- Third-party dependencies (EEGLAB, TESA, FastICA, AARATEP); vulnerabilities in
-  those should be reported upstream, but let us know if a nestapp default
-  exposes one.
+- Third-party dependencies — EEGLAB and its plugins (TESA, FastICA, ICLabel,
+  PICARD, CleanLine, clean_rawdata, firfilt) and the AARATEP helpers.
+  Vulnerabilities in those belong upstream, but tell us if a nestapp default
+  exposes one. Note that nestapp **redistributes none of them**: EEGLAB and its
+  plugins are installed by the user through EEGLAB's extension manager, and
+  `Help > Install AARATEP Helpers...` downloads a pinned upstream release over
+  HTTPS from GitHub.
+- The toolbox package (`.mltbx`) attached to a release, which MATLAB installs
+  into the user's add-ons folder. It contains only files tracked in this
+  repository — the packaging script takes its file list from `git ls-files`
+  rather than globbing the working tree, so an untracked local dependency
+  cannot be shipped inside it.
 
 ## Reporting a vulnerability
 

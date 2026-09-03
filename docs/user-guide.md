@@ -4,6 +4,7 @@ Every tab, control and export route. For installation and a first run, see the
 [README](../README.md); for the code layout, [architecture.md](architecture.md).
 
 - [Cleaning tab](#cleaning-tab)
+  - [Parallel processing](#parallel-processing)
 - [Reports tab](#reports-tab)
 - [Explore tab](#explore-tab)
 - [Preferences](#preferences)
@@ -58,6 +59,25 @@ run log at the start of every batch, so the reference stays with the data.
 A file that fails does not stop the batch: the error is captured with a
 diagnostic bundle, the remaining files continue, and the failure is listed in
 the report with the step that raised it.
+
+### Parallel processing
+
+**Parallel Processing** on the Cleaning tab spreads a batch across workers. It
+needs the Parallel Computing Toolbox, and worker count comes from
+**Settings → Preferences** (default 4, never more than the number of files).
+
+It is **requested, not guaranteed.** The run falls back to serial and says so in
+the status bar when:
+
+| | Why |
+|---|---|
+| only one file is selected | there is nothing to parallelise |
+| the Parallel Computing Toolbox is not licensed | no workers available |
+| the pipeline contains an interactive step | a step that opens a dialog cannot run on a worker |
+
+That last one is the common surprise: adding one interactive step to an
+otherwise batch pipeline turns off parallelism for the whole run. The status bar
+names the offending steps.
 
 ### Provenance
 
@@ -155,13 +175,37 @@ computed at.
 
 ## Preferences
 
-**Settings → Preferences**:
+**Settings → Preferences**, in the order the dialog presents them.
 
-- the EEGLAB installation folder;
-- default data and pipeline folders;
-- output layout — whether results are grouped by artifact type or by input file;
-- whether the Reports tab opens automatically after a run;
-- whether clearing a pipeline needs confirmation.
+**Quality Screening**
+- auto-generate QC images at each Quality Gate;
+- auto-detect the TMS pulse window from EEG events, or set it in ms;
+- skip the remaining pipeline steps when a Quality Gate fails;
+- auto-save a PDF report per file (text plus checkpoint images);
+- keep AARATEP intermediate datasets — roughly **3x the result on disk**;
+- attribute mode.
+
+**EEGLAB**
+- the installation path;
+- suppress EEGLAB's processing dialogs (you are still warned about overwrites
+  before a run);
+- hide the EEGLAB window during processing.
+
+**Default Locations**
+- data, pipeline and report folders;
+- output root — leave blank to write next to the inputs;
+- layout — group results by artifact type, or per input file.
+
+**Parallel Processing**
+- max workers: a cap on simultaneous files when Parallel is on. Greyed out with
+  *"Not available - Parallel Computing Toolbox not licensed"* if you do not
+  have the toolbox. See [Parallel processing](#parallel-processing) for when it
+  is used and when it is skipped.
+
+**Behaviour**
+- switch to the Reports tab after each run;
+- confirm before clearing a pipeline;
+- overwrite existing report files rather than timestamping them.
 
 ---
 

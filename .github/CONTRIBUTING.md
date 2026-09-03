@@ -7,11 +7,15 @@ first — it maps what each module does and where to make common changes.
 
 ## Development setup
 
-1. **MATLAB R2023b or later** (developed on R2026a). Required toolboxes:
-   Signal Processing, Statistics and Machine Learning. The `TMS-EEG / AARATEP`
-   template additionally needs the Curve Fitting Toolbox.
-2. **EEGLAB**, **TESA**, **FastICA** — install per the [README](../README.md#requirements).
-   These are *not* bundled with the repo.
+1. **MATLAB R2023b or later** (developed on R2026a). Required: Signal
+   Processing and Statistics and Machine Learning toolboxes. Optional: Parallel
+   Computing (for batch parallelism) and Curve Fitting (for the AARATEP
+   template's decay step). See the
+   [README](../README.md#requirements) for the full required/optional split.
+2. **EEGLAB plus its plugins** (TESA 1.2+, FastICA, ICLabel, PICARD, CleanLine,
+   clean_rawdata, firfilt) — install per the
+   [README](../README.md#installation). **None of these are redistributed with
+   this repo**; `eeglab2026.0.0/` in a development checkout is untracked.
 3. **AARATEP helpers** (only if working on that template) — run
    `installAaratep` at the MATLAB prompt, which fetches the pinned release into
    `third_party/aaratep/`. A `git clone` of the same tag works too; the
