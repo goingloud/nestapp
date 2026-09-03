@@ -49,8 +49,8 @@
 %
 %   DURING THE REWRITE this runner also serves the OLD suite under its old
 %   names (unit, regression, integration, ui, characterization, and 'fast'
-%   meaning unit+regression); it is now an alias for 'pure', so the dormant CI
-%   workflow that calls it still resolves to a real suite.
+%   meaning unit+regression); it is now an alias for 'pure', which is what the
+%   CI workflow calls and the only suite a hosted runner can execute.
 %
 %   See also: NestappTestCase, addNestappPath, scratchDir
 
@@ -153,11 +153,11 @@ switch suite
         spec.needs   = {'eeglab', 'display'};
 
     % 'fast' is what .github/workflows/tests.yml calls. It named the old
-    % unit+regression suite; now it is simply 'pure'. Kept as an alias because
-    % renaming a suite out from under a workflow turns a DORMANT job into a
-    % BROKEN one, and the breakage would only surface whenever someone revives
-    % it. CI has not run since 2026-05-31; a one-line alias keeps that door
-    % open at no cost.
+    % unit+regression suite; now it is simply 'pure', which is the only suite a
+    % hosted runner can execute - it needs neither EEGLAB nor a display, and it
+    % skips nothing. Kept as an alias rather than renamed in the workflow so
+    % that a checkout of an older commit still resolves 'fast' to something
+    % real.
     case 'fast'
         spec.folders = at('pure');
 

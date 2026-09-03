@@ -66,10 +66,11 @@ first. It maps what each module does and where to make common changes.
 
 ## Pull requests
 
-- Ensure `run_tests('all')` passes. **CI is not a safety net here**: the
-  workflow has not run since 2026-05-31, and EEGLAB is untracked so a runner
-  could not execute the `eeglab` suite anyway. Running the suites locally is
-  the only gate that actually exists.
+- Ensure `run_tests('all')` passes locally. CI runs the `pure` suite and the
+  linter on every push to `main` and `develop` and on every pull request, but
+  it cannot run the `eeglab`, `gui` or `eeglab_gui` suites: EEGLAB is not
+  tracked in this repository and a hosted runner has no display. So CI proves
+  the pure suite and static analysis; the other three are on you.
 - When you add a test, put it in the folder its dependencies require and let
   the suite run with no skips. When you add a *helper*, make sure something
   calls it. An unused helper is a second thing to keep in step, and the

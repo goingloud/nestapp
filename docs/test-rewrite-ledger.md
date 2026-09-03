@@ -338,7 +338,7 @@ below, which is the first evidence this project has had on that question.
 - `run_tests`: the LEGACY suite block is gone and `strictSkips` with it, since
   a skip is now unconditionally a failure. **`fast` stays as an alias for
   `pure`** — `.github/workflows/tests.yml` calls it, and renaming a suite out
-  from under a dormant workflow turns it into a broken one.
+  from under the workflow that calls it would break the one gate that runs.
 - **Five helpers deleted** (`assumeDesktop`, `driveModalDialog`, `fakeRegistry`,
   `hideFromPath`, `isolateRoiPresets`) — every caller was in the old suite.
   `isolateRoiPresets` was first generalised into `isolatePrefs(testCase, keys)`,
@@ -447,3 +447,26 @@ companion case calls `pop_rmbase` directly with no nestapp code in it at all —
 which is the "asserting that EEGLAB works" category the plan excluded by name.
 Neither was coverage worth carrying forward. Recorded here so the gap is known
 rather than lost.
+
+---
+
+## Correction: CI was never dormant
+
+This document's context section recorded that CI "has had **zero runs since
+2026-05-31**", and that claim was repeated in `.github/CONTRIBUTING.md` and in
+`run_tests.m`. It was wrong, and it was inherited from the plan without being
+checked against the run history.
+
+CI had been running continuously and **failing**, on every push to `develop`,
+from at least 2026-07-21 through 2026-09-03. The cause is the finding this
+rewrite already recorded from the other direction: the `fast` suite's
+documented "no EEGLAB, no GUI" contract was false, so ~21 cases were
+structurally dead on a hosted runner and the job could not pass.
+
+Aliasing `fast` to `pure` at the cutover fixed it. `pure` needs neither EEGLAB
+nor a display and skips nothing, so it is the one suite a hosted runner can
+execute honestly. **Tests, Lint and Docs are now green on both branches**, with
+the Tests job reporting 174 passed, 0 failed, 0 skipped in about two minutes.
+
+The lesson is the same one this rewrite keeps relearning: a claim about what a
+gate does is worth exactly as much as the last time somebody looked at it.
