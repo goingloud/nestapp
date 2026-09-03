@@ -49,7 +49,7 @@ classdef FigureScaleTest < NestappTestCase
         % Two groups (rows) x two windows (columns). The groups within a window
         % must still share, because that is the comparison the rows exist for.
             vals = {[1 -1]', [10 -10]'; [2 -2]', [8 -8]'};
-            [perCol, shared] = topoColourScale(vals, 'per column');
+            [perCol, shared] = topoColourScale(vals, true);
             tc.verifyEqual(perCol{1}, [-2 2]);
             tc.verifyEqual(perCol{2}, [-10 10]);
             tc.verifyEmpty(shared, ...
@@ -60,9 +60,9 @@ classdef FigureScaleTest < NestappTestCase
         % Ledger C4. A caller hanging one bar over per-column maps would state a
         % voltage that means something else in the map beside it - a wrong
         % number on a published figure, and one nothing on screen contradicts.
-            [~, shared] = topoColourScale({[1 2]', [3 4]'}, 'per column');
+            [~, shared] = topoColourScale({[1 2]', [3 4]'}, true);
             tc.verifyEmpty(shared);
-            [~, stillShared] = topoColourScale({[1 2]', [3 4]'}, 'shared');
+            [~, stillShared] = topoColourScale({[1 2]', [3 4]'}, false);
             tc.verifyNotEmpty(stillShared);
         end
 
@@ -70,14 +70,14 @@ classdef FigureScaleTest < NestappTestCase
         % drawGroupTopo's "per map" and drawTEPTopo's "per window" were the
         % same rule written twice; per-map over a single row IS per-column.
             vals = {[1 -1]', [5 -5]'};
-            perCol = topoColourScale(vals, 'per column');
+            perCol = topoColourScale(vals, true);
             tc.verifyEqual(perCol, {[-1 1], [-5 5]});
         end
 
         function aPinnedMagnitudeOverridesTheMode(tc)
         % What makes two figures from different runs comparable: a derived scale
         % moves with the data, so the same colour means a different voltage.
-            [perCol, shared] = topoColourScale({[1 2]', [3 4]'}, 'per column', 7);
+            [perCol, shared] = topoColourScale({[1 2]', [3 4]'}, true, 7);
             tc.verifyEqual(shared, [-7 7]);
             tc.verifyEqual(perCol{1}, [-7 7]);
             tc.verifyEqual(perCol{2}, [-7 7]);
@@ -86,7 +86,7 @@ classdef FigureScaleTest < NestappTestCase
         function aNegativePinIsReadAsAMagnitude(tc)
         % -6 and 6 name the same symmetric scale; the alternative is an
         % inverted CLim that renders every map in reverse polarity.
-            [~, shared] = topoColourScale({[1 2]'}, 'shared', -6);
+            [~, shared] = topoColourScale({[1 2]'}, false, -6);
             tc.verifyEqual(shared, [-6 6]);
         end
 
@@ -94,20 +94,20 @@ classdef FigureScaleTest < NestappTestCase
         % Ledger C1's sibling. Unticking the form's Default checkbox without
         % typing a number leaves 0 behind; honouring it would pin every map to
         % +/-1 uV and hide all of the data.
-            [~, pinned]  = topoColourScale({[3 -3]'}, 'shared', 0);
-            [~, derived] = topoColourScale({[3 -3]'}, 'shared');
+            [~, pinned]  = topoColourScale({[3 -3]'}, false, 0);
+            [~, derived] = topoColourScale({[3 -3]'}, false);
             tc.verifyEqual(pinned, derived);
             tc.verifyNotEqual(pinned, [-1 1]);
         end
 
         function aZeroPinDoesNotSuppressPerColumn(tc)
         % The override only wins when it states something.
-            [~, shared] = topoColourScale({[1 1]', [9 9]'}, 'per column', 0);
+            [~, shared] = topoColourScale({[1 1]', [9 9]'}, true, 0);
             tc.verifyEmpty(shared);
         end
 
         function anExplicitPairWinsOutright(tc)
-            [perCol, shared] = topoColourScale({[1 2]', [3 4]'}, 'per column', [-9 9]);
+            [perCol, shared] = topoColourScale({[1 2]', [3 4]'}, true, [-9 9]);
             tc.verifyEqual(shared, [-9 9]);
             tc.verifyEqual(perCol{2}, [-9 9]);
         end

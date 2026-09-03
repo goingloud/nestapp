@@ -32,21 +32,25 @@ classdef DispatchContractTest < NestappTestCase
         % were run twice and the fixture was rebuilt and re-saved 110 times -
         % which is the redundant pop_saveset pattern the audit found in the old
         % suite, reproduced by me. One save, one pass.
-            global EEG ALLEEG CURRENTSET ALLCOM %#ok<GVMIS>
-            evalc('[ALLEEG, EEG, CURRENTSET, ALLCOM] = eeglab(''nogui'');');
+            startEeglab(tc);
 
             tc.Registry = stepRegistry();
             tc.assertNotEmpty(tc.Registry);
 
-            tmp = scratchDir(tc);
-            evalc(['pop_saveset(charFixture(''epochedPulses''), ' ...
-                   '''filename'', ''probe.set'', ''filepath'', tmp);']);
-            tc.ProbeSet = fullfile(tmp, 'probe.set');
+            % 'tiny' - 8 channels, 100 samples, 4 trials - because its own
+            % docstring says it is "the smallest thing every step will still
+            % accept... for tests that ask 'does this run at all' across every
+            % step", which is exactly this sweep. It had been using
+            % 'epochedPulses' (32 x 600 x 24), fifty-five times, to establish
+            % a fact that does not depend on the data at all: whether the
+            % dispatch RECOGNISES the step name, which it decides before the
+            % step touches a sample.
+            tc.ProbeSet = saveFixtureSet(scratchDir(tc), 'tiny');
 
             tc.Outcomes = containers.Map();
             for i = 1:numel(tc.Registry)
                 name = tc.Registry(i).name;
-                if tc.isInteractive(tc.Registry(i)); continue; end
+                if alwaysBlocks(tc.Registry(i)); continue; end
                 tc.Outcomes(name) = tc.dispatchOnce(name);
             end
         end
@@ -147,25 +151,38 @@ classdef DispatchContractTest < NestappTestCase
     methods (Access = private)
 
         function err = dispatchOnce(tc, name)
-        % Run [Load Data, <step>] on a generic fixture and hand back whatever
+        % Run [Load Data, <step>] on the shared fixture and hand back whatever
         % it threw. Most steps fail for their own reasons here - wrong data
         % shape, no events, a plugin wanting more setup - and that is fine:
         % any error but nestapp:unknownStep proves the step was recognised.
             err = [];
             try
-                tc.runSpec(tc.specFor(name));
+                evalc(['processOneFile(tc.specFor(name), tc.ProbeSet, ' ...
+                       'struct(''pipelineName'', ''dispatch'', ''fileIndex'', 1));']);
             catch e
                 err = e;
             end
         end
 
         function tf = isUnimplemented(~, err)
-        % processOneFile catches the dispatch error and rethrows it wrapped as
-        % nestapp:stepFailed, so the identifier alone cannot distinguish "no
-        % implementation" from "the step ran and failed on this fixture" -
-        % which is the whole distinction this file rests on. The inner message
-        % is what carries it.
-            tf = ~isempty(err) && contains(err.message, 'has no implementation');
+        % Reads the CAUSE CHAIN, not the message text. processOneFile wraps a
+        % failing step as nestapp:stepFailed, so the outer identifier cannot
+        % distinguish "no implementation" from "the step ran and failed on
+        % this fixture" - which is the whole distinction this file rests on.
+        %
+        % That used to be recovered by matching the English phrase "has no
+        % implementation" in the message, which made the coverage check
+        % depend on prose written for a human: rewording it would have
+        % silently defeated the check for every step at once, and the control
+        % test would not have noticed because both read the same string.
+        % processOneFile now attaches the original error with addCause, so
+        % the identifier survives and is what gets asserted.
+            if isempty(err); tf = false; return; end
+            ids = {};
+            if ~isempty(err.cause); ids = cellfun(@(c) c.identifier, ...
+                                                  err.cause, 'UniformOutput', false); end
+            tf = strcmp(err.identifier, 'nestapp:unknownStep') || ...
+                 any(strcmp(ids, 'nestapp:unknownStep'));
         end
 
         function tf = looksLikeAPrompt(~, err)
@@ -193,22 +210,21 @@ classdef DispatchContractTest < NestappTestCase
             end
         end
 
-        function runSpec(tc, spec)
-            evalc(['processOneFile(spec, tc.ProbeSet, ' ...
-                   'struct(''pipelineName'', ''dispatch'', ''fileIndex'', 1));']);
-        end
-
         function runTinyPipeline(tc, outRoot, layout)
         % Two steps, so the run completes and writes its batch artifacts.
-            reg   = tc.Registry;
-            fname = 'layout_probe.set';
-            evalc('pop_saveset(charFixture(''tiny''), ''filename'', fname, ''filepath'', outRoot);');
-            spec  = [makePipelineStep('Load Data', reg), ...
-                     makePipelineStep('Save New Set', reg)];
-            opts  = struct('uiFigure', [], 'pipelineName', 'layout-probe', ...
-                           'statusBar', [], 'parallel', false, 'chanLocFile', '', ...
-                           'outputRoot', outRoot, 'layout', layout);
-            evalc('runPipelineCore(spec, {fullfile(outRoot, fname)}, opts);');
+            reg = tc.Registry;
+            % Written into outRoot rather than the shared scratch dir, because
+            % this test asserts on the folder structure the run creates BESIDE
+            % its input.
+            fx = charFixture('tiny');
+            evalc('pop_saveset(fx, ''filename'', ''layout_probe.set'', ''filepath'', outRoot);');
+            spec = [makePipelineStep('Load Data', reg), ...
+                    makePipelineStep('Save New Set', reg)];
+            opts = struct('uiFigure', [], 'pipelineName', 'layout-probe', ...
+                          'statusBar', [], 'parallel', false, 'chanLocFile', '', ...
+                          'outputRoot', outRoot, 'layout', layout);
+            evalc(['runPipelineCore(spec, ' ...
+                   '{fullfile(outRoot, ''layout_probe.set'')}, opts);']);
         end
 
         function p = soleBatchFolder(tc, outRoot)
@@ -220,9 +236,21 @@ classdef DispatchContractTest < NestappTestCase
             p = fullfile(outRoot, d(1).name);
         end
 
-        function tf = isInteractive(~, entry)
-            tf = isfield(entry, 'interactive') && ~isempty(entry.interactive) ...
-                 && entry.interactive;
-        end
     end
+end
+
+function tf = alwaysBlocks(entry)
+% Skip only the steps that wait for a human REGARDLESS of their parameters -
+% which is canStepBlock's second output, and the registry's own predicate for
+% this question.
+%
+% This was a local copy checking entry.interactive directly, which silently
+% ignored `interactiveWhen`: a step that blocks only in certain modes (TESA
+% component review, when compCheck is on) was classified by a rule that did
+% not know the field existed. It happens to agree at default parameters, so
+% the swap changes nothing today - but the copy would have gone stale the
+% moment canStepBlock's encoding changed, and the thing it would then
+% mis-classify is precisely what noStepFlaggedNonInteractiveOpensADialog
+% exists to catch.
+[~, tf] = canStepBlock(entry);
 end

@@ -1,18 +1,28 @@
 % SPDX-License-Identifier: GPL-3.0-or-later
 % Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
 % Part of nestapp; see the LICENSE file for full terms.
-function [perColumn, shared] = topoColourScale(vals, mode, override)
+function [perColumn, shared] = topoColourScale(vals, byColumn, override)
 % TOPOCOLOURSCALE  Decide the colour limits for a grid of scalp maps.
 %   [perColumn, shared] = TOPOCOLOURSCALE(vals)
-%   [perColumn, shared] = TOPOCOLOURSCALE(vals, mode)
-%   [perColumn, shared] = TOPOCOLOURSCALE(vals, mode, override)
+%   [perColumn, shared] = TOPOCOLOURSCALE(vals, byColumn)
+%   [perColumn, shared] = TOPOCOLOURSCALE(vals, byColumn, override)
 %
 %   vals       nRows-by-nCols cell, each holding one map's channel values.
 %              A row is a group; a column is a window.
-%   mode       'shared' (default) - one limit across the whole grid
-%              'per column'       - one limit per column, shared down its rows
+%   byColumn   false (default) - one limit across the whole grid
+%              true            - one limit per column, shared down its rows
 %   override   [] to derive; a scalar uV to pin the limits at +/- that value;
 %              or an explicit 2-element [lo hi], which wins outright.
+%
+%   A LOGICAL RATHER THAN A MODE STRING, deliberately. Both callers name this
+%   choice in their own vocabulary - drawGroupTopo calls it "per map",
+%   drawTEPTopo "per window" - and each had grown the same two-line adapter
+%   translating its word into a third one this function understood. Taking a
+%   boolean lets each caller pass matchesChoice(opts.<its own field>, '<its
+%   own word>') in one line, with no duplicated translation and without this
+%   function learning either caller's domain naming. Teaching it those words
+%   would re-couple pure arithmetic to the registry's wording, which is how
+%   three drifted copies of one enum comparison happened.
 %
 %   perColumn  1-by-nCols cell of [lo hi], the limits each column's maps use.
 %   shared     [lo hi] when every column shares one, and EMPTY when they do
@@ -49,8 +59,8 @@ function [perColumn, shared] = topoColourScale(vals, mode, override)
 %
 %   See also: drawScalpTopo, drawGroupTopo, drawTEPTopo, sharedColorbar
 
-if nargin < 2 || isempty(mode);     mode = 'shared'; end
-if nargin < 3;                      override = [];   end
+if nargin < 2 || isempty(byColumn); byColumn = false; end
+if nargin < 3;                      override = [];    end
 
 nCols = size(vals, 2);
 if isempty(vals)
@@ -59,35 +69,33 @@ if isempty(vals)
     return
 end
 
-% An explicit pair wins outright, and pins every column to it.
-if numel(override) == 2
-    shared    = override(:)';
-    perColumn = repmat({shared}, 1, nCols);
-    return
-end
-
+% A zero or non-finite pin names no scale at all, so it is read as "derive
+% one" before the precedence chain below sees it.
 if ~isempty(override) && (~isfinite(override(1)) || override(1) == 0)
-    override = [];      % names no scale; derive one
+    override = [];
 end
 
-if ~isempty(override)
-    m         = abs(override(1));
-    shared    = [-m m];
-    perColumn = repmat({shared}, 1, nCols);
-    return
+% ONE decision - what is the shared limit - then perColumn is derived from it.
+% Precedence: an explicit pair, then a pinned magnitude, then the mode.
+if numel(override) == 2
+    shared = override(:)';
+elseif ~isempty(override)
+    m      = abs(override(1));
+    shared = [-m m];
+elseif byColumn
+    shared = [];        % nothing for one colour bar to describe
+else
+    shared = symmetricLimit(vals(:));
 end
 
-if matchesChoice(mode, 'per column')
+if isempty(shared)
     perColumn = cell(1, nCols);
     for k = 1:nCols
         perColumn{k} = symmetricLimit(vals(:, k));
     end
-    shared = [];        % nothing for one colour bar to describe
-    return
+else
+    perColumn = repmat({shared}, 1, nCols);
 end
-
-shared    = symmetricLimit(vals(:));
-perColumn = repmat({shared}, 1, nCols);
 end
 
 function lim = symmetricLimit(cells)

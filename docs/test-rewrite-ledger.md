@@ -42,7 +42,35 @@ the 17 numbered findings in `docs/param-audit-findings.md`, all marked DONE with
 | `characterization` | 2 | 2 | 0 | 0 | 3.3 |
 | **total** | **916** | | | | **174.5** |
 
-Two things this table is evidence for. **`fast` skips nothing here** — because EEGLAB is on the
+### New suite, same machine
+
+| suite | cases | pass | fail | skip | seconds |
+|---|---|---|---|---|---|
+| `pure` | 151 | 151 | 0 | 0 | **4.2** |
+| `eeglab` | 18 | 18 | 0 | 0 | 17.9 |
+| `gui` | 17 | 17 | 0 | 0 | 1.1 |
+| **total** | **186** | **186** | **0** | **0** | **23.2** |
+
+**916 cases / 174.5 s becomes 186 cases / 23.2 s.** `pure` is 4.2 s against a 20 s target, so the
+suite is cheap enough to run on every save, which was the whole point of the target.
+
+The `eeglab` figure was **125.7 s** until an efficiency pass found two duplicated-work bugs I had
+written myself, both of them the same pattern the audit had found in the old suite:
+
+- `DispatchContractTest` sweeps all 55 registry steps to prove each one is *recognised* by the
+  dispatch — a fact settled before the step reads a sample. It was doing that on
+  `charFixture('epochedPulses')` (32 x 600 x 24), whose four ICA steps accounted for 93% of the
+  sweep and Infomax alone for 73%. `charFixture('tiny')`'s own docstring says it exists "for tests
+  that ask 'does this run at all' across every step". Swapping it: **31.3 s to 2.5 s**, with the
+  same steps recognised and the same none unimplemented.
+- `StepGoldenTest` saved a `.set` per case — ten saves for ten goldens over **three** distinct
+  fixture kinds. Now named by kind, so the ten cases share three files.
+
+Neither changed a single assertion. Recorded here because "I reproduced the exact inefficiency I
+was removing" is the more useful half of the finding: the old suite's redundant `pop_saveset`
+pattern was not carelessness, it is what writing a step test naturally produces.
+
+Two things the baseline table is evidence for. **`fast` skips nothing here** — because EEGLAB is on the
 path locally; on the CI runner the same 791 cases include ~21 that skip and never run, which is the
 local-vs-CI divergence the rewrite removes by construction. And **`fast` takes 57.6 s**, which is
 why the target for `pure` is under 20 s: a suite that costs a minute is not one you run constantly,

@@ -67,7 +67,7 @@ classdef ReportOutputTest < NestappTestCase
             r = initPipelineReport('/data/s.set');
             r.channels = struct('original', 64, 'nRejected', 5, ...
                                 'nInterpolated', 3, 'final', 64);
-            txt = exportReport(r, tc.scratch());
+            txt = exportReport(r, scratchDir(tc));
 
             tc.verifyTrue(contains(txt, '5 removed'), ...
                 'a reader must be able to see that channels were lost');
@@ -76,7 +76,7 @@ classdef ReportOutputTest < NestappTestCase
 
         function theSummaryNamesTheFileItIsAbout(tc)
             r = initPipelineReport('/data/subject07.set');
-            tc.verifyTrue(contains(exportReport(r, tc.scratch()), 'subject07'));
+            tc.verifyTrue(contains(exportReport(r, scratchDir(tc)), 'subject07'));
         end
 
         % ── where things are written ─────────────────────────────────────────
@@ -140,15 +140,6 @@ classdef ReportOutputTest < NestappTestCase
             d   = scratchDir(tc);
             ctx = buildBatchContext({'/in/a.set'}, 'demo', 'typeBased', d);
             tc.verifyEqual(ctx.outputRoot, d);
-        end
-    end
-
-    methods (Access = private)
-        function d = scratch(tc)
-        % exportReport falls back to pwd when handed '', which is how the old
-        % suite wrote 36 .mat files into its own source directories. No test
-        % here calls it that way.
-            d = scratchDir(tc);
         end
     end
 end

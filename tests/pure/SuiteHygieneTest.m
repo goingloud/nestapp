@@ -40,28 +40,39 @@ classdef SuiteHygieneTest < NestappTestCase
         % design - see the class comment.
         SuiteFolders = {'pure', 'eeglab', 'gui', 'eeglab_gui'}
 
-        % Files permitted to read nestapp source as text. Source scraping is
-        % not banned outright because two contracts genuinely need it - "every
-        % plot param key is a real option of its draw function" and "every case
-        % literal in methodsClause is a real registry step". Both DERIVE the
-        % expected set from the registry rather than hardcoding it, which is
-        % what separates them from the 19 brittle scrapes being deleted (exact
-        % source lines as string literals; extractBetween bounded by an
-        % ADJACENT function's name, so renaming a neighbour broke them).
-        % An allowlist makes adding a third one a deliberate act.
-        MayReadSource = {'RegistryContractTest', 'MethodsClauseTest'}
+        % Files permitted to read a file as text, each with a reason.
+        %
+        % RegistryContractTest and MethodsClauseTest read nestapp SOURCE, which
+        % is the practice this rewrite is otherwise eliminating. They are
+        % allowed because both DERIVE their expected set from the registry and
+        % check the code against it - the opposite of the 19 scrapes being
+        % deleted, which hardcoded a source fragment and checked the source
+        % still contained it, so they failed on rewording and caught nothing.
+        %
+        % StepGoldenTest reads recorded JSON, not source. That is data the
+        % suite owns, so it carries none of the brittleness above - but it
+        % still reads a file as text, and the rule cannot tell a .json target
+        % from a .m one without parsing the call. Listing it keeps the rule
+        % honest rather than loosening it: every text read in the suite is
+        % accounted for by name.
+        MayReadSource = {'RegistryContractTest', 'MethodsClauseTest', ...
+                         'StepGoldenTest'}
     end
 
     properties (Access = private)
-        % One entry per suite file: .path .name .folder .code (comments stripped).
+        % One entry per suite file: .path .name .folder .code (comments
+        % stripped), .effective (.code plus the code of every tests/helpers
+        % function it calls - see helperClosure).
         Files
     end
 
     methods (TestClassSetup)
         function readTheSuiteOnce(tc)
         % Runs after NestappTestCase's own TestClassSetup has fixed the path.
-            tc.Files = struct('path', {}, 'name', {}, 'folder', {}, 'code', {});
+            tc.Files = struct('path', {}, 'name', {}, 'folder', {}, ...
+                              'code', {}, 'effective', {});
             root = fullfile(addNestappPath(), 'tests');
+            helpers = readHelpers(fullfile(root, 'helpers'));
 
             % Every suite folder goes on the path for the duration, because
             % everyTestClassInheritsTheBase resolves classes by reflection and
@@ -97,9 +108,10 @@ classdef SuiteHygieneTest < NestappTestCase
                     if strcmp(e(i).name, 'SuiteHygieneTest.m'); continue; end
                     p = fullfile(d, e(i).name);
                     [~, name] = fileparts(e(i).name);
+                    code = stripComments(p);
                     tc.Files(end+1) = struct('path', p, 'name', name, ...
-                                             'folder', folder, ...
-                                             'code', stripComments(p));
+                                             'folder', folder, 'code', code, ...
+                                             'effective', helperClosure(code, helpers));
                 end
             end
         end
@@ -158,8 +170,8 @@ classdef SuiteHygieneTest < NestappTestCase
             allowed = tc.MayReadSource;
             tc.verifyNoneOf(@(f) noteWhen(~ismember(f.name, allowed) && ...
                     ~isempty(regexp(f.code, '(fileread|readlines)\s*\(', 'once'))), ...
-                ['reads source as text; prefer a behavioural test, or add it ' ...
-                 'to SuiteHygieneTest.MayReadSource with a reason']);
+                ['reads a file as text; prefer a behavioural test, or add ' ...
+                 'it to SuiteHygieneTest.MayReadSource with a reason']);
         end
 
         function everyTestIsInTheFolderItsDependenciesRequire(tc)
@@ -180,18 +192,36 @@ classdef SuiteHygieneTest < NestappTestCase
         % The postmortem comment left in .gitignore asks a human to remember.
         % This is that same rule, enforced - which is this file's whole
         % argument, applied to the one place it had been left as prose.
-            ignore  = fileread(fullfile(addNestappPath(), '.gitignore'));
+        %
+        % ASKED OF GIT, NOT OF THE FILE. The first version of this rule read
+        % .gitignore and looked for the literal '!tests/<folder>/*.m', which
+        % asserts how the rule is SPELLED rather than what it DOES - the same
+        % source-scraping mistake the old suite made nineteen times, and one
+        % that a negation elsewhere in the file, a different but equivalent
+        % pattern, or a second .gitignore deeper in the tree would each defeat
+        % while the text still matched. check-ignore is the resolver git itself
+        % uses when deciding what to add, so it is the only answer that cannot
+        % be wrong.
             missing = {};
             for k = 1:numel(tc.SuiteFolders)
-                want = sprintf('!tests/%s/*.m', tc.SuiteFolders{k});
-                if ~contains(ignore, want)
-                    missing{end+1} = want; %#ok<AGROW>
+                rel = sprintf('tests/%s/ZZHygieneProbeTest.m', tc.SuiteFolders{k});
+                if tc.gitIgnores(rel)
+                    missing{end+1} = rel; %#ok<AGROW>
                 end
             end
             tc.verifyEmpty(missing, sprintf( ...
-                ['.gitignore does not whitelist %d suite folder(s), so files ' ...
-                 'there are silently untracked. Add: %s'], ...
+                ['git would not add a new test in %d suite folder(s), so files ' ...
+                 'there are silently untracked. Whitelist in .gitignore: %s'], ...
                 numel(missing), strjoin(missing, ', ')));
+
+        % Positive control, in the same test because it is the same fact: a
+        % folder nobody whitelisted MUST come back ignored. Without it a probe
+        % that silently stopped resolving - a git that failed to run, a path
+        % git could not read - would report every folder safe, which is how
+        % three tests in this rewrite passed while asserting nothing.
+            tc.verifyTrue(tc.gitIgnores('tests/not_a_suite_folder/ZZProbe.m'), ...
+                ['the ignore probe itself is not working: an unlisted folder ' ...
+                 'came back tracked, so the check above proves nothing']);
         end
 
         function theHelpersAreActuallyShared(tc)
@@ -216,6 +246,18 @@ classdef SuiteHygieneTest < NestappTestCase
 
     % ── the one shape every rule uses ────────────────────────────────────────
     methods (Access = private)
+
+        function tf = gitIgnores(tc, relPath)
+        % True when git would refuse to add relPath. Exit 0 means ignored, 1
+        % means not; anything else is git failing to answer, which must be a
+        % failure and not a quiet false either way.
+            [status, out] = system(sprintf('git -C "%s" check-ignore -q "%s"', ...
+                                           addNestappPath(), relPath));
+            tc.assertTrue(ismember(status, [0 1]), sprintf( ...
+                'git check-ignore could not answer for %s (exit %d): %s', ...
+                relPath, status, strtrim(out)));
+            tf = status == 0;
+        end
 
         function verifyNoneOf(tc, noteFcn, why)
         % noteFcn(fileEntry) returns '' when the file is fine, or text to
@@ -275,9 +317,19 @@ function note = folderNote(f)
 % A folder may be MORE permissive than the file needs (a pure test parked in
 % eeglab/ is wasteful, not wrong), but never less: that is the failure that
 % makes a suite's contract a lie.
-needsEeglab = ~isempty(regexp(f.code, ['(^|[^.\w])(pop_[a-z]\w*|eeg_checkset|' ...
+%
+% READS f.effective, NOT f.code, and that distinction is the whole rule. A
+% requirement moved behind a shared helper disappears from the calling file's
+% text while remaining just as real - which happened here: extracting
+% startEeglab and saveFixtureSet took the last 'eeglab(' and 'pop_saveset('
+% out of StepGoldenTest, and a text-only version of this rule went from
+% correctly identifying it as needing EEGLAB to seeing a file it would happily
+% have accepted in pure/. Since using helpers is the thing this suite is built
+% to encourage, a rule that goes blind exactly when a helper is used would
+% decay to nothing on its own.
+needsEeglab = ~isempty(regexp(f.effective, ['(^|[^.\w])(pop_[a-z]\w*|eeg_checkset|' ...
     'eeg_emptyset|eeglab|topoplot|convertlocs|readlocs)\s*\('], 'once'));
-needsDisplay = ~isempty(regexp(f.code, ['(^|[^.\w])(uifigure|figure|uiaxes|axes|' ...
+needsDisplay = ~isempty(regexp(f.effective, ['(^|[^.\w])(uifigure|figure|uiaxes|axes|' ...
     'subplot|uipanel|exportapp|nestapp)\s*\('], 'once'));
 
 if      needsEeglab &&  needsDisplay; want = 'eeglab_gui';
@@ -300,6 +352,35 @@ note = '';
 if ~ok
     note = sprintf(' (in %s/, needs %s/)', f.folder, want);
 end
+end
+
+function h = readHelpers(dir_)
+% name -> stripped source, for every function in tests/helpers.
+h = struct('name', {}, 'code', {});
+if ~isfolder(dir_); return; end
+e = dir(fullfile(dir_, '*.m'));
+for i = 1:numel(e)
+    [~, name] = fileparts(e(i).name);
+    h(end+1) = struct('name', name, 'code', stripComments(fullfile(dir_, e(i).name))); %#ok<AGROW>
+end
+end
+
+function txt = helperClosure(code, helpers)
+% A file's own code plus the code of every tests/helpers function it names.
+%
+% ONE LEVEL DEEP, deliberately, and the same choice drawSourceGraph makes for
+% the same reason: helpers call each other at most once here (saveFixtureSet
+% calls charFixture and scratchDir), and a transitive closure would need cycle
+% handling to buy a depth nothing yet uses. If a helper ever hides a
+% requirement two levels down, this is where to deepen it - but the honest
+% statement is that it is one level, not that it is complete.
+parts = {code};
+for k = 1:numel(helpers)
+    if ~isempty(regexp(code, ['(^|[^.\w])' helpers(k).name '\s*\('], 'once'))
+        parts{end+1} = helpers(k).code; %#ok<AGROW>
+    end
+end
+txt = strjoin(parts, newline);
 end
 
 function s = shortPath(p)

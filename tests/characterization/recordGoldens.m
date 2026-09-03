@@ -94,6 +94,8 @@ d = eegDigest(EEG);
 end
 
 function s = safeName(name)
-s = regexprep(name, '[^A-Za-z0-9]+', '_');
-s = regexprep(s, '_+$', '');
+% Delegates to the shared definition, so the recorder and StepGoldenTest
+% cannot disagree about where a golden lives. Kept as a local name because
+% two call sites above read better with it.
+s = goldenFileStem(name);
 end

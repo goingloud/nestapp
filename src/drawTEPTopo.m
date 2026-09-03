@@ -113,9 +113,8 @@ end
 % groups in it. topoColourScale decides both, and returns an EMPTY shared limit
 % under 'per window' so nothing downstream can hang one colour bar over columns
 % that no longer share a scale.
-mode = 'shared';
-if matchesChoice(opts.mapScale, 'per window'); mode = 'per column'; end
-[colClim, info.clim] = topoColourScale(vals, mode);
+[colClim, info.clim] = topoColourScale(vals, ...
+                            matchesChoice(opts.mapScale, 'per window'));
 perWindow = isempty(info.clim);
 
 % ── geometry ────────────────────────────────────────────────────────────

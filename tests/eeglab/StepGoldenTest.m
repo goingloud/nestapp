@@ -41,12 +41,17 @@ classdef StepGoldenTest < NestappTestCase
         goldenCase = StepGoldenTest.casesByName()
     end
 
+    properties (Access = private)
+        % Class-scoped, so the ten cases share the three .set files they save
+        % between them. scratchDir teardown follows the scope that called it,
+        % and TestClassSetup is the scope that makes the sharing correct.
+        FixtureDir
+    end
+
     methods (TestClassSetup)
         function eeglabIsUp(tc)
-        % run_tests has already checked EEGLAB is on the path; this brings the
-        % session up so the plugin functions the steps call resolve.
-            evalc('eeglab(''nogui'')');
-            tc.assertNotEmpty(which('pop_saveset'));
+            startEeglab(tc);
+            tc.FixtureDir = scratchDir(tc);
         end
     end
 
@@ -54,7 +59,7 @@ classdef StepGoldenTest < NestappTestCase
 
         function theStepStillDoesWhatItWasRecordedDoing(tc, goldenCase)
             gf = fullfile(addNestappPath(), tc.GoldenDir, ...
-                          [safeGoldenName(goldenCase.name) '.json']);
+                          [goldenFileStem(goldenCase.name) '.json']);
             tc.assertTrue(isfile(gf), sprintf( ...
                 ['no golden for "%s". Record one deliberately with ' ...
                  'recordGoldens(''%s'') - never as a reaction to a red test.'], ...
@@ -74,7 +79,7 @@ classdef StepGoldenTest < NestappTestCase
             d      = dir(fullfile(addNestappPath(), tc.GoldenDir, '*.json'));
             onDisk = strrep({d.name}, '.json', '');
             rows   = characterizationCases();
-            named  = cellfun(@safeGoldenName, rows(:, 1), 'UniformOutput', false);
+            named  = cellfun(@goldenFileStem, rows(:, 1), 'UniformOutput', false);
             tc.verifyEmpty(setdiff(onDisk, named'), ...
                 'golden files with no case in characterizationCases');
         end
@@ -99,9 +104,11 @@ classdef StepGoldenTest < NestappTestCase
         % EEGLAB global, which is why that is where the result is read from.
             global EEG %#ok<GVMIS>
 
-            tmp   = scratchDir(tc);
-            fname = [safeGoldenName(c.name) '.set'];
-            evalc('pop_saveset(charFixture(c.kind), ''filename'', fname, ''filepath'', tmp);');
+            % Named by KIND, not by step, so the ten cases share the three
+            % files between them - six use epochedPulses, three epoched, one
+            % epochedTmsArtifact. Each is loaded and worked on in the EEGLAB
+            % globals, so sharing the input is safe.
+            setPath = saveFixtureSet(tc.FixtureDir, c.kind);
 
             reg  = stepRegistry();
             spec = makePipelineStep('Load Data', reg);
@@ -115,7 +122,7 @@ classdef StepGoldenTest < NestappTestCase
             spec(end+1) = step;
 
             rng(42, 'twister');   % any step with a stochastic component
-            evalc(['processOneFile(spec, fullfile(tmp, fname), ' ...
+            evalc(['processOneFile(spec, setPath, ' ...
                    'struct(''pipelineName'', ''golden'', ''fileIndex'', 1));']);
             d = eegDigest(EEG);
         end
@@ -138,10 +145,3 @@ end
 
 % ── file-level helpers ───────────────────────────────────────────────────────
 
-function n = safeGoldenName(stepName)
-% The filename convention recordGoldens writes with. Kept identical here on
-% purpose: if the two ever disagree, every golden looks missing at once, which
-% is a loud failure rather than a silent mismatch.
-n = regexprep(stepName, '[^\w]+', '_');
-n = regexprep(n, '_+$', '');
-end

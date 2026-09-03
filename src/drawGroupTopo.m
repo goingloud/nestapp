@@ -84,9 +84,8 @@ end
 % owns the precedence (an explicit pair beats a pinned magnitude beats the
 % mode) and the symmetry, and is unit-tested without drawing anything.
 override = fieldOr(opts, 'clim', opts.climit);
-mode     = 'shared';
-if matchesChoice(opts.scale, 'per map'); mode = 'per column'; end
-[perMapClim, clim] = topoColourScale(vals, mode, override);
+[perMapClim, clim] = topoColourScale(vals, matchesChoice(opts.scale, 'per map'), ...
+                                     override);
 perMap = isempty(clim);
 
 % No bars on the maps. A bar shrinks the axes it attaches to, so putting one on

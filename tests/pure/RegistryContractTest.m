@@ -22,6 +22,11 @@ classdef RegistryContractTest < NestappTestCase
 %   Ledger rows pinned here: B4, B7, B8, B10 (steps offering values the
 %   upstream function rejects).
 
+    properties (Access = private)
+        % Path -> file text, filled on first read. See sourceOf.
+        SourceCache
+    end
+
     methods (Test)
 
         % ── derived contracts ────────────────────────────────────────────────
@@ -188,19 +193,34 @@ classdef RegistryContractTest < NestappTestCase
             end
         end
 
-        function src = drawSourceGraph(~, fn)
+        function src = drawSourceGraph(tc, fn)
         % The named drawer plus every draw*/shade* helper it calls, one level
         % down - as deep as a plot's opts struct is ever forwarded. A composite
         % like TEP-topo hands its whole opts to the curve drawer, so 'xlim' is
         % honoured one call deeper than the file that declares it.
-            src     = fileread(which(fn));
-            callees = unique(regexp(src, '\<(?:draw|shade)\w+', 'match'));
+            parts   = {tc.sourceOf(which(fn))};
+            callees = unique(regexp(parts{1}, '\<(?:draw|shade)\w+', 'match'));
             for c = 1:numel(callees)
                 w = which(callees{c});
                 if ~isempty(w) && ~strcmp(callees{c}, fn)
-                    src = [src newline fileread(w)]; %#ok<AGROW>
+                    parts{end+1} = tc.sourceOf(w); %#ok<AGROW>
                 end
             end
+            src = strjoin(parts, newline);
+        end
+
+        function txt = sourceOf(tc, path)
+        % Read-through cache, because the seven registry entries share their
+        % helpers: drawTEPOverlay is reached by three plots and was being read
+        % five times, drawScalpTopo four, for 24 reads of nine files. Source on
+        % disk cannot change mid-run, so one read each is the whole fix.
+            if isempty(tc.SourceCache)
+                tc.SourceCache = containers.Map('KeyType', 'char', 'ValueType', 'char');
+            end
+            if ~tc.SourceCache.isKey(path)
+                tc.SourceCache(path) = fileread(path);
+            end
+            txt = tc.SourceCache(path);
         end
     end
 end

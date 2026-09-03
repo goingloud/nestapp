@@ -1692,8 +1692,16 @@ for si = 1:nSteps
                         'fi', opts.fileIndex, 'si', 0, ...
                         'nSteps', nSteps, 'stepName', 'Failed', 'failed', true));
                 end
-                error('nestapp:stepFailed', 'Step %d (%s) failed: %s', ...
-                    si, stepName, err.message);
+                % The cause is ATTACHED, not just interpolated. Rethrowing
+                % with only err.message discarded the inner identifier, so a
+                % caller could no longer tell "this step has no
+                % implementation" (nestapp:unknownStep) from "this step ran
+                % and failed on this data" - a distinction the dispatch
+                % coverage check depends on, and which it was reduced to
+                % recovering by matching English in the message text.
+                outer = MException('nestapp:stepFailed', ...
+                    'Step %d (%s) failed: %s', si, stepName, err.message);
+                throw(addCause(outer, err));
             end
         end
     end
