@@ -8,6 +8,42 @@ The version here must match `src/nestappVersion.m` and the release git tag.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-09-03
+
+### Note on the version number
+
+**This release jumps from 1.0.0 to 2.1.0, and the jump is deliberate.** Two
+version lineages had collided. The original application was tagged and released
+as `v1.01` through `v1.05` and then `v2.0` between 2024 and 2025; the
+open-source re-baseline in May 2026 restarted at `1.0.0` on the reasoning that
+1.0.0 is the conventional first public release.
+
+The consequence was that GitHub's **"Latest release" was `v2.0`** - a commit 382
+behind, predating the pipeline engine, the Explore tab and everything since - so
+a newcomer clicking the download on the repository front page got a 2025
+snapshot, and any `1.x` release would have sorted below it permanently. For an
+app whose audience is researchers who are not looking closely at tag numbers,
+that is worse than publishing no releases at all.
+
+So numbering continues from the line that is already public. `1.0.0` remains in
+this file as what it was: the open-source re-baseline of the 2.x application.
+
+### Added
+
+- **`Help > Install AARATEP Helpers...`** - installs the AARATEP helper
+  functions from inside the app: 0.6 MB, about a second, no git or shell
+  required. It fetches a **pinned release** (v2.1.1) rather than whatever is
+  newest, because AARATEP defines the behaviour of a published pipeline and two
+  people running the same nestapp template must get the same helpers. A newer
+  upstream release is reported but never installed silently. Point nestapp at
+  an existing clone with `setpref('nestapp', 'aaratepPath', ...)`.
+- **Installable packaging** - `tools/package_toolbox.m` builds
+  `nestapp-<version>.mltbx`. Double-clicking it installs nestapp, sets the path
+  permanently, and lists it under Add-Ons for update or uninstall, replacing
+  "unzip somewhere, cd there, run a script, re-do the cd every session".
+  EEGLAB is declared as required additional software, so MATLAB's installer
+  offers to fetch it too.
+
 ### Changed
 - **The test suite has been replaced rather than trimmed.** 916 cases /
   11,201 executable lines across 116 files became 210 / 1,644 across 15 (plus
@@ -40,6 +76,19 @@ The version here must match `src/nestappVersion.m` and the release git tag.
   reintroducing the defect and requiring the suite to go red. See
   `docs/test-rewrite-ledger.md`, which also records two known gaps and the
   mutation-testing results behind them.
+
+- **Documentation rewritten, and several stale claims corrected.** The README
+  was doing two jobs - install guide and user manual - so the tab-by-tab detail
+  moved to `docs/user-guide.md` and the README is now setup and orientation.
+  Verified against the running code rather than assumed, which turned up: the
+  documented EEGLAB (2025.0.0) and TESA (1.1.1) versions were *below* what the
+  registry requires (2026.0.0, TESA 1.2); FastICA was documented as a separate
+  manual download when it is now an EEGLAB plugin; the requirements table
+  listed 3 plugins where the registry declares 13; the workflow told users to
+  "switch to the Analysis tab", which Stage 7 removed; and three Reports
+  buttons were named wrong. `THIRD_PARTY_NOTICES.md` also described the EEGLAB
+  stack as "bundled with the nestapp distribution" when a clone contains none
+  of it - reworded to say what is true.
 
 ### Fixed
 - **Adding a group in Explore failed with `Undefined function 'pop_loadset'`.**
@@ -268,5 +317,6 @@ First public open-source release.
   additionally requires the Curve Fitting Toolbox and the AARATEP helpers
   cloned into `third_party/aaratep/` (see README).
 
-[Unreleased]: https://github.com/goingloud/nestapp/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/goingloud/nestapp/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/goingloud/nestapp/releases/tag/v2.1.0
 [1.0.0]: https://github.com/goingloud/nestapp/releases/tag/v1.0.0

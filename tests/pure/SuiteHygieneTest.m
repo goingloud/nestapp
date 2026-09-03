@@ -56,7 +56,7 @@ classdef SuiteHygieneTest < NestappTestCase
         % honest rather than loosening it: every text read in the suite is
         % accounted for by name.
         MayReadSource = {'RegistryContractTest', 'MethodsClauseTest', ...
-                         'StepGoldenTest', 'AaratepInstallTest'}
+                         'StepGoldenTest', 'AaratepInstallTest', 'VersionTest'}
     end
 
     properties (Access = private)
