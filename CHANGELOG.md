@@ -55,14 +55,14 @@ this file as what it was: the open-source re-baseline of the 2.x application.
   documented "no EEGLAB, no GUI" fast suite needed one or the other, so its
   stated contract was false.
 
-  Suites are now **folders**, encoding the only two things that gate a test —
-  EEGLAB and a display — as a cross-product: `tests/pure/`, `tests/eeglab/`,
+  Suites are now **folders**, encoding as a cross-product the only two things
+  that gate a test, EEGLAB and a display: `tests/pure/`, `tests/eeglab/`,
   `tests/gui/`, `tests/eeglab_gui/`. A test's requirements are visible in its
   path, so it cannot be misfiled unnoticed. Three rules are enforced: **a skip
   is a failure** (there are now zero `assumeFail` sites, down from 38), an
   empty or missing suite is a failure, and the path is restored on exit.
 
-  The conventions are executable rather than documented — `SuiteHygieneTest`
+  The conventions are executable rather than documented. `SuiteHygieneTest`
   holds nine of them, including that every test sits in the folder its
   dependencies require, that no test rolls its own path setup or temp
   directory, that source-scraping is opt-in with a named exception list, and
@@ -218,16 +218,16 @@ this file as what it was: the open-source re-baseline of the 2.x application.
   (`divergingColormap`) with white pinned at 0 uV, replacing the cyclic,
   non-perceptual `hsv`. Drawing is shared by the in-app axes and the pop-out
   via the new `drawScalpTopo` helper.
-- `nestappDoctor` — environment diagnostics that validate MATLAB/EEGLAB/
+- `nestappDoctor`, environment diagnostics that validate MATLAB/EEGLAB/
   toolbox versions, every plugin the step registry requires, and flag
   shadowed functions. Surfaced in the GUI via **Help → Copy Diagnostics to
   Clipboard** and referenced from the bug-report template.
-- `describePipeline` — a readable summary of the current pipeline (steps and
+- `describePipeline`, a readable summary of the current pipeline (steps and
   the parameters that differ from defaults), for methods sections and bug
   reports. Surfaced via **File → Copy Pipeline Description**.
-- Debug log (`debugLog` preference) — tees a run's full step-by-step trace
+- Debug log (`debugLog` preference), which tees a run's full step-by-step trace
   to a file in the batch output folder (`nestDebugLog` + `nestLog`).
-- Metadata-only debug bundles — on a step failure, `saveErrorBundle` writes
+- Metadata-only debug bundles: on a step failure, `saveErrorBundle` writes
   the error, environment, pipeline, and EEG **metadata** (never recordings)
   to `<batch>/debug/`. **Help → Collect Support Bundle** produces the same
   on demand, and **Help → Check My Install** runs the fast test suite.
@@ -291,25 +291,25 @@ this file as what it was: the open-source re-baseline of the 2.x application.
 First public open-source release.
 
 ### Added
-- **Pipeline builder** — drag-and-drop construction of EEG/TMS-EEG cleaning
+- **Pipeline builder** for drag-and-drop construction of EEG/TMS-EEG cleaning
   pipelines from a registry of steps (`src/stepRegistry.m`), executed by a
   batch engine (`src/runPipelineCore.m`, `src/processOneFile.m`) with
   serial and parallel (PCT) modes.
 - **Built-in pipeline templates** (`src/buildTemplates.m`, `src/templates/`):
   TMS-EEG / TEP (TESA), TESA + Quality Gates, ARTIST (Wu 2018), AARATEP
   (Cline 2021), Resting-State, and Minimal (Delorme 2023).
-- **Quality control** — Quality Gate step with absolute and batch (median +
+- **Quality control**: Quality Gate step with absolute and batch (median +
   MAD) thresholds, skip-on-fail, auto-generated QC images, and a Session
   Quality Dashboard on the Reports tab.
-- **TEP analysis** — ROI waveform plotting, topographies, TESA-based peak
+- **TEP analysis**: ROI waveform plotting, topographies, TESA-based peak
   detection with a polarity guard, and batch peak extraction to CSV
   (`src/batchTEPExtract.m`, `src/tepPeakFinder.m`).
-- **Reports & provenance** — per-file reports, methods-paragraph export, and
+- **Reports & provenance**: per-file reports, methods-paragraph export, and
   full pipeline provenance written to `EEG.history`.
-- **Citations** — built-in templates log their primary reference per run
+- **Citations**: built-in templates log their primary reference per run
   (`src/templateCitation.m`); `THIRD_PARTY_NOTICES.md` documents all
   bundled and vendored dependencies.
-- **Test suite** — unit, regression, and integration tests with a
+- **Test suite**: unit, regression, and integration tests with a
   `tests/run_tests.m` harness and CI (`.github/workflows/tests.yml`).
 
 ### Notes

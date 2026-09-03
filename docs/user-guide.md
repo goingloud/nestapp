@@ -27,8 +27,8 @@ the **Info** panel.
 - **Re/Start Steps** clears the pipeline, after a confirmation prompt.
 
 **Only installed steps are offered.** The picker asks what each step requires
-and withholds any whose plugin is missing or too old — because the alternative
-is building a pipeline around a step and finding out at the pre-flight. A saved
+and withholds any whose plugin is missing or too old. The alternative would be
+building a pipeline around a step and finding out at the pre-flight. A saved
 pipeline that references an unavailable step still *loads*; the pre-flight then
 blocks the run and names both the step and what it needs.
 
@@ -45,13 +45,13 @@ run log at the start of every batch, so the reference stays with the data.
 - **File → Load Pipeline** restores one.
 - **File → Recent Pipelines** lists the last few.
 - **File → Copy Pipeline Description** puts a prose description of the current
-  pipeline on the clipboard — useful for a methods section before you have run
-  anything.
+  pipeline on the clipboard. This is useful for a methods section before you
+  have run anything.
 
 ### Running
 
 1. **File → Open Data...** selects the input files (`.set`, `.vhdr`, `.cnt`,
-   `.cdt`). Reading the non-EEGLAB formats needs the matching plugin —
+   `.cdt`). Reading the non-EEGLAB formats needs the matching plugin:
    `bva-io` for BrainVision, `loadcnt` for Neuroscan, `curry` for Curry.
 2. **Run Analysis** starts the batch. A progress dialog names the current file
    and step, and the run can be cancelled between steps.
@@ -81,8 +81,8 @@ names the offending steps.
 
 ### Provenance
 
-Every processed file gets its full pipeline — steps, parameters and a timestamp
-— written into `EEG.history` inside the saved `.set`. After a run the final
+Every processed file gets its full pipeline written into `EEG.history` inside
+the saved `.set`: the steps, their parameters, and a timestamp. After a run the final
 dataset is also in the MATLAB base workspace, so:
 
 ```matlab
@@ -99,19 +99,20 @@ it was made, even years later and without this repository.
 
 One report per processed file, added as the run proceeds. Each shows:
 
-- channel counts — how many were present, rejected, interpolated, and which;
-- trial retention — how many epochs survived, and what removed them;
-- ICA statistics — components per round, what each was classified as, how much
-  variance was removed;
+- channel counts: how many were present, rejected and interpolated, and which;
+- trial retention: how many epochs survived, and what removed them;
+- ICA statistics: components per round, what each was classified as, and how
+  much variance was removed;
 - quality-gate verdicts, where thresholds were configured (**Pass**,
   **Marginal** or **Fail**, with the metric and value that decided it).
 
 Three things to do with a report:
 
-- **Copy Methods Text** — a prose description of what was actually done to
+- **Copy Methods Text** gives a prose description of what was actually done to
   *this* file, with the numbers filled in, ready to paste into a manuscript.
-- **Export Metrics CSV** — one row per file, for a multi-subject batch summary.
-- **Export PDF...** — the report as a document, one file or all of them.
+- **Export Metrics CSV** writes one row per file, for a multi-subject batch
+  summary.
+- **Export PDF...** writes the report as a document, for one file or all of them.
 
 Reports are also written to disk beside the processed data, so a batch can be
 reviewed later without re-running it.
@@ -120,22 +121,22 @@ reviewed later without re-running it.
 
 ## Explore tab
 
-Explore works on processed `.set` files — output from a nestapp run, or any
-EEGLAB-compatible epoched dataset. It supports the comparison most TMS-EEG
+Explore works on processed `.set` files, either the output of a nestapp run or
+any EEGLAB-compatible epoched dataset. It supports the comparison most TMS-EEG
 studies are designed around: pre versus post, or one cohort against another.
 
 ### Defining the comparison
 
 - **Add group...** assigns recordings to a named condition. A group is defined
   over **subjects**, so repeat recordings of one person are averaged before the
-  group estimate is formed — and the reported *n* counts participants, not
-  files. Sessions are weighted by their trial counts, because two sessions of
+  group estimate is formed, and the reported *n* counts participants rather
+  than files. Sessions are weighted by their trial counts, because two sessions of
   one person are not equal evidence if one held 10 trials and the other 190.
 - **Files, subjects, groups...** shows and corrects which file belongs to whom.
   This is where *n* comes from, so it is worth checking.
 - **Design** is set explicitly as paired or unpaired. Paired is offered only
   when every group holds the same subjects, and it drops any subject without a
-  complete set — naming them rather than silently excluding them.
+  complete set, naming them rather than excluding them silently.
 - **Region of interest** is chosen from a scalp diagram or a named preset,
   defaulting to `AF3 F1 F3 FC1 FC3`. A file on a non-conforming montage is
   excluded and named.
@@ -182,7 +183,8 @@ computed at.
 - auto-detect the TMS pulse window from EEG events, or set it in ms;
 - skip the remaining pipeline steps when a Quality Gate fails;
 - auto-save a PDF report per file (text plus checkpoint images);
-- keep AARATEP intermediate datasets — roughly **3x the result on disk**;
+- keep AARATEP intermediate datasets, which costs roughly **3x the result on
+  disk**;
 - attribute mode.
 
 **EEGLAB**
@@ -193,8 +195,8 @@ computed at.
 
 **Default Locations**
 - data, pipeline and report folders;
-- output root — leave blank to write next to the inputs;
-- layout — group results by artifact type, or per input file.
+- output root, which can be left blank to write next to the inputs;
+- layout, grouping results either by artifact type or per input file.
 
 **Parallel Processing**
 - max workers: a cap on simultaneous files when Parallel is on. Greyed out with
@@ -218,9 +220,9 @@ for. Most problems are a missing or out-of-date plugin, and it names which.
 (The same check is `nestappDoctor` at the MATLAB prompt, if you prefer.)
 
 If you need to report a problem, **Help → Collect Support Bundle...** gathers
-the versions, the pipeline and the logs into one file to attach — or
-**Help → Copy Diagnostics to Clipboard** if you just want to paste them into an
-issue.
+the versions, the pipeline and the logs into one file to attach. Use
+**Help → Copy Diagnostics to Clipboard** instead if you only want to paste them
+into an issue.
 
 | Symptom | Usually |
 |---|---|

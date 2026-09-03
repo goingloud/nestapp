@@ -8,17 +8,17 @@
 
 Three tabs, in the order you use them:
 
-- **Cleaning** — build a preprocessing pipeline (or load a published one as a template) and run it over a batch of files.
-- **Reports** — see what the run did to each file: channels dropped, trials kept, ICA components removed, and a methods paragraph you can paste into a manuscript.
-- **Explore** — the comparison most TMS-EEG studies are designed around: pre versus post, or one cohort against another, with TEP waveforms, topographies, and per-window measures exported to CSV.
+- **Cleaning** builds a preprocessing pipeline, or loads a published one as a template, and runs it over a batch of files.
+- **Reports** shows what the run did to each file: channels dropped, trials kept, ICA components removed, and a methods paragraph you can paste into a manuscript.
+- **Explore** supports the comparison most TMS-EEG studies are designed around, pre versus post or one cohort against another, with TEP waveforms, topographies, and per-window measures exported to CSV.
 
-Every processed file carries its full pipeline — steps, parameters, timestamp — inside `EEG.history` in the saved `.set`, so a result can always be traced back to how it was made.
+Every processed file carries its full pipeline inside `EEG.history` in the saved `.set`: the steps, their parameters, and a timestamp. A result can therefore always be traced back to how it was made.
 
 ---
 
 ## Requirements
 
-**Required** — nestapp will not run without these:
+**Required.** nestapp will not run without these:
 
 | | Version | How you get it |
 |---|---|---|
@@ -27,7 +27,7 @@ Every processed file carries its full pipeline — steps, parameters, timestamp 
 | Statistics and Machine Learning Toolbox | any recent | MATLAB installer |
 | EEGLAB | 2026.0.0 (2025.x works) | [eeglab.org](https://eeglab.org/) |
 
-**Required for most pipelines** — every built-in template uses these, and steps
+**Required for most pipelines.** Every built-in template uses these, and steps
 that need one are hidden until it is installed. All come from EEGLAB's own
 extension manager:
 
@@ -41,7 +41,7 @@ extension manager:
 | clean_rawdata | ASR and bad-channel detection |
 | firfilt | FIR filtering |
 
-**Optional** — each unlocks something specific; nestapp works without them:
+**Optional.** Each unlocks something specific, and nestapp works without them:
 
 | | What it enables | Without it |
 |---|---|---|
@@ -71,7 +71,7 @@ a run that references a missing one and names what to install.
 2. **Double-click it.** MATLAB installs nestapp, puts it on the path
    permanently, and lists it under **Add-Ons** (where you can later update or
    uninstall it). If you do not have EEGLAB, the installer offers to fetch it.
-3. **Install the EEGLAB plugins** — run `eeglab` at the MATLAB prompt, open
+3. **Install the EEGLAB plugins.** Run `eeglab` at the MATLAB prompt, open
    **File → Manage EEGLAB extensions**, and install TESA, FastICA, ICLabel,
    PICARD, CleanLine, clean_rawdata and firfilt. They go into EEGLAB's own
    `plugins/` folder; nothing needs adding to your path by hand.
@@ -79,7 +79,7 @@ a run that references a missing one and names what to install.
    ```matlab
    nestapp
    ```
-5. **Point it at EEGLAB** — **Settings → Preferences**, set the EEGLAB
+5. **Point it at EEGLAB.** Open **Settings → Preferences** and set the EEGLAB
    installation folder. nestapp puts EEGLAB and its plugins on the path on
    every launch from then on.
 
@@ -108,7 +108,7 @@ check is `nestappDoctor` at the prompt.
 Only needed for the `TMS-EEG / AARATEP` template. Its helper functions are a
 separate project that nestapp cannot redistribute, so the app fetches them:
 
-**Help → Install AARATEP Helpers...** — about a second, no other tools needed.
+**Help → Install AARATEP Helpers...** takes about a second and needs no other tools.
 
 Or at the MATLAB prompt:
 
@@ -142,8 +142,8 @@ setpref('nestapp', 'aaratepPath', '/path/to/AARATEPPipeline')
 |---|---|---|
 | TMS-EEG / TEP (TESA) | TESA two-round ICA for single-pulse TMS | Rogasch et al. 2017, *NeuroImage* 147:934-951 |
 | TMS-EEG / AARATEP | SOUND + decay-fit removal + AR-blend interpolation + TMS-aware muscle classifier | Cline et al. 2021, *IEEE NER* |
-| Resting-State EEG | PREP + Delorme cleaning with ICLabel | Delorme 2023, *Sci Rep* 13:2372 |
-| Minimal ERP | High-pass + bad channels + ICA, minimum-handling | Delorme 2023 |
+| Resting-State EEG | PREP-style robust referencing and bad-channel detection, with ICLabel | Bigdely-Shamlo et al. 2015, *Front Neuroinform* 9:16 (also Delorme 2023) |
+| Minimal ERP | High-pass, bad channels, ICA; minimum-handling | Delorme 2023, *Sci Rep* 13:2372 |
 
 Each template logs its own citation and DOI at the start of every batch run, so the reference lands in the run log beside the data.
 
@@ -164,19 +164,19 @@ Each template logs its own citation and DOI at the start of every batch run, so 
 
 ## Citing
 
-If you use nestapp in published work, cite it with the metadata in [`CITATION.cff`](CITATION.cff) — GitHub's **Cite this repository** button generates APA and BibTeX for you.
+If you use nestapp in published work, cite it with the metadata in [`CITATION.cff`](CITATION.cff). GitHub's **Cite this repository** button generates APA and BibTeX for you.
 
 **Also cite the pipeline paper for whichever template you ran**, from the table above. nestapp writes these into the run log so the reference is recorded with the data rather than reconstructed later.
 
 ## Contributing
 
-Contributions are welcome — see [CONTRIBUTING.md](.github/CONTRIBUTING.md). New to the codebase? [`docs/architecture.md`](docs/architecture.md) is the map.
+Contributions are welcome. See [CONTRIBUTING.md](.github/CONTRIBUTING.md) to get started, and [`docs/architecture.md`](docs/architecture.md) for a map of the codebase.
 
 ## Authors
 
-**Aref Pariz** — original application (2023), developed at the Royal Institute for Mental Health in Dr. Sara Tremblay's lab ([NESTLAB](https://www.nest-lab.ca/)) and Dr. Jeremie Lefebvre's lab, University of Ottawa.
+**Aref Pariz** wrote the original application in 2023, at the Royal Institute for Mental Health in Dr. Sara Tremblay's lab ([NESTLAB](https://www.nest-lab.ca/)) and in Dr. Jeremie Lefebvre's lab at the University of Ottawa.
 
-**Wesley Dunne** — pipeline engine, progress reporting and provenance, automated reports with ICA tracking, TEP visualisation and batch peak extraction, pipeline templates, quality-control gates, and test suite. Led the 1.0.0 open-source release.
+**Wesley Dunne** contributed the pipeline engine, progress reporting and provenance, automated reports with ICA tracking, TEP visualisation and batch peak extraction, pipeline templates, quality-control gates, and the test suite, and led the 1.0.0 open-source release.
 
 ## License
 

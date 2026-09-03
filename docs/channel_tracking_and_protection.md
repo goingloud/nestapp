@@ -65,11 +65,6 @@ not global:
   removal step, not clean_rawdata's detection, so it does not deviate from the
   published algorithm — but it is an extension we would own.
 
-  *(This bullet previously named a step "Remove Bad Channels (ARTIST)" and a
-  file `artistBadChannelsRansac.m`; neither exists. The detector is a
-  clean_channels wrapper, and the real ARTIST classifier was never available -
-  see the note in the audit findings.)*
-
 ### Recommendation (deferred — counting/naming was the agreed scope)
 
 If protection is later wanted everywhere:

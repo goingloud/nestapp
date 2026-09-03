@@ -11,13 +11,13 @@ These external packages each define the algorithm and parameters of a built-in n
 ### TESA (TMS-EEG Signal Analyser)
 
 - **Templates that use it:** `TMS-EEG / TEP (TESA)`, *plus most steps of* `TMS-EEG / AARATEP`.
-- **Upstream:** https://nigelrogasch.github.io/TESA/ — code at https://github.com/nigelrogasch/TESA
+- **Upstream:** https://nigelrogasch.github.io/TESA/ (code at https://github.com/nigelrogasch/TESA)
 - **License:** GPL-3.0
 - **Installed via:** EEGLAB's own plugin manager, into EEGLAB's `plugins/` folder. **Not redistributed with nestapp** - `eeglab2026.0.0/` is untracked, so a clone of this repository contains no EEGLAB code and the user installs it themselves (see the README). Not vendored under `third_party/` either.
 - **What nestapp uses:** `pop_tesa_findpulse` (TMS pulse detection), `pop_tesa_removedata` (artifact removal), `pop_tesa_interpdata` (cubic interpolation), `pop_tesa_filtbutter` (zero-phase Butterworth filtering, also used for the 60 Hz notch in the AARATEP template), `pop_tesa_fastica` (FastICA wrapper), `pop_tesa_compselect` (six-detector TMS-EEG IC classifier), `pop_tesa_sound` (SOUND algorithm wrapper, used by AARATEP template), `pop_tesa_sspsir` (SSP-SIR), `pop_tesa_peakanalysis`/`pop_tesa_peakoutput` (TEP peak extraction).
-- **Template design provenance:** the `TMS-EEG / TEP (TESA)` template's step order is annotated against specific steps of the TESA User Manual (Rogasch's published preprocessing recipe) — see `src/buildTemplates.m` lines 19–79 for the manual-step cross-references.
+- **Template design provenance:** the `TMS-EEG / TEP (TESA)` template's step order is annotated against specific steps of the TESA User Manual (Rogasch's published preprocessing recipe). See `src/util/buildTemplates.m` lines 19–79 for the manual-step cross-references.
 - **Cite as:** Rogasch N.C., Sullivan C., Thomson R.H., Rose N.S., Bailey N.W., Fitzgerald P.B., Farzan F., Hernandez-Pavon J.C. (2017). Analysing concurrent transcranial magnetic stimulation and electroencephalographic data: a review and introduction to the open-source TESA software. *NeuroImage* 147:934-951. doi:[10.1016/j.neuroimage.2017.06.014](https://doi.org/10.1016/j.neuroimage.2017.06.014)
-- **Additional citation for SOUND:** Mutanen T.P., Metsomaa J., Liljander S., Ilmoniemi R.J. (2018). Automatic and robust noise suppression in EEG and MEG: The SOUND algorithm. *NeuroImage* 166:135-151. doi:[10.1016/j.neuroimage.2017.10.021](https://doi.org/10.1016/j.neuroimage.2017.10.021) — cite this *in addition to* the TESA paper whenever your pipeline includes a SOUND step — `Source-Informed Sensor Cleaning (SOUND)` or `SOUND (AARATEP)` (the latter is used by the `TMS-EEG / AARATEP` template).
+- **Additional citation for SOUND:** Mutanen T.P., Metsomaa J., Liljander S., Ilmoniemi R.J. (2018). Automatic and robust noise suppression in EEG and MEG: The SOUND algorithm. *NeuroImage* 166:135-151. doi:[10.1016/j.neuroimage.2017.10.021](https://doi.org/10.1016/j.neuroimage.2017.10.021). Cite this *in addition to* the TESA paper whenever your pipeline includes a SOUND step, meaning `Source-Informed Sensor Cleaning (SOUND)` or `SOUND (AARATEP)` (the latter is used by the `TMS-EEG / AARATEP` template).
 
 ## Vendored code (copies under `third_party/`)
 
@@ -56,34 +56,35 @@ The two detectors each interpolate flagged channels **in place** (spherical
 spline) and accumulate their labels in `EEG.etc.aaratepBadChannels`. Run in
 sequence (PREP then DDWiener) they reproduce the upstream ensemble loop exactly:
 because each interpolates in place, the second method sees the PREP-cleaned data
-— matching `c_TMSEEG_detectBadChannels`'s internal behaviour with
+matching `c_TMSEEG_detectBadChannels`'s internal behaviour with
 `replaceMethod='interpolate'`. The `SOUND` step (with `reconstructBadChannels =
 on`) then reads those labels as `replaceChannels` to lead-field reconstruct
 them. When `reconstructBadChannels = off`, the SOUND step is the standard
 `pop_tesa_sound`, unchanged for non-AARATEP pipelines.
 
 **Paper-over-code choice:** the 2021 paper's final "reject ICs with peak amplitude
-> 15 µV" check is **not** in the maintained v2.1.1 code (verified — code rejection
+> 15 µV" check is **not** in the maintained v2.1.1 code (verified: code rejection
 is ICLabel thresholds + the TMS-muscle *ratio* only). It is **included** here as
 the `Flag ICA Components (AARATEP Peak)` step, per an explicit request to follow
-the paper for this step — the one place this template follows the 2021 paper
+the paper for this step, the one place this template follows the 2021 paper
 rather than v2.1.1. The threshold (15 µV) and intent are the paper's; the exact
-metric — trial-averaged, back-projected to the scalp, peak |amplitude| in µV — is
+metric, which is trial-averaged, back-projected to the scalp and measured as
+peak |amplitude| in µV, is
 *our interpretation*, since the paper gives no formula. (`lineNoiseNumHarmonics`
 defaults to 1, so the single 58–62 Hz bandstop is the upstream default behaviour.)
 
-**Required MATLAB toolbox for AARATEP:** the `Remove Decay Artifact` step calls MATLAB's `fit()` function (Curve Fitting Toolbox) with constrained nonlinear exponential decay models (see `c_TMSEEG_fitAndRemoveDecayArtifact.m` lines 101 / 107). **Curve Fitting Toolbox must be installed** to run the AARATEP template end-to-end. If it isn't, the pre-flight check (`checkStepDependencies.m`) blocks the run with an install message before the pipeline starts. Workaround: remove `Remove Decay Artifact` from the pipeline (AARATEP will still run but the decay-fit cleanup step is skipped — results will differ from the published pipeline).
+**Required MATLAB toolbox for AARATEP:** the `Remove Decay Artifact` step calls MATLAB's `fit()` function (Curve Fitting Toolbox) with constrained nonlinear exponential decay models (see `c_TMSEEG_fitAndRemoveDecayArtifact.m` lines 101 / 107). **Curve Fitting Toolbox must be installed** to run the AARATEP template end-to-end. If it isn't, the pre-flight check (`checkStepDependencies.m`) blocks the run with an install message before the pipeline starts. Workaround: remove `Remove Decay Artifact` from the pipeline (AARATEP will still run but the decay-fit cleanup step is skipped, so results will differ from the published pipeline).
 
 **Observed limitation (not a fidelity gap): ICA artifact capture.** On at least
 one dataset the faithful AARATEP template left visible TMS-locked eye blinks in
 the output. The ICA *settings* match the upstream code (FastICA symmetric / tanh),
 and the run report showed the two ICA passes removed only ~1.3% of variance
-(round 1: 2 Eye ICs, 0.9%; round 2: 0 Eye ICs plus 34 tiny components, 0.4%) —
+(round 1: 2 Eye ICs, 0.9%; round 2: 0 Eye ICs plus 34 tiny components, 0.4%),
 i.e. the large blink/muscle artifacts did not concentrate into removable
 components and round 2 found no Eye ICs. These are observations about the faithful
 pipeline's *output*; they are **not** deviations from the source. Hypotheses for
 the cause and any candidate fixes are *Claude's, not from the AARATEP paper/code*,
-so they are kept out of this fidelity document — see the pipeline-evaluation
+so they are kept out of this fidelity document. See the pipeline-evaluation
 plan's "Tier-3 improvement hypotheses". None are applied to the faithful template.
 
 ## The EEGLAB stack nestapp calls

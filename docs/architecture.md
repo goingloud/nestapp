@@ -34,11 +34,9 @@ button and headless callers like `runPipelineCore` and the test suite.
 
 ## Module map (`src/`)
 
-**The folders are the map.** `src/` used to hold 146 loose `.m` files, so this
-section was a hand-maintained table of individual filenames - which drifted:
-it listed `artist*.m` and `templateCitation.m`, neither of which exists. A
-folder is checkable by `ls`, so a new file lands in a documented area by
-construction rather than by someone remembering to add a row here.
+**The folders are the map.** Each is one area of responsibility, so a new file
+belongs wherever its subject already lives, and `ls` is the authority rather
+than this table.
 
 | Folder | Responsibility |
 |---|---|
@@ -103,7 +101,7 @@ function's folder never affects whether it resolves.
 - **Allowlist `.gitignore`.** New files in new dirs are invisible to git until
   allowlisted.
 - **`nestapp.m`, not the `.mlapp`.** The `.mlapp` would overwrite hand edits.
-- **EEGLAB and `third_party/` are not committed** — external dependencies.
+- **EEGLAB and `third_party/` are not committed.** They are external dependencies.
 - **`processOneFile` uses EEGLAB globals** (`EEG`, `ALLEEG`, …); headless
   callers should expect shared state to be reset per worker.
 
@@ -111,7 +109,7 @@ function's folder never affects whether it resolves.
 
 The GUI is one caller, not the interface. Everything the Explore tab does is a
 pure function it calls, and each is usable from a script or a batch with no
-figure on screen - which is what makes the analysis reproducible from code
+figure on screen, which is what makes the analysis reproducible from code
 rather than from a sequence of clicks.
 
 | Function | Takes | Gives back |
@@ -141,19 +139,19 @@ same `spec` the GUI builds, driven from a script.
 ## Tests
 
 `tests/run_tests.m` is the harness. Suites are FOLDERS, encoding the two
-things that actually gate a test - EEGLAB and a display - as a cross-product:
+things that actually gate a test, EEGLAB and a display, as a cross-product:
 `pure/` (neither, ~4 s), `eeglab/` (EEGLAB, includes the step goldens),
 `gui/` (a display), `eeglab_gui/` (both). `run_tests('all')` runs the lot in
 ~40 s.
 
-Three rules: a skip is a failure (there are zero `assumeFail` sites - the
-folder already declares what a test needs), an empty or missing suite is a
-failure, and the path is restored on exit.
+Three rules apply. A skip is a failure, because the folder already declares
+what a test needs and there are zero `assumeFail` sites. An empty or missing
+suite is a failure. The path is restored on exit.
 
 The conventions are executable rather than documented: `tests/pure/SuiteHygieneTest.m`
 holds nine of them, including that every test sits in the folder its
 dependencies require, that no test rolls its own path setup or temp dir, that
 source-scraping is opt-in with a named exception list, and that every helper
 in `tests/helpers/` has a caller. `tests/golden/` holds the 10 step
-characterization recordings; re-recording one is a decision, not a chore - see
-`tests/recordGoldens.m`.
+characterization recordings. Re-recording one is a decision rather than a
+chore; see `tests/recordGoldens.m`.
