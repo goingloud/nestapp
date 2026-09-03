@@ -1,0 +1,259 @@
+
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
+% Part of nestapp; see the LICENSE file for full terms.
+function renderDashboardPanel(parent, reports, opts)
+% RENDERDASHBOARDPANEL  Paint the Session Quality Dashboard.
+%   RENDERDASHBOARDPANEL(parent, reports)
+%   RENDERDASHBOARDPANEL(parent, reports, opts)
+%
+%   Lays out a header, a full-width table of the files that failed or came
+%   back Marginal, and the per-metric distributions.
+%
+%   parent  : uipanel or uifigure that the dashboard renders into.
+%             Any existing children are deleted first so the same
+%             function can refresh the live view in place and also
+%             paint an offscreen figure for PNG export.
+%   reports : cell array of pipeline report structs.
+%   opts    : optional struct
+%     .title           override header text (default 'Session Quality Overview')
+%     .onRefresh       function handle, called with no args when the
+%                        in-app Refresh button is clicked. If empty the
+%                        Refresh button is hidden (PNG export path).
+%     .onExport        function handle for Export Dashboard PNG.
+%                        If empty the button is hidden.
+%     .onFailedRowClick function handle taking (filename) when a row in
+%                        the failed-files table is selected; used to
+%                        jump to that file's text report. Empty = no
+%                        callback wired.
+%     .failed          struct array of files that did not complete
+%                        (errored or skipped at a hard gate), from
+%                        runPipelineCore. These have no report, so they are
+%                        surfaced here rather than derived from reports.
+
+if nargin < 3 || ~isstruct(opts), opts = struct(); end
+if ~isfield(opts, 'title'),           opts.title = 'Session Quality Overview'; end
+if ~isfield(opts, 'onRefresh'),       opts.onRefresh = []; end
+if ~isfield(opts, 'onExport'),        opts.onExport = []; end
+if ~isfield(opts, 'onFailedRowClick'),opts.onFailedRowClick = []; end
+if ~isfield(opts, 'failed'),          opts.failed = struct([]); end
+
+% Clear any existing children so this works as both first-paint and refresh.
+delete(allchild(parent));
+
+verdicts = aggregateGateVerdicts(reports);
+metrics  = aggregateMetricDistributions(reports);
+
+drawHeader(parent, opts.title, verdicts, opts.failed);
+drawFailedTable(parent, reports, opts.failed, opts.onFailedRowClick);
+drawHistograms(parent, metrics);
+drawButtons(parent, opts.onRefresh, opts.onExport);
+end
+
+% -- header ----------------------------------------------------------------
+
+function drawHeader(parent, titleText, verdicts, failed)
+nFiles    = numel(verdicts.files);
+nErrored  = numel(failed);
+if nFiles == 0 && nErrored == 0
+    sub = 'No reports yet - run a pipeline with a Quality Gate.';
+else
+    sub = sprintf('%d files: %d Pass / %d Marginal / %d Fail', ...
+        nFiles, verdicts.counts.Pass, verdicts.counts.Marginal, ...
+        verdicts.counts.Fail);
+    if nErrored > 0
+        sub = sprintf('%s / %d did not complete', sub, nErrored);
+    end
+end
+uilabel(parent, 'Text', titleText, 'FontWeight', 'bold', 'FontSize', 14, ...
+    'Position', [10, parentTop(parent) - 25, parentWidth(parent) - 20, 22]);
+uilabel(parent, 'Text', sub, ...
+    'Position', [10, parentTop(parent) - 48, parentWidth(parent) - 20, 22], ...
+    'FontColor', [0.4 0.4 0.4]);
+end
+
+% -- failed-files table ----------------------------------------------------
+
+function drawFailedTable(parent, reports, failed, onRowClick)
+% Full width, and up to just under the header: this used to share the band
+% with a files x gates verdict heatmap, which was unreadable past ~10 files
+% and said nothing the table does not, one row per flagged file with the
+% actual reasons. Taking the whole band back buys visible rows.
+HEADER_H = 70;   % title + subtitle, per drawHeader
+W = parentWidth(parent);
+H = parentTop(parent);
+yBot = round(H * 0.42);
+pos  = [10, yBot, W - 20, max(60, round(H - HEADER_H) - yBot)];
+
+% Two sources, one table: files that completed but tripped a gate
+% (collectFailures, derived from reports) and files that never produced a
+% report at all (failedFileRows, from the failure log). Errored files are
+% listed first so the re-run candidates are at the top.
+errRows = failedFileRows(failed);
+gateRows = collectFailures(reports);
+rows = [errRows; gateRows];
+uilabel(parent, 'Text', 'Failed / Marginal files', ...
+    'FontWeight', 'bold', ...
+    'Position', [pos(1), pos(2) + pos(4) + 2, pos(3), 18]);
+
+t = uitable(parent, 'Position', pos, ...
+    'ColumnName', {'File', 'Gate', 'Verdict', 'Reasons'}, ...
+    'ColumnWidth', {220, 160, 80, 'auto'}, ...
+    'Data', rows);
+
+if ~isempty(onRowClick)
+    t.CellSelectionCallback = @(src, ev) handleSelect(src, ev, onRowClick);
+end
+end
+
+function rows = collectFailures(reports)
+% One row per file. Roll up every Marginal/Fail gate's label and
+% reasons so a file is never split across multiple rows: the user gets
+% the full picture of why a file was flagged in one place.
+% cell(0,4) (not {}) so it vertcats cleanly with the errored-file rows.
+rows = cell(0, 4);
+for ri = 1:numel(reports)
+    r = reports{ri};
+    if ~isstruct(r) || ~isfield(r, 'quality') ...
+            || ~isfield(r.quality, 'gates'), continue, end
+    [~, name] = fileparts(r.inputFile);
+
+    flaggedGates = {};
+    allReasons   = {};
+    worstSeen    = 'Pass';
+    for gi = 1:numel(r.quality.gates)
+        g = r.quality.gates{gi};
+        if ~any(strcmp(g.verdict, {'Marginal', 'Fail'})), continue, end
+        flaggedGates{end+1} = g.label; %#ok<AGROW>
+        worstSeen = worstVerdict(worstSeen, g.verdict);
+        if isfield(g, 'reasons') && ~isempty(g.reasons)
+            for k = 1:numel(g.reasons)
+                allReasons{end+1} = sprintf('[%s] %s', g.label, g.reasons{k}); %#ok<AGROW>
+            end
+        end
+    end
+    if isempty(flaggedGates), continue, end
+
+    gateStr   = strjoin(flaggedGates, ', ');
+    reasonStr = strjoin(allReasons,   '; ');
+    rows(end+1, :) = {name, gateStr, worstSeen, reasonStr}; %#ok<AGROW>
+end
+end
+
+function v = worstVerdict(a, b)
+order = {'Pass', 'Marginal', 'Fail'};
+ia = find(strcmp(a, order)); if isempty(ia), ia = 0; end
+ib = find(strcmp(b, order)); if isempty(ib), ib = 0; end
+v = order{max(ia, ib)};
+end
+
+function handleSelect(src, ev, cb)
+if isempty(ev.Indices), return, end
+row = ev.Indices(1);
+if row < 1 || row > size(src.Data, 1), return, end
+fileName = src.Data{row, 1};
+try
+    cb(fileName);
+catch
+    % Swallow callback errors - dashboard must not crash the app.
+end
+end
+
+% -- per-metric histograms -------------------------------------------------
+
+function drawHistograms(parent, metrics)
+W = parentWidth(parent);
+H = parentTop(parent);
+yTop = round(H * 0.36);
+yBot = 50;
+hPanel = yTop - yBot;
+if hPanel < 60 || isempty(metrics)
+    if isempty(metrics)
+        uilabel(parent, 'Text', 'No enabled metrics to plot', ...
+            'Position', [10, yTop - 22, W - 20, 20], ...
+            'FontColor', [0.5 0.5 0.5]);
+    end
+    return
+end
+
+uilabel(parent, 'Text', 'Per-metric distributions', 'FontWeight', 'bold', ...
+    'Position', [10, yTop, W - 20, 18]);
+
+nCols = min(4, numel(metrics));
+nRows = ceil(numel(metrics) / nCols);
+cellW = floor((W - 20) / nCols) - 5;
+cellH = floor((hPanel - 22) / nRows) - 5;
+
+for k = 1:numel(metrics)
+    col = mod(k - 1, nCols);
+    row = floor((k - 1) / nCols);
+    x = 10 + col * (cellW + 5);
+    y = yTop - 22 - (row + 1) * cellH - row * 5;
+    ax = uiaxes(parent, 'Position', [x, y, cellW, cellH]);
+    ax.TickLabelInterpreter = 'none';
+    drawOneHistogram(ax, metrics(k));
+end
+end
+
+function drawOneHistogram(ax, m)
+vals = m.values;
+if isempty(vals)
+    text(ax, 0.5, 0.5, m.displayName, 'HorizontalAlignment', 'center', ...
+        'Units', 'normalized');
+    axis(ax, 'off');
+    return
+end
+
+nBins = max(5, min(20, ceil(sqrt(numel(vals)))));
+histogram(ax, vals, nBins, 'FaceColor', [0.3 0.5 0.8], 'EdgeColor', 'none');
+title(ax, m.displayName, 'FontSize', 9, 'Interpreter', 'none');
+ax.FontSize = 8;
+
+hold(ax, 'on');
+yl = ylim(ax);
+for t = m.absThresholds
+    plot(ax, [t t], yl, 'r-', 'LineWidth', 1.2);
+end
+hold(ax, 'off');
+end
+
+% -- buttons ---------------------------------------------------------------
+
+function drawButtons(parent, onRefresh, onExport)
+W = parentWidth(parent);
+
+x = W - 200;
+if ~isempty(onRefresh)
+    uibutton(parent, 'Text', 'Refresh', ...
+        'Position', [x, 10, 90, 28], ...
+        'ButtonPushedFcn', @(~,~) onRefresh());
+    x = x + 100;
+end
+if ~isempty(onExport)
+    uibutton(parent, 'Text', 'Export PNG', ...
+        'Position', [x, 10, 90, 28], ...
+        'ButtonPushedFcn', @(~,~) onExport());
+end
+end
+
+% -- layout helpers --------------------------------------------------------
+
+function w = parentWidth(parent)
+pos = getPositionPx(parent);
+w = pos(3);
+end
+
+function h = parentTop(parent)
+pos = getPositionPx(parent);
+h = pos(4);
+end
+
+function p = getPositionPx(parent)
+% Returns the inner [width height] in pixels. uipanel and uifigure
+% both expose .Position as [x y w h].
+if isprop(parent, 'InnerPosition')
+    p = parent.InnerPosition;
+else
+    p = parent.Position;
+end
+end

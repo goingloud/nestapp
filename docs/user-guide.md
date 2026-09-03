@@ -1,0 +1,187 @@
+# nestapp user guide
+
+Every tab, control and export route. For installation and a first run, see the
+[README](../README.md); for the code layout, [architecture.md](architecture.md).
+
+- [Cleaning tab](#cleaning-tab)
+- [Reports tab](#reports-tab)
+- [Explore tab](#explore-tab)
+- [Preferences](#preferences)
+- [When something does not work](#when-something-does-not-work)
+
+---
+
+## Cleaning tab
+
+### Building a pipeline
+
+The left panel is a tree of every processing step, grouped by the stage it
+belongs to. Click a step to read what it does and what its parameters mean in
+the **Info** panel.
+
+- **Add** (or double-click) appends the selected step to **Selected Steps**.
+- **Remove**, **Move Up** and **Move Down** edit the order.
+- Clicking a step in **Selected Steps** shows its parameters in the table
+  below, where they can be edited. **Default Value** resets that step.
+- **Re/Start Steps** clears the pipeline, after a confirmation prompt.
+
+**Only installed steps are offered.** The picker asks what each step requires
+and withholds any whose plugin is missing or too old — because the alternative
+is building a pipeline around a step and finding out at the pre-flight. A saved
+pipeline that references an unavailable step still *loads*; the pre-flight then
+blocks the run and names both the step and what it needs.
+
+### Templates
+
+**File → Load Template** starts you from a published pipeline rather than a
+blank list. See the table in the [README](../README.md#first-run) for what each
+one is and the paper to cite. The template's citation and DOI are written to the
+run log at the start of every batch, so the reference stays with the data.
+
+### Saving and loading pipelines
+
+- **File → Save Pipeline** writes the step list and every parameter to a `.mat`.
+- **File → Load Pipeline** restores one.
+- **File → Recent Pipelines** lists the last few.
+- **File → Copy Pipeline Description** puts a prose description of the current
+  pipeline on the clipboard — useful for a methods section before you have run
+  anything.
+
+### Running
+
+1. **File → Open Data...** selects the input files (`.set`, `.vhdr`, `.cnt`,
+   `.cdt`). Reading the non-EEGLAB formats needs the matching plugin —
+   `bva-io` for BrainVision, `loadcnt` for Neuroscan, `curry` for Curry.
+2. **Run Analysis** starts the batch. A progress dialog names the current file
+   and step, and the run can be cancelled between steps.
+
+A file that fails does not stop the batch: the error is captured with a
+diagnostic bundle, the remaining files continue, and the failure is listed in
+the report with the step that raised it.
+
+### Provenance
+
+Every processed file gets its full pipeline — steps, parameters and a timestamp
+— written into `EEG.history` inside the saved `.set`. After a run the final
+dataset is also in the MATLAB base workspace, so:
+
+```matlab
+EEG.history      % the whole record as text
+eegh             % browse it in EEGLAB's history viewer
+```
+
+This is deliberate: a `.set` from a nestapp run can always be traced back to how
+it was made, even years later and without this repository.
+
+---
+
+## Reports tab
+
+One report per processed file, added as the run proceeds. Each shows:
+
+- channel counts — how many were present, rejected, interpolated, and which;
+- trial retention — how many epochs survived, and what removed them;
+- ICA statistics — components per round, what each was classified as, how much
+  variance was removed;
+- quality-gate verdicts, where thresholds were configured (**Pass**,
+  **Marginal** or **Fail**, with the metric and value that decided it).
+
+Three things to do with a report:
+
+- **Copy Methods Text** — a prose description of what was actually done to
+  *this* file, with the numbers filled in, ready to paste into a manuscript.
+- **Export Metrics CSV** — one row per file, for a multi-subject batch summary.
+- **Export PDF...** — the report as a document, one file or all of them.
+
+Reports are also written to disk beside the processed data, so a batch can be
+reviewed later without re-running it.
+
+---
+
+## Explore tab
+
+Explore works on processed `.set` files — output from a nestapp run, or any
+EEGLAB-compatible epoched dataset. It supports the comparison most TMS-EEG
+studies are designed around: pre versus post, or one cohort against another.
+
+### Defining the comparison
+
+- **Add group...** assigns recordings to a named condition. A group is defined
+  over **subjects**, so repeat recordings of one person are averaged before the
+  group estimate is formed — and the reported *n* counts participants, not
+  files. Sessions are weighted by their trial counts, because two sessions of
+  one person are not equal evidence if one held 10 trials and the other 190.
+- **Files, subjects, groups...** shows and corrects which file belongs to whom.
+  This is where *n* comes from, so it is worth checking.
+- **Design** is set explicitly as paired or unpaired. Paired is offered only
+  when every group holds the same subjects, and it drops any subject without a
+  complete set — naming them rather than silently excluding them.
+- **Region of interest** is chosen from a scalp diagram or a named preset,
+  defaulting to `AF3 F1 F3 FC1 FC3`. A file on a non-conforming montage is
+  excluded and named.
+- **Windows** define the intervals measured. Each carries a peak polarity
+  (`auto`, `pos` or `neg`) deciding which way its peak is read. The same table
+  switches to **results**, reporting mean amplitude, peak latency and peak
+  amplitude for the group selected in the groups list.
+
+Measures are taken **per subject and then averaged**, not read off the group
+average. For a peak the two differ systematically, because a peak read off an
+average is flattened by latency jitter between subjects.
+
+### Plots
+
+The plot picker offers the ROI waveform, global and local mean field power, the
+difference wave, scalp topographies, a TEP-topo grid, and a per-window bar
+chart. A plot that cannot be drawn with the current settings is **listed with
+the reason** rather than hidden. Plot-specific settings are behind
+**Options...**.
+
+Confidence intervals are computed across subjects, with the paired design using
+the Cousineau–Morey correction. The interval level actually drawn is stamped
+into the figure caption, so a band can never be labelled with a level it was not
+computed at.
+
+### Exporting
+
+- **Figure...** composes the plot at a chosen column width and resolution,
+  stamping the groups, sample sizes, design and ROI into a caption line so the
+  image stays interpretable once separated from the session.
+- **Measures → CSV...** writes one row per subject, group and window.
+- **Results → MATLAB...** writes the complete result, curves included.
+  **File → Load Analysis** reads it back, restoring groups, subject
+  assignments, ROI, windows, design and plot selection.
+
+---
+
+## Preferences
+
+**Settings → Preferences**:
+
+- the EEGLAB installation folder;
+- default data and pipeline folders;
+- output layout — whether results are grouped by artifact type or by input file;
+- whether the Reports tab opens automatically after a run;
+- whether clearing a pipeline needs confirmation.
+
+---
+
+## When something does not work
+
+**Help → Check My Install** first. It reports your MATLAB version, which
+plugins were found and their versions, and what any unavailable step is waiting
+for. Most problems are a missing or out-of-date plugin, and it names which.
+
+(The same check is `nestappDoctor` at the MATLAB prompt, if you prefer.)
+
+If you need to report a problem, **Help → Collect Support Bundle...** gathers
+the versions, the pipeline and the logs into one file to attach — or
+**Help → Copy Diagnostics to Clipboard** if you just want to paste them into an
+issue.
+
+| Symptom | Usually |
+|---|---|
+| An AARATEP step is unavailable | The helper functions are not installed — **Help → Install AARATEP Helpers...** |
+| A step is greyed out in the picker | Its plugin is missing or older than the step needs — **Check My Install** names it |
+| `Undefined function 'pop_...'` | EEGLAB's folder is not set in **Settings → Preferences** |
+| A saved pipeline will not run | The pre-flight found an unavailable step; the message names it |
+| A file failed mid-batch | The report names the step that raised it, and a diagnostic bundle is saved beside the output |

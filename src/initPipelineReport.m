@@ -1,3 +1,7 @@
+
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
+% Part of nestapp; see the LICENSE file for full terms.
 function report = initPipelineReport(inputFile)
 % INITPIPELINEREPORT  Create a fresh PipelineReport struct for one EEG file.
 %
@@ -10,8 +14,10 @@ function report = initPipelineReport(inputFile)
 %     processedAt           - datetime when processing started
 %     steps                 - cell array of step records (one per completed step)
 %     channels.original     - EEG.nbchan at Load Data
-%     channels.nRejected    - cumulative channels removed (bad channel steps)
-%     channels.nInterpolated- cumulative channels interpolated
+%     channels.nRejected    - cumulative bad channels (removed by bad-channel
+%                             steps, or interpolated in place by the AARATEP
+%                             detectors)
+%     channels.nInterpolated- cumulative channels interpolated (incl. in place)
 %     channels.final        - EEG.nbchan after last step
 %     trials.original       - epoch count at first Epoching step
 %     trials.rejected       - cumulative rejected epochs
@@ -31,16 +37,55 @@ function report = initPipelineReport(inputFile)
 report.inputFile   = inputFile;
 report.processedAt = datetime('now');
 
+% Where Save New Set wrote the cleaned recording, filled in by processOneFile
+% when that step runs. '' for a pipeline that never saves - which is a real
+% configuration, and the reason the app warns about it.
+%
+% Without this the batch's own output is undiscoverable from the report: the
+% destination is composed inside the Save New Set case from outputPaths and
+% the savenew name, and was thrown away as soon as it was used. The Reports
+% tab needs it to offer the file it is describing.
+report.outputFile = '';
+% Pipeline / template name (e.g. 'TMS-EEG / AARATEP'); set by processOneFile
+% from opts.pipelineName. Provenance metadata saved with the report. ''
+% for ad-hoc pipelines. (Citations are derived from the steps that ran, not
+% this name - see stepCitations.)
+report.pipelineName = '';
+
+% Per-step records appended by processOneFile: each has .name, .params (the
+% step's parameter struct, used to build the methods narrative), .chansBefore/
+% After, .trialsBefore/After, .duration, .timestamp.
 report.steps = {};
 
 report.channels.original      = 0;
 report.channels.nRejected     = 0;
 report.channels.nInterpolated = 0;
 report.channels.final         = 0;
+% Labels (not just counts) of the channels removed by rejection steps and of
+% the channels restored by interpolation steps, accumulated across the
+% pipeline so the report can name them. See processOneFile post-step block.
+report.channels.rejectedNames     = {};
+report.channels.interpolatedNames = {};
+% Removed channels split by reason so reports can distinguish detection from
+% intent: badChannelNames = quality-based bad-channel detection
+% (kurt/spec/ARTIST/ASR), unneededNames = the deliberate "Remove un-needed
+% Channels" step. Both feed the per-file report and the session-summary tally
+% (kept distinct there); together they make up rejectedNames.
+report.channels.badChannelNames   = {};
+report.channels.unneededNames     = {};
 
-report.trials.original = 0;
-report.trials.rejected = 0;
-report.trials.final    = 0;
+report.trials.original         = 0;
+report.trials.rejected         = 0;
+report.trials.final            = 0;
+% Cumulative original-trial indices that any bad-epoch step removed.
+% Updated by processOneFile after Remove Bad Epoch / Remove Bad Trials
+% so QC images can mark exactly which positions were dropped.
+report.trials.rejectedIndices  = [];
+% Current-to-original index map. Initialised at the first Epoching
+% step to 1:original and shrunk as trials are rejected. Internal -
+% used to remap locally-indexed rejection results back to original
+% trial numbers.
+report.trials.survivingIdx     = [];
 
 report.ica.nComponents = 0;
 report.ica.nRejected   = 0;
@@ -54,4 +99,10 @@ ICA_CATEGORIES = {'Brain','Muscle','Eye','Heart','Line Noise','Ch Noise','Other'
 report.ica.categories.names    = ICA_CATEGORIES;
 report.ica.categories.nRemoved = zeros(1, 7);
 report.ica.categories.varShare = zeros(1, 7);
+
+% Quality screening: populated when autoQualityReport is on (figures)
+% or when Quality Gate pipeline steps run (gates / worstVerdict).
+report.quality.figures      = {};
+report.quality.gates        = {};
+report.quality.worstVerdict = 'NotChecked';
 end

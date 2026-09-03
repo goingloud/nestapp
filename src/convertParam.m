@@ -1,4 +1,8 @@
-﻿function v = convertParam(raw, type)
+
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
+% Part of nestapp; see the LICENSE file for full terms.
+function v = convertParam(raw, type)
 % CONVERTPARAM Convert a raw parameter value to the correct typed form.
 %   v = CONVERTPARAM(raw, type) coerces raw (from UITable, TextArea, or a
 %   saved .mat) to the type declared in the step registry.
@@ -13,7 +17,16 @@
 
 switch type
     case {'scalar', 'integer'}
-        if isnumeric(raw) && isscalar(raw)
+        % Several EEGLAB scalar params (clean_rawdata's *Criterion values)
+        % accept the literal 'off' to disable that stage. Preserve it rather
+        % than coercing it to NaN, which would leave the stage running with a
+        % NaN threshold or be stripped into the upstream default.
+        if (ischar(raw) || isstring(raw)) && strcmpi(strtrim(char(raw)), 'off')
+            v = 'off';
+        elseif iscell(raw) && isscalar(raw) && (ischar(raw{1}) || isstring(raw{1})) ...
+                && strcmpi(strtrim(char(raw{1})), 'off')
+            v = 'off';
+        elseif isnumeric(raw) && isscalar(raw)
             v = raw;
         elseif isnumeric(raw) && ~isempty(raw)
             v = raw(1);
@@ -47,7 +60,9 @@ switch type
     case 'logical'
         v = raw;   % keep as 'on'/'off' string
 
-    case 'string'
+    % 'folder' and 'file' are strings that the GUI offers a picker for -
+    % the stored value is a plain path, so they convert identically.
+    case {'string', 'folder', 'file'}
         if ischar(raw) && isrow(raw)
             v = raw;
         elseif ischar(raw)

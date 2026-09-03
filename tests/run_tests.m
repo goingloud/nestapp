@@ -1,92 +1,233 @@
-%% run_tests  Run the full nestapp test suite (or a subset).
+%% run_tests  Run the nestapp test suite (or one part of it).
 %
 %   USAGE
-%     run_tests            % unit + regression (no EEGLAB required)
-%     run_tests('all')     % unit + regression + integration (EEGLAB required)
-%     run_tests('unit')    % unit tests only
-%     run_tests('regression') % regression tests only
-%     run_tests('integration') % integration tests only (EEGLAB required)
+%     run_tests              % 'pure' - no EEGLAB, no display. The default.
+%     run_tests('eeglab')    % needs EEGLAB on the path
+%     run_tests('gui')       % needs a display
+%     run_tests('all')       % everything
+%
+%   A SUITE IS A FOLDER, AND THE FOLDER DECLARES WHAT THE TEST NEEDS:
+%
+%     tests/pure/         no EEGLAB, no display (writing to a temp dir is fine)
+%     tests/eeglab/       needs EEGLAB
+%     tests/gui/          needs a display
+%     tests/eeglab_gui/   needs both
+%
+%   Two axes, both binary, so the cross-product is four folders and selection
+%   needs no per-test machinery. The requirement is visible in the path, which
+%   means a test cannot be misfiled without it being obvious.
+%
+%   THREE RULES THIS RUNNER ENFORCES, each fixing a way the previous suite went
+%   quietly wrong:
+%
+%   1. A SKIP IS A FAILURE. The old runner gated only on Failed and merely
+%      printed the Incomplete count, so a run in which every test skipped
+%      exited green - which is how 125 of 916 cases came to be executed by
+%      nothing at all, unnoticed, for months. Here a skip is a fault: the
+%      folder already said what the test needs, so a test has no business
+%      deciding at runtime that it cannot run. There are no assumeFail sites in
+%      the new suite, and this rule is what keeps it that way.
+%
+%   2. AN EMPTY SUITE IS A FAILURE. The old runner warned and passed when a
+%      suite folder was missing, so a typo'd or renamed directory was green.
+%
+%   3. THE PATH IS RESTORED. The old runner added to the path and never
+%      removed, which is why every local test runner had to snapshot and
+%      restore it by hand.
+%
+%   Preconditions are checked ONCE per suite, up front, with a clear message -
+%   not per test. Running the eeglab suite without EEGLAB is a user error and
+%   should say so immediately, not skip 96 tests one at a time.
 %
 %   OUTPUT
-%     Prints pass/fail summary to the MATLAB command window.
-%     Non-zero exit status on any failure (useful for CI).
+%     results  (optional) matlab.unittest.TestResult array. Called with no
+%              output, run_tests errors on any failure or skip so it cannot be
+%              missed. When the caller captures results it inspects them
+%              itself - but note that checking only [results.Failed] reproduces
+%              the exact blindness rule 1 exists to remove; check .Incomplete
+%              too.
 %
-%   See also: runtests
+%   DURING THE REWRITE this runner also serves the OLD suite under its old
+%   names (unit, regression, integration, ui, characterization, and 'fast'
+%   meaning unit+regression); it is now an alias for 'pure', so the dormant CI
+%   workflow that calls it still resolves to a real suite.
+%
+%   See also: NestappTestCase, addNestappPath, scratchDir
 
-function run_tests(suite)
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
+% Part of nestapp; see the LICENSE file for full terms.
+
+function results = run_tests(suite)
 if nargin < 1
-    suite = 'fast';   % unit + regression, no EEGLAB
+    suite = 'pure';
 end
 
 testRoot = fileparts(mfilename('fullpath'));
-repoRoot = fileparts(testRoot);
-addpath(repoRoot);
-addpath(fullfile(repoRoot, 'src'));
+oldPath  = path;
+restore  = onCleanup(@() path(oldPath));   % rule 3: always put the path back
 addpath(fullfile(testRoot, 'helpers'));
+addNestappPath();
 
-switch lower(suite)
-    case 'fast'
-        suites = {fullfile(testRoot, 'unit'), fullfile(testRoot, 'regression')};
-    case 'unit'
-        suites = {fullfile(testRoot, 'unit')};
-    case 'regression'
-        suites = {fullfile(testRoot, 'regression')};
-    case 'integration'
-        suites = {fullfile(testRoot, 'integration')};
-    case 'all'
-        suites = {fullfile(testRoot, 'unit'), ...
-                  fullfile(testRoot, 'regression'), ...
-                  fullfile(testRoot, 'integration')};
-    otherwise
-        error('run_tests: unknown suite "%s". Valid: fast, unit, regression, integration, all', suite);
-end
+spec = resolveSuite(lower(suite), testRoot);
+checkPreconditions(spec.needs, suite);
+
+logFile = fullfile(tempdir, 'nestapp_test_progress.log');
+if exist(logFile, 'file'); delete(logFile); end
+fprintf('Per-test progress log: %s\n\n', logFile);
+
+% A FILE THAT DOES NOT COMPILE MUST NOT BE SILENTLY DROPPED. TestSuite.fromFolder
+% only WARNS when a file fails to parse, excludes it, and carries on - so a
+% syntax error in a test class removes every one of its cases while the run
+% still reports green. That happened here: a broken string literal in
+% SuiteHygieneTest silently took eight rules out of the suite and it passed.
+%
+% This is the same disease as rules 1 and 2, arriving by a third route: the
+% suite quietly gets smaller and nothing says so. Promoting the warning to an
+% error is the whole fix.
+warnState = warning('error', 'MATLAB:unittest:TestSuite:FileExcluded');
+restoreWarn = onCleanup(@() warning(warnState));
+
+runner = matlab.unittest.TestRunner.withTextOutput;
+runner.addPlugin(TestProgressLogger(logFile));
 
 results = matlab.unittest.TestResult.empty;
-for i = 1:numel(suites)
-    if ~exist(suites{i}, 'dir')
-        warning('run_tests: suite directory not found: %s', suites{i});
-        continue
+for i = 1:numel(spec.folders)
+    f = spec.folders{i};
+    if ~isfolder(f)
+        error('nestapp:missingSuite', ...
+              'Suite folder does not exist: %s', f);   % rule 2
     end
-    r = runtests(suites{i});
-    results = [results, r]; %#ok<AGROW>
+    s = matlab.unittest.TestSuite.fromFolder(f);
+    if isempty(s)
+        error('nestapp:emptySuite', ...
+              'Suite folder holds no tests: %s', f);    % rule 2
+    end
+    results = [results, runner.run(s)]; %#ok<AGROW>
 end
 
-%% Summary
+report(results, suite);
+
+% A SKIP THROWS EVEN WHEN THE CALLER CAPTURES RESULTS. Failures are
+% nargout-gated, because a caller may legitimately want to collect and triage
+% them - but a skip in a strict suite is not a test outcome, it is the suite
+% being misconfigured, and there is no reading of that a caller should be
+% allowed to swallow. This is the hole the old setup had: CI captured results
+% and asserted on [results.Failed] alone, which is exactly how 125 skipped
+% cases went unnoticed for months. Gating skips on nargout would rebuild it.
+nSkip = sum([results.Incomplete]);
+if nSkip > 0
+    error('nestapp:testsSkipped', ...
+          ['run_tests: %d test(s) skipped in a strict suite. A skip is a ' ...
+           'fault here - the folder already declares what a test needs.'], nSkip);
+end
+if sum([results.Failed]) > 0 && nargout == 0
+    error('nestapp:testsFailed', 'run_tests: %d test(s) failed.', ...
+          sum([results.Failed]));
+end
+end
+
+% ── suites ───────────────────────────────────────────────────────────────────
+
+function spec = resolveSuite(suite, testRoot)
+% .folders  where the tests are
+% .needs    {} | {'eeglab'} | {'display'} | {'eeglab','display'}
+% A skip is always a failure (rule 1): the folder already declares what a test
+% needs, so no test has any business deciding it cannot run.
+% fullfile returns a CELLSTR when handed one, so at('a','b') gives a 2-element
+% cell of paths and at('a') a 1-element cell - which is what .folders wants.
+at = @(varargin) fullfile(testRoot, varargin);
+spec = struct('folders', {{}}, 'needs', {{}});
+
+switch suite
+    case 'pure'
+        spec.folders = at('pure');
+    case 'eeglab'
+        spec.folders = at('eeglab');       spec.needs = {'eeglab'};
+    case 'gui'
+        spec.folders = at('gui');          spec.needs = {'display'};
+    case 'eeglab_gui'
+        spec.folders = at('eeglab_gui');   spec.needs = {'eeglab', 'display'};
+    case 'all'
+        spec.folders = at('pure', 'eeglab', 'gui', 'eeglab_gui');
+        spec.needs   = {'eeglab', 'display'};
+
+    % 'fast' is what .github/workflows/tests.yml calls. It named the old
+    % unit+regression suite; now it is simply 'pure'. Kept as an alias because
+    % renaming a suite out from under a workflow turns a DORMANT job into a
+    % BROKEN one, and the breakage would only surface whenever someone revives
+    % it. CI has not run since 2026-05-31; a one-line alias keeps that door
+    % open at no cost.
+    case 'fast'
+        spec.folders = at('pure');
+
+    otherwise
+        error('nestapp:unknownSuite', ...
+              ['run_tests: unknown suite "%s". Valid: pure (default), ' ...
+               'eeglab, gui, eeglab_gui, all, fast (= pure).'], suite);
+end
+end
+
+function checkPreconditions(needs, suite)
+% Once, up front, naming what is missing and how to fix it. A test never makes
+% this decision for itself - see rule 1.
+for k = 1:numel(needs)
+    switch needs{k}
+        case 'eeglab'
+            if isempty(which('eeglab'))
+                error('nestapp:eeglabRequired', ...
+                    ['The "%s" suite needs EEGLAB on the MATLAB path, and it ' ...
+                     'is not there.\nAdd it (addpath to the EEGLAB root, then ' ...
+                     'eeglab(''nogui'')) and run again, or use run_tests(''pure'').'], ...
+                     suite);
+            end
+        case 'display'
+            if ~usejava('desktop')
+                error('nestapp:displayRequired', ...
+                    ['The "%s" suite needs a display and this session has ' ...
+                     'none.\nRun it from a desktop MATLAB, or use ' ...
+                     'run_tests(''pure'').'], suite);
+            end
+    end
+end
+end
+
+% ── reporting ────────────────────────────────────────────────────────────────
+
+function report(results, suite)
 nPass = sum([results.Passed]);
 nFail = sum([results.Failed]);
-nInc  = sum([results.Incomplete]);
-nTot  = numel(results);
+nSkip = sum([results.Incomplete]);
 
 fprintf('\n');
-fprintf('══════════════════════════════════════════════\n');
-fprintf('  nestapp test suite — %s\n', suite);
-fprintf('══════════════════════════════════════════════\n');
-fprintf('  Total:      %3d\n', nTot);
-fprintf('  Passed:     %3d\n', nPass);
-if nFail > 0
-    fprintf('  FAILED:     %3d  ← fix before committing\n', nFail);
-else
-    fprintf('  Failed:     %3d\n', nFail);
-end
-if nInc > 0
-    fprintf('  Incomplete: %3d\n', nInc);
-end
-fprintf('══════════════════════════════════════════════\n\n');
+fprintf('==============================================\n');
+fprintf('  nestapp test suite - %s\n', suite);
+fprintf('==============================================\n');
+fprintf('  Total:   %4d\n', numel(results));
+fprintf('  Passed:  %4d\n', nPass);
+fprintf('  Failed:  %4d%s\n', nFail, marker(nFail));
+fprintf('  Skipped: %4d%s\n', nSkip, marker(nSkip));
+fprintf('==============================================\n\n');
 
-%% Print failed test names for quick diagnosis
-if nFail > 0
-    fprintf('Failed tests:\n');
-    for i = 1:numel(results)
-        if results(i).Failed
-            fprintf('  ✗ %s\n', results(i).Name);
-        end
-    end
-    fprintf('\n');
+% Names, not just counts. A count tells you something is wrong; a name tells
+% you what. The old runner printed failure names but only a skip COUNT, which
+% is how skips stayed invisible.
+printNames(results, [results.Failed], 'Failed');
+printNames(results, [results.Incomplete], ...
+    ['Skipped (a skip is a FAULT - the folder already declares what a ' ...
+     'test needs)']);
 end
 
-if nFail > 0 && nargout == 0
-    % In CI contexts: exit with non-zero status
-    % (MATLAB does not have a direct exit code, but the caller can check)
-    error('run_tests: %d test(s) failed.', nFail);
+function s = marker(n)
+if n > 0; s = '  <-- fix before committing'; else; s = ''; end
 end
+
+function printNames(results, mask, heading)
+if ~any(mask); return; end
+fprintf('%s:\n', heading);
+hit = results(mask);
+for i = 1:numel(hit)
+    fprintf('  - %s\n', hit(i).Name);
+end
+fprintf('\n');
 end

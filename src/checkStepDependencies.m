@@ -1,4 +1,8 @@
-﻿function [ok, msg] = checkStepDependencies(stepNames, filePaths)
+
+% SPDX-License-Identifier: GPL-3.0-or-later
+% Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
+% Part of nestapp; see the LICENSE file for full terms.
+function [ok, msg] = checkStepDependencies(stepNames, filePaths)
 % CHECKSTEPDEPENDENCIES  Verify required plugins are on the MATLAB path.
 %
 %   [ok, msg] = checkStepDependencies(stepNames, filePaths)
@@ -27,33 +31,42 @@ exts = unique(lower(extList));
 steps    = stepRegistry();
 nameList = {steps.name};
 
-% missing: containers.Map keyed by plugin name
+% Vendored AARATEP helpers ship with nestapp under third_party/ but are only
+% added to the path lazily during step dispatch. Add them now - only when a
+% selected step actually needs them - so the which() probes below see the
+% bundled functions instead of reporting them as missing plugins. Gating
+% avoids a ~280-file genpath walk on every non-AARATEP pre-flight.
+%
+% Which steps need them is DERIVED from the registry (a requirement whose
+% function is a vendored c_* helper), not from a hand-kept list beside it.
+% The previous list named three steps while five needed the path, so
+% "Modified Bandpass Filter (AARATEP)" and both "Detect Bad Channels" steps
+% were reported as missing a plugin that ships in the box - blocking runs
+% that would have worked.
+if anyStepNeedsVendoredHelper(stepNames, steps, nameList)
+    try
+        ensureAaratepOnPath();
+    catch
+        % If the vendored tree is genuinely absent, the which() checks
+        % below report the AARATEP steps as missing with the bundled note.
+    end
+end
+
+% missing: containers.Map keyed by plugin display name
 missing = containers.Map('KeyType','char','ValueType','any');
 
 for i = 1:numel(stepNames)
     idx = find(strcmp(nameList, stepNames{i}), 1);
     if isempty(idx); continue; end
-    reqs = steps(idx).requires;
-    if isempty(reqs); continue; end
-    for j = 1:numel(reqs)
-        r = reqs(j);
-        % Skip format-specific loaders when no files are selected or no file of
-        % that format is present in the selection.
-        if ~isempty(r.fileExt) && (isempty(filePaths) || ~any(strcmpi(exts, r.fileExt)))
-            continue
-        end
-        if isempty(which(r.fn))
-            if ~isKey(missing, r.plugin)
-                missing(r.plugin) = struct( ...
-                    'installNote', r.installNote, ...
-                    'steps',       {{}}, ...
-                    'fns',         {{}});
-            end
-            entry = missing(r.plugin);
-            entry.steps{end+1} = stepNames{i};
-            entry.fns{end+1}   = r.fn;
-            missing(r.plugin)  = entry;
-        end
+    % One resolver answers this for both the picker and the pre-flight, so a
+    % step cannot be offered in the list and then rejected here (or the
+    % reverse). See stepAvailability.
+    if isempty(filePaths); checkExts = {}; else; checkExts = exts; end
+    [avail, unmet] = stepAvailability(steps(idx), checkExts);
+    if avail; continue; end
+    for j = 1:numel(unmet)
+        missing = addMissing(missing, unmet(j).plugin, unmet(j).note, ...
+                             stepNames{i}, unmet(j).fn);
     end
 end
 
@@ -76,4 +89,34 @@ for i = 1:numel(pluginNames)
     lines{end+1} = '';                                                %#ok<AGROW>
 end
 msg = strjoin(lines, newline);
+end
+
+% ── helpers ───────────────────────────────────────────────────────────────────
+function tf = anyStepNeedsVendoredHelper(stepNames, steps, nameList)
+% True when any selected step declares a requirement on a vendored AARATEP
+% helper. Those are the c_* functions under third_party/aaratep; every other
+% requirement resolves from the normal MATLAB path.
+tf = false;
+for i = 1:numel(stepNames)
+    k = find(strcmp(nameList, stepNames{i}), 1);
+    if isempty(k); continue; end
+    rq = steps(k).requires;
+    for j = 1:numel(rq)
+        if isfield(rq(j), 'fn') && ~isempty(rq(j).fn) && ...
+                startsWith(rq(j).fn, 'c_')
+            tf = true; return
+        end
+    end
+end
+end
+
+function missing = addMissing(missing, plugin, note, stepName, fn)
+% Record one unsatisfied requirement under its plugin display name.
+if ~isKey(missing, plugin)
+    missing(plugin) = struct('installNote', note, 'steps', {{}}, 'fns', {{}});
+end
+entry = missing(plugin);
+entry.steps{end+1} = stepName;
+entry.fns{end+1}   = fn;
+missing(plugin)    = entry;
 end
