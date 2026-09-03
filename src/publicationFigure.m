@@ -54,43 +54,20 @@ function [fig, info] = publicationFigure(drawFcn, opts)
 %
 %   See also: exploreResults, drawTEPTopo, exportgraphics
 
-SINGLE_MM = 89;    % typical journal single column
-DOUBLE_MM = 183;   % typical journal double column / full width
-
 if nargin < 2; opts = struct(); end
 opts = fillDefaults(opts, struct('width', 'double', 'height', [], ...
     'dpi', 600, 'fontSize', [], 'file', '', 'title', 'nestapp figure', ...
     'provenance', struct()));
-
-widthMm = opts.width;
-if isempty(widthMm); widthMm = 'double'; end
 if isempty(opts.dpi); opts.dpi = 600; end
-if ischar(widthMm) || isstring(widthMm)
-    switch lower(strtrim(char(widthMm)))
-        case 'single', widthMm = SINGLE_MM;
-        case 'double', widthMm = DOUBLE_MM;
-        otherwise
-            % Parsed, not rejected. The width setting has to accept the words
-            % 'single' and 'double', so the dialog stores it as TEXT - which
-            % means a millimetre value typed there arrives as '400', not 400.
-            % Erroring on that made the millimetre option this function
-            % advertises unreachable from the only interface that sets it.
-            widthMm = str2double(widthMm);
-    end
-end
-if ~isnumeric(widthMm) || ~isscalar(widthMm) || ~isfinite(widthMm) || widthMm <= 0
-    error('nestapp:badFigureWidth', ...
-          ['Width must be ''single'' (89 mm), ''double'' (183 mm), or a ' ...
-           'positive number of millimetres; got ''%s''.'], ...
-          char(string(opts.width)));
-end
-heightMm = opts.height;
-if isempty(heightMm); heightMm = widthMm * 0.62; end
-if isempty(opts.fontSize)
-    % Type has to shrink with the page or it collides with itself: the same
-    % 8 pt that reads well across 183 mm overlaps six column titles at 89 mm.
-    opts.fontSize = max(5, min(9, round(8 * widthMm / DOUBLE_MM)));
-end
+
+% The millimetre lookup, the 0.62 default height and the width-derived type
+% size are all pure arithmetic, and they used to be reachable only by composing
+% a figure - nine of them, in the test that checked this. publicationFigureSize
+% owns them now and is tested without any graphics at all.
+sz            = publicationFigureSize(opts);
+widthMm       = sz.widthMm;
+heightMm      = sz.heightMm;
+opts.fontSize = sz.fontSize;
 
 ppi = get(groot, 'ScreenPixelsPerInch');
 px  = round([widthMm heightMm] / 25.4 * ppi);
