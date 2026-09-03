@@ -1,5 +1,8 @@
 # nestapp architecture
 
+For what the app does from a user's side, see the [user guide](user-guide.md);
+for setup, the [README](../README.md).
+
 A map of how nestapp is put together and **where to make common changes**.
 For the per-function contract of any file, see the generated
 [API reference](../site/index.md) (built from the source header comments by

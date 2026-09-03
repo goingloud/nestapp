@@ -2,15 +2,15 @@
 
 Thanks for your interest in improving nestapp. This guide covers how to set up
 a development environment, the conventions we follow, and how to get a change
-merged. New to the codebase? Read [docs/architecture.md](docs/architecture.md)
+merged. New to the codebase? Read [docs/architecture.md](../docs/architecture.md)
 first — it maps what each module does and where to make common changes.
 
 ## Development setup
 
-1. **MATLAB R2023b or later** (developed on R2025b+). Required toolboxes:
+1. **MATLAB R2023b or later** (developed on R2026a). Required toolboxes:
    Signal Processing, Statistics and Machine Learning. The `TMS-EEG / AARATEP`
    template additionally needs the Curve Fitting Toolbox.
-2. **EEGLAB**, **TESA**, **FastICA** — install per the [README](README.md#requirements).
+2. **EEGLAB**, **TESA**, **FastICA** — install per the [README](../README.md#requirements).
    These are *not* bundled with the repo.
 3. **AARATEP helpers** (only if working on that template) — clone into
    `third_party/aaratep/`:
@@ -109,7 +109,7 @@ function out = myFunction(in)
 ## Adding a pipeline step
 
 Steps are data-driven. To add one (worked detail in
-[docs/architecture.md](docs/architecture.md)):
+[docs/architecture.md](../docs/architecture.md)):
 
 1. **Register it** in `src/stepRegistry.m` — append a block with `.name`,
    `.defaults`, `.info`, `.params` (per-field metadata), and optional

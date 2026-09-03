@@ -13,7 +13,7 @@ These external packages each define the algorithm and parameters of a built-in n
 - **Templates that use it:** `TMS-EEG / TEP (TESA)`, *plus most steps of* `TMS-EEG / AARATEP`.
 - **Upstream:** https://nigelrogasch.github.io/TESA/ — code at https://github.com/nigelrogasch/TESA
 - **License:** GPL-3.0
-- **Installed via:** EEGLAB Plugin Manager (bundled with nestapp under `eeglab2026.0.0/plugins/`); not vendored under `third_party/`.
+- **Installed via:** EEGLAB's own plugin manager, into EEGLAB's `plugins/` folder. **Not redistributed with nestapp** - `eeglab2026.0.0/` is untracked, so a clone of this repository contains no EEGLAB code and the user installs it themselves (see the README). Not vendored under `third_party/` either.
 - **What nestapp uses:** `pop_tesa_findpulse` (TMS pulse detection), `pop_tesa_removedata` (artifact removal), `pop_tesa_interpdata` (cubic interpolation), `pop_tesa_filtbutter` (zero-phase Butterworth filtering, also used for the 60 Hz notch in the AARATEP template), `pop_tesa_fastica` (FastICA wrapper), `pop_tesa_compselect` (six-detector TMS-EEG IC classifier), `pop_tesa_sound` (SOUND algorithm wrapper, used by AARATEP template), `pop_tesa_sspsir` (SSP-SIR), `pop_tesa_peakanalysis`/`pop_tesa_peakoutput` (TEP peak extraction).
 - **Template design provenance:** the `TMS-EEG / TEP (TESA)` template's step order is annotated against specific steps of the TESA User Manual (Rogasch's published preprocessing recipe) — see `src/buildTemplates.m` lines 19–79 for the manual-step cross-references.
 - **Cite as:** Rogasch N.C., Sullivan C., Thomson R.H., Rose N.S., Bailey N.W., Fitzgerald P.B., Farzan F., Hernandez-Pavon J.C. (2017). Analysing concurrent transcranial magnetic stimulation and electroencephalographic data: a review and introduction to the open-source TESA software. *NeuroImage* 147:934-951. doi:[10.1016/j.neuroimage.2017.06.014](https://doi.org/10.1016/j.neuroimage.2017.06.014)
@@ -86,9 +86,17 @@ the cause and any candidate fixes are *Claude's, not from the AARATEP paper/code
 so they are kept out of this fidelity document — see the pipeline-evaluation
 plan's "Tier-3 improvement hypotheses". None are applied to the faithful template.
 
-## Other bundled EEGLAB stack
+## The EEGLAB stack nestapp calls
 
-These packages are not vendored under `third_party/` but are bundled with the nestapp distribution under `eeglab2026.0.0/`. They are installed and updated through EEGLAB's own plugin manager. Cite each according to its own conventions when used. (TESA is documented above under "Pipeline-defining packages" because it defines two of the built-in templates.)
+These packages are **not redistributed with nestapp** - neither vendored under
+`third_party/` nor tracked in this repository. A development checkout may have
+them under `eeglab2026.0.0/`, but that folder is untracked and a fresh clone
+contains none of it: the user installs EEGLAB and then these plugins through
+EEGLAB's own plugin manager, as the README describes. They are listed here
+because nestapp calls into them and their authors deserve citation, not because
+nestapp ships them. Cite each according to its own conventions when used. (TESA
+is documented above under "Pipeline-defining packages" because it defines two of
+the built-in templates.)
 
 | Package | Upstream | License | Cite as |
 |---|---|---|---|
