@@ -28,7 +28,7 @@ raw = {
  'Import & Session', {
    {'Load Data',                   {{'Load Data','EEGLAB'}}}
    {'Load Channel Location',       {{'Load Channel Location','EEGLAB'}}}
-   {'Choose Data Set',             {{'Choose Data Set','nestapp'}}}
+   {'Choose Data Set',             {{'Choose Data Set','EEGLAB'}}}
    {'Save New Set',                {{'Save New Set','EEGLAB'}}}
  }
  'Channels', {
