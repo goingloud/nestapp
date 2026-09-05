@@ -106,7 +106,9 @@ check is `nestappDoctor` at the prompt.
 ### Installing the AARATEP helpers
 
 Only needed for the `TMS-EEG / AARATEP` template. Its helper functions are a
-separate project that nestapp cannot redistribute, so the app fetches them:
+separate project. nestapp fetches them on request rather than committing a copy
+into this repository, to keep the two codebases from entangling — the licence
+(MIT) would permit redistribution:
 
 **Help → Install AARATEP Helpers...** takes about a second and needs no other tools.
 
