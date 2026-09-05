@@ -18,9 +18,9 @@ function TAX = stepTaxonomy()
 %                                          flag; AARATEP/nestapp are flagged)
 %
 %   This is design metadata, deliberately hand-ordered - it is NOT derivable
-%   from the registry. test_stepTaxonomy asserts it covers exactly the listed
-%   registry steps, so adding a registry step without placing it here fails the
-%   suite rather than silently dropping the step from the picker.
+%   from the registry. Nothing checks that it covers the listed registry steps,
+%   so a step added to the registry and not placed here is dropped from the
+%   picker silently, with nothing failing. Add it in both or not at all.
 %
 %   See also: availableSteps, stepRegistry, stepInteractiveIcon
 
