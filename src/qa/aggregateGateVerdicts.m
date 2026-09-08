@@ -17,9 +17,8 @@ function summary = aggregateGateVerdicts(reports)
 %                  order across the batch).
 %     .verdicts  numeric matrix (numel(files) x numel(gates)) using
 %                  the integer codes:
-%                    0 = NotChecked, 1 = Pass, 2 = Marginal,
-%                    3 = Fail,       4 = Pending
-%     .counts    struct(Pass, Marginal, Fail, Pending) - totals across
+%                    0 = NotChecked, 1 = Pass, 2 = Marginal, 3 = Fail
+%     .counts    struct(Pass, Marginal, Fail) - totals across
 %                  the entire matrix (NotChecked is excluded).
 %
 %   Notes
@@ -31,7 +30,7 @@ function summary = aggregateGateVerdicts(reports)
 %   - Reports that are completely empty or non-struct are skipped.
 
 summary = struct('files', {{}}, 'gates', {{}}, 'verdicts', [], ...
-    'counts', struct('Pass', 0, 'Marginal', 0, 'Fail', 0, 'Pending', 0));
+    'counts', struct('Pass', 0, 'Marginal', 0, 'Fail', 0));
 
 if isempty(reports), return, end
 
@@ -77,8 +76,7 @@ end
 
 counts = struct('Pass', sum(verdicts(:) == 1), ...
                 'Marginal', sum(verdicts(:) == 2), ...
-                'Fail',     sum(verdicts(:) == 3), ...
-                'Pending',  sum(verdicts(:) == 4));
+                'Fail',     sum(verdicts(:) == 3));
 
 summary.files    = files;
 summary.gates    = gates;
@@ -109,7 +107,6 @@ switch verdict
     case 'Pass',     code = 1;
     case 'Marginal', code = 2;
     case 'Fail',     code = 3;
-    case 'Pending',  code = 4;
     otherwise,       code = 0;   % NotChecked
 end
 end

@@ -2,24 +2,28 @@
 
 Thanks for your interest in improving nestapp. This guide covers how to set up
 a development environment, the conventions we follow, and how to get a change
-merged. New to the codebase? Read [docs/architecture.md](docs/architecture.md)
-first — it maps what each module does and where to make common changes.
+merged. New to the codebase? Read [docs/architecture.md](../docs/architecture.md)
+first. It maps what each module does and where to make common changes.
 
 ## Development setup
 
-1. **MATLAB R2023b or later** (developed on R2025b+). Required toolboxes:
-   Signal Processing, Statistics and Machine Learning. The `TMS-EEG / AARATEP`
-   template additionally needs the Curve Fitting Toolbox.
-2. **EEGLAB**, **TESA**, **FastICA** — install per the [README](README.md#requirements).
-   These are *not* bundled with the repo.
-3. **AARATEP helpers** (only if working on that template) — clone into
-   `third_party/aaratep/`:
-   ```bash
-   cd third_party && git clone --depth 1 https://github.com/chriscline/AARATEPPipeline.git aaratep
-   ```
+1. **MATLAB R2023b or later** (developed on R2026a). Required: Signal
+   Processing and Statistics and Machine Learning toolboxes. Optional: Parallel
+   Computing (for batch parallelism) and Curve Fitting (for the AARATEP
+   template's decay step). See the
+   [README](../README.md#requirements) for the full required/optional split.
+2. **EEGLAB plus its plugins** (TESA 1.2+, FastICA, ICLabel, PICARD, CleanLine,
+   clean_rawdata, firfilt). Install these per the
+   [README](../README.md#installation). **None of these are redistributed with
+   this repo**; `eeglab2026.0.0/` in a development checkout is untracked.
+3. **AARATEP helpers** (only if working on that template). Run
+   `installAaratep` at the MATLAB prompt, which fetches the pinned release into
+   `third_party/aaratep/`. A `git clone` of the same tag works too; the
+   installer stamps the version it wrote, so a hand-cloned tree is reported as
+   "version unknown" rather than assumed to be the pin.
 4. **Clone and launch**:
    ```bash
-   git clone https://github.com/goingloud/nestapp.git
+   git clone https://github.com/arefpz/nestapp.git
    ```
    ```matlab
    run_nestapp            % launches the app
@@ -27,11 +31,29 @@ first — it maps what each module does and where to make common changes.
 5. **Run the tests** (from the repo root):
    ```matlab
    cd tests
-   run_tests              % fast: unit + regression, no EEGLAB needed
-   run_tests('all')       % adds integration tests (EEGLAB + TESA required)
+   run_tests                 % pure: no EEGLAB, no display, ~4 s
+   run_tests('eeglab')       % needs EEGLAB (includes the step goldens)
+   run_tests('gui')          % needs a display; opens windows
+   run_tests('eeglab_gui')   % needs both; launches the app
+   run_tests('all')          % everything, ~40 s
    ```
-   `run_tests` prints a summary and errors on any failure. Integration tests
-   `assumeFail` (skip) gracefully when EEGLAB/TESA are absent.
+   Folders are the suites, and they encode the only two things that gate a
+   test: **does it need EEGLAB, does it need a display.** Both are binary, so
+   the cross-product is four folders and nothing else is needed to select
+   tests. A test's requirements are visible in its path, so it cannot be
+   misfiled unnoticed. `tests/pure/SuiteHygieneTest.m` checks that convention,
+   and eight others, executably.
+
+   `run_tests` enforces three rules:
+
+   - **A skip is a failure.** The folder already declares what a test needs, so
+     no test has any business deciding it cannot run. There are zero
+     `assumeFail` sites; if you find yourself wanting one, the test is in the
+     wrong folder.
+   - **An empty or missing suite is a failure**, so a mistyped or renamed
+     folder cannot pass by running nothing.
+   - **The path is restored** on the way out, so runs don't leak into each
+     other.
 
 ## Branching & commits
 
@@ -44,11 +66,15 @@ first — it maps what each module does and where to make common changes.
 
 ## Pull requests
 
-- Ensure `run_tests` passes. CI runs the fast suite (unit + regression) on a
-  GitHub-hosted runner — no setup required. The integration suite needs
-  EEGLAB/TESA, which CI does not provide, so **run `run_tests('all')`
-  locally** when your change touches pipeline execution or anything
-  EEGLAB-dependent.
+- Ensure `run_tests('all')` passes locally. CI runs the `pure` suite and the
+  linter on every push to `main` and `develop` and on every pull request, but
+  it cannot run the `eeglab`, `gui` or `eeglab_gui` suites: EEGLAB is not
+  tracked in this repository and a hosted runner has no display. So CI proves
+  the pure suite and static analysis; the other three are on you.
+- When you add a test, put it in the folder its dependencies require and let
+  the suite run with no skips. When you add a *helper*, make sure something
+  calls it. An unused helper is a second thing to keep in step, and the
+  hygiene test will fail on it.
 - Add or update tests for the behaviour you change. When fixing a bug, add a
   regression test that fails before your fix (the "if you liked it, put a test
   on it" rule).
@@ -60,7 +86,7 @@ first — it maps what each module does and where to make common changes.
 See [STYLE.md](../docs/STYLE.md) for the full conventions. In short: camelCase
 functions and variables, 4-space indent, a header comment block on every
 function (see the docstring contract below), and named intermediate variables
-over dense one-liners. CI runs `tools/run_lint.m` (a `checkcode` wrapper) — fix
+over dense one-liners. CI runs `tools/run_lint.m` (a `checkcode` wrapper); fix
 reported errors before merging.
 
 ### Function docstring contract
@@ -89,16 +115,20 @@ function out = myFunction(in)
 ## Adding a pipeline step
 
 Steps are data-driven. To add one (worked detail in
-[docs/architecture.md](docs/architecture.md)):
+[docs/architecture.md](../docs/architecture.md)):
 
-1. **Register it** in `src/stepRegistry.m` — append a block with `.name`,
+1. **Register it** in `src/registry/stepRegistry.m`, appending a block with `.name`,
    `.defaults`, `.info`, `.params` (per-field metadata), and optional
    `.requires` (plugin/toolbox dependencies surfaced by the pre-flight check).
-2. **Dispatch it** in `src/processOneFile.m` — add a `case 'Your Step Name'`
+2. **Dispatch it** in `src/processOneFile.m`, adding a `case 'Your Step Name'`
    to the switch that maps the step to its implementation.
-3. **(Optional) Use it in a template** — edit `src/buildTemplates.m`, then
+3. **(Optional) Use it in a template.** Edit `src/util/buildTemplates.m`, then
    regenerate: run `buildTemplates()` and commit the updated `src/templates/*.mat`.
-4. Add a test under `tests/unit/` (see `test_newStepDispatch.m` for the pattern).
+4. Add a test. A step's dispatch is covered by `tests/eeglab/DispatchContractTest.m`
+   automatically, because it sweeps the whole registry, so what a new step
+   needs is a *behavioural* test of what it does. If its output is worth pinning
+   exactly, add a case to `tests/helpers/characterizationCases.m` and record a
+   golden with `recordGoldens('Your Step Name')`.
 
 ## Diagnosing environment problems
 
@@ -132,7 +162,7 @@ artifacts are what to attach when reporting a hard-to-reproduce problem.
   `git status` shows your new file before committing.
 - **Templates are generated binaries.** `src/templates/*.mat` are produced by
   `buildTemplates()`. Editing a template means editing `buildTemplates.m`,
-  re-running it, and committing the regenerated `.mat` — not editing the `.mat`.
+  re-running it, and committing the regenerated `.mat`, never editing the `.mat` itself.
 - **Edit `nestapp.m` directly, never the `.mlapp`.** The GUI is a plain-text
   class (`src/@nestapp/nestapp.m`). Opening and saving the App Designer
   `.mlapp` would overwrite hand-edited methods.
@@ -141,12 +171,12 @@ artifacts are what to attach when reporting a hard-to-reproduce problem.
 
 ## Using AI coding assistants
 
-LLM-assisted contributions are welcome — but the quality of the tool matters.
+LLM-assisted contributions are welcome, but the quality of the tool matters.
 This is a research codebase with non-obvious cross-file invariants (the step
 registry ↔ dispatch ↔ template contract, EEGLAB/TESA quirks, the allowlist
 `.gitignore`), and a weak assistant will confidently get these wrong.
 
-- **Use coding-grade agents on advanced models at high effort** — e.g. Claude
+- **Use coding-grade agents on advanced models at high effort**, for example Claude
   **Opus 4.8** or OpenAI **Codex** (or the latest equivalents) in a high-effort /
   extended-reasoning mode, running an agent designed for software engineering.
 - **Do not** use general-purpose chat assistants or small, underpowered models
@@ -158,7 +188,7 @@ registry ↔ dispatch ↔ template contract, EEGLAB/TESA quirks, the allowlist
 ## Reporting bugs & requesting features
 
 Use the GitHub issue templates. For security issues, do **not** open a public
-issue — see [SECURITY.md](SECURITY.md).
+issue; see [SECURITY.md](SECURITY.md).
 
 ## License
 

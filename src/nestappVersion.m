@@ -9,7 +9,7 @@ function v = nestappVersion()
 %     v = nestappVersion()
 %
 %   Outputs
-%     v  char - the semantic version of nestapp, e.g. '1.0.0'.
+%     v  char - the semantic version of nestapp, e.g. '2.1.0'.
 %
 %   This is the single source of truth for the application version. The
 %   About dialog, README, CHANGELOG, and the release git tag must all
@@ -22,5 +22,5 @@ function v = nestappVersion()
 %
 %   See also: version, CHANGELOG.md
 
-v = '1.0.0';
+v = '2.1.0';
 end

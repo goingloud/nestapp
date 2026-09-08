@@ -1,5 +1,8 @@
 # nestapp architecture
 
+For what the app does from a user's side, see the [user guide](user-guide.md);
+for setup, the [README](../README.md).
+
 A map of how nestapp is put together and **where to make common changes**.
 For the per-function contract of any file, see the generated
 [API reference](../site/index.md) (built from the source header comments by
@@ -11,9 +14,9 @@ nestapp has two halves that share one engine:
 
 ```
             ┌─────────────────────────────┐
-   GUI ───► │  src/@nestapp/nestapp.m      │   five tabs:
-            │  (App Designer class, plain  │   Cleaning · Visualizing ·
-            │   text — edit directly)      │   Analysis · Reports · Settings
+   GUI ───► │  src/@nestapp/nestapp.m      │   three tabs:
+            │  (App Designer class, plain  │   Cleaning · Reports ·
+            │   text — edit directly)      │   Explore
             └──────────────┬──────────────┘
                            │ builds a pipeline "spec" (ordered steps + params)
                            ▼
@@ -23,39 +26,62 @@ nestapp has two halves that share one engine:
    (tests,  └──────────────┬──────────────┘
    scripts)                │ switch over step name → EEGLAB / TESA / helpers
                            ▼
-                 EEGLAB / TESA / FastICA / vendored AARATEP
+         EEGLAB / TESA / plugins / vendored AARATEP helpers
 ```
 
 The same `spec` (a struct array of `{name, params}`) drives both the GUI run
-button and headless callers like `batchTEPExtract` and the test suite.
+button and headless callers like `runPipelineCore` and the test suite.
 
 ## Module map (`src/`)
 
-| Area | Files | Responsibility |
-|---|---|---|
-| **GUI** | `@nestapp/nestapp.m`, `@nestapp/createComponents.m`, `@nestapp/rescaleComponents.m` | The App Designer class. `nestapp.m` holds all state, callbacks, and tab logic. `createComponents`/`rescaleComponents` build and lay out the UI. **Edit `nestapp.m` directly — never the `.mlapp`.** |
-| **Step registry** | `stepRegistry.m`, `makePipelineStep.m`, `checkStepDependencies.m` | The catalogue of pipeline steps: each step's name, default params, UI metadata, and dependency requirements. The single source of truth for "what steps exist." |
-| **Execution** | `runPipelineCore.m`, `processOneFile.m`, `paramsToVarin.m`, `varinToStruct.m`, `stripVarinKeys.m`, `stripEmptyVarin.m`, `nestLog.m` | The batch engine and the per-file dispatch `switch`. Each step name maps to an EEGLAB/TESA call or a nestapp helper here. |
-| **Templates** | `buildTemplates.m`, `templates/*.mat`, `templateCitation.m`, `specFromSaved.m` | Built-in pipelines. `buildTemplates.m` is the source; the `.mat` files are **generated artifacts** (see gotchas). |
-| **Step helpers** | `aaratepMuscleClassifier.m`, `artist*.m`, `ensureAaratepOnPath.m`, `computeICAActivation.m`, `tepPeakFinder.m`, `batchTEPExtract.m`, `defaultTEPComponentDefs.m`, `tepPeakFinder.m` | Algorithm implementations behind specific steps and analyses. |
-| **Quality control** | `qa/*.m` | Quality Gate scoring, batch verdicts, QC images, dashboard, attribute matrices. |
-| **Reporting / IO** | `buildReportText.m`, `initPipelineReport.m`, `exportReport.m`, `summarizeReports.m`, `buildHistoryEntry.m`, `io/*.m` | Per-file reports, methods paragraphs, provenance, and output-path layout. |
-| **Version** | `nestappVersion.m` | Single source of truth for the app version (SemVer). |
-| **Diagnostics** | `nestappDoctor.m`, `describePipeline.m`, `nestDebugLog.m`, `saveErrorBundle.m`, `collectSupportBundle.m` | `nestappDoctor` validates the environment (Help → Copy Diagnostics); `describePipeline` renders the current pipeline (File → Copy Pipeline Description); `nestDebugLog` tees the run trace to a file when the `debugLog` pref is on; `saveErrorBundle` writes a metadata-only bundle on a step failure; `collectSupportBundle` is the on-demand version (Help → Collect Support Bundle). |
+**The folders are the map.** Each is one area of responsibility, so a new file
+belongs wherever its subject already lives, and `ls` is the authority rather
+than this table.
+
+| Folder | Responsibility |
+|---|---|
+| `@nestapp/` | The App Designer class. `nestapp.m` holds all state, callbacks and tab logic; `createComponents`/`rescaleComponents` build and lay out the UI. **Edit `nestapp.m` directly — there is no `.mlapp`.** |
+| `registry/` | The catalogue: what steps and plots exist, their params and defaults, their dependency requirements, and what is available on this machine. The single source of truth for "what steps exist". |
+| `params/` | Turning registry params into what an EEGLAB call wants, and back: type conversion, name/value assembly, key renaming, enable/disable rules, and the parameter form. |
+| `plot/` | Everything that draws: the `draw*` functions, colour scales, shared colour bars, publication figure sizing, and the plot-options dialogs. |
+| `analysis/` | Explore's arithmetic: group curves, confidence intervals, window measures, TEP peaks, and the cohort/subject bookkeeping behind *n*. |
+| `roi/` | Region-of-interest selection, presets, montage layout, and channel/electrode validation. |
+| `ica/` | ICA engines, component classification and marking, activation, and rank/variance decisions. |
+| `report/` | Per-file reports, methods prose, citations, provenance strings, and failure summaries. |
+| `qa/` | Quality Gate scoring, batch verdicts, QC images, attribute matrices. |
+| `io/` | Output-path layout and results-root resolution. |
+| `env/` | The environment: bringing EEGLAB and plugins up, plugin versions, the AARATEP pin/installer, logging, and `nestappDoctor`. |
+| `util/` | Small shared helpers with no domain of their own, plus `buildTemplates`. |
+| `aaratep_compat/` | Shims for the vendored AARATEP tree. |
+| `templates/` | Built-in pipelines as `.mat` — **generated artifacts** (see gotchas); `util/buildTemplates.m` is the source. |
+
+Four files stay at `src/` root because they are entry points or cross-cutting,
+not members of an area:
+
+| File | |
+|---|---|
+| `runPipelineCore.m` | the batch engine (serial / parallel) |
+| `processOneFile.m` | the per-file dispatch `switch` |
+| `nestappVersion.m` | single source of truth for the version (SemVer) |
+| `nestappRoot.m` | resolves the install root by walking up to `run_nestapp.m`, so nothing else has to know its own depth in the tree |
+
+`src/` and every subfolder go on the path via `genpath` (`run_nestapp.m`,
+`addNestappPath` in the tests, and the packaged toolbox all do this), so a
+function's folder never affects whether it resolves.
 
 ## "If you want to change X, edit Y"
 
 | Goal | Where | Notes |
 |---|---|---|
-| Add a processing step | `stepRegistry.m` (register) + `processOneFile.m` (dispatch `case`) | Recipe in [CONTRIBUTING.md](../.github/CONTRIBUTING.md#adding-a-pipeline-step). |
-| Change/add a built-in template | `buildTemplates.m`, then run `buildTemplates()` and commit the regenerated `templates/*.mat` | The `.mat` is generated — never edit it directly. |
-| Add a citation for a template | `templateCitation.m` | Logged per run by `runPipelineCore.m`. |
-| Change a Quality Gate metric | `qa/qualityGate.m` (+ `qa/finalizeBatchVerdicts.m` for batch mode) | Step params live in `stepRegistry.m`. |
-| Change TEP peak detection | `tepPeakFinder.m` (interactive) / `batchTEPExtract.m` (CSV) | Both feed the smoothed waveform to `tepPeakFinder`. |
+| Add a processing step | `registry/stepRegistry.m` (register) + `processOneFile.m` (dispatch `case`) | Recipe in [CONTRIBUTING.md](../.github/CONTRIBUTING.md#adding-a-pipeline-step). |
+| Change/add a built-in template | `util/buildTemplates.m`, then run `buildTemplates()` and commit the regenerated `templates/*.mat` | The `.mat` is generated — never edit it directly. |
+| Add a citation for a template | `registry/stepCitations.m` | Logged per run by `runPipelineCore.m`. |
+| Change a Quality Gate metric | `qa/qualityGate.m` (+ `qa/aggregateGateVerdicts.m` for batch mode) | Step params live in `registry/stepRegistry.m`. |
+| Change TEP peak detection | `analysis/tepPeakFinder.m` (TESA detection) / `analysis/computeWindowMeasures.m` (mean, area, fallback peak) | Explore's results table prefers `tepPeakFinder` so it agrees with what an overlay would draw, and falls back to `computeWindowMeasures` when TESA is absent. |
 | Change a tab's UI/behaviour | `@nestapp/nestapp.m` (callbacks) + `@nestapp/createComponents.m` (layout) | Plain-text class; diffable. |
-| Change report contents | `buildReportText.m`, `initPipelineReport.m` | |
-| Bump the version | `nestappVersion.m` + `CHANGELOG.md` (+ git tag) | A CI check keeps the three in sync. |
-| Add an environment/diagnostic check | `nestappDoctor.m` (`diagnose` + collectors) | Surfaced via Help → Copy Diagnostics; dependency list derives from `stepRegistry`. |
+| Change report contents | `report/buildReportText.m`, `report/initPipelineReport.m` | |
+| Bump the version | `nestappVersion.m` + `CHANGELOG.md` + `CITATION.cff` (+ git tag) | `tests/pure/VersionTest.m` keeps them in sync, including the README badge. |
+| Add an environment/diagnostic check | `env/nestappDoctor.m` (`diagnose` + collectors) | Surfaced via Help → Check My Install; dependency list derives from `registry/stepRegistry`. |
 
 ## Data flow of a run
 
@@ -75,13 +101,57 @@ button and headless callers like `batchTEPExtract` and the test suite.
 - **Allowlist `.gitignore`.** New files in new dirs are invisible to git until
   allowlisted.
 - **`nestapp.m`, not the `.mlapp`.** The `.mlapp` would overwrite hand edits.
-- **EEGLAB and `third_party/` are not committed** — external dependencies.
+- **EEGLAB and `third_party/` are not committed.** They are external dependencies.
 - **`processOneFile` uses EEGLAB globals** (`EEG`, `ALLEEG`, …); headless
   callers should expect shared state to be reset per worker.
 
+## Headless API
+
+The GUI is one caller, not the interface. Everything the Explore tab does is a
+pure function it calls, and each is usable from a script or a batch with no
+figure on screen, which is what makes the analysis reproducible from code
+rather than from a sequence of clicks.
+
+| Function | Takes | Gives back |
+|---|---|---|
+| `exploreDataset(paths, rules, opts)` | file paths | one entry per file: `.path .subject .group .subjectConfident` |
+| `loadReducedSets(paths, opts)` | file paths | per-file cache: `.trialAvg .labels .chanlocs .time .nTrials` - trial averages, not epochs (~800 kB/file) |
+| `groupCurves(cache, entries, opts)` | the two above | `res`: group means, per-subject `.curves`, per-file `.files`, intervals, montage report |
+| `curveInterval(curvesByGroup, design, level)` | subject x time per group | mean, CI, SEM, n, df - paired (Cousineau-Morey) or unpaired |
+| `exploreMeasures(res, windows)` | a `res` | one table row per subject x group x window |
+| `exploreResults(res, entries, opts)` | a `res` | the complete saved-analysis struct |
+| `computeWindowMeasures(curve, t, t1, t2, polarity)` | one curve | mean, area, peak latency/amplitude for one window |
+| `drawTEPOverlay` / `drawTEPTopo` / `drawGroupTopo` / `drawWindowBars` | axes (or a panel) + a `res` | the figure content, into axes the caller mints |
+
+Two conventions make these safe to call without a display:
+
+- **The caller mints the axes.** No drawing function creates a figure, so the
+  same code renders into a `uiaxes` on screen and a classic `axes` bound for
+  `print`. Every MATLAB export path silently omits UI components, which is why
+  the export path passes an `axesFcn` that makes classic axes.
+- **`nestapp.loadAnalysis(app, file)`** reopens a saved Results `.mat` without
+  a dialog, so a batch can restore groups, subjects, ROI, windows, design and
+  plot selection and carry on.
+
+`runPipelineCore(spec, filePaths, opts)` is the equivalent for cleaning: the
+same `spec` the GUI builds, driven from a script.
+
 ## Tests
 
-`tests/run_tests.m` is the harness: `run_tests` (fast: unit + regression),
-`run_tests('all')` (adds integration, needs EEGLAB/TESA). Unit tests avoid
-EEGLAB; integration tests `assumeFail` (skip) when it's absent. See
-`tests/unit/test_newStepDispatch.m` for the conventions.
+`tests/run_tests.m` is the harness. Suites are FOLDERS, encoding the two
+things that actually gate a test, EEGLAB and a display, as a cross-product:
+`pure/` (neither, ~4 s), `eeglab/` (EEGLAB, includes the step goldens),
+`gui/` (a display), `eeglab_gui/` (both). `run_tests('all')` runs the lot in
+~40 s.
+
+Three rules apply. A skip is a failure, because the folder already declares
+what a test needs and there are zero `assumeFail` sites. An empty or missing
+suite is a failure. The path is restored on exit.
+
+The conventions are executable rather than documented: `tests/pure/SuiteHygieneTest.m`
+holds nine of them, including that every test sits in the folder its
+dependencies require, that no test rolls its own path setup or temp dir, that
+source-scraping is opt-in with a named exception list, and that every helper
+in `tests/helpers/` has a caller. `tests/golden/` holds the 10 step
+characterization recordings. Re-recording one is a decision rather than a
+chore; see `tests/recordGoldens.m`.

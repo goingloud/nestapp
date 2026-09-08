@@ -7,6 +7,9 @@ function renderDashboardPanel(parent, reports, opts)
 %   RENDERDASHBOARDPANEL(parent, reports)
 %   RENDERDASHBOARDPANEL(parent, reports, opts)
 %
+%   Lays out a header, a full-width table of the files that failed or came
+%   back Marginal, and the per-metric distributions.
+%
 %   parent  : uipanel or uifigure that the dashboard renders into.
 %             Any existing children are deleted first so the same
 %             function can refresh the live view in place and also
@@ -23,12 +26,17 @@ function renderDashboardPanel(parent, reports, opts)
 %                        the failed-files table is selected; used to
 %                        jump to that file's text report. Empty = no
 %                        callback wired.
+%     .failed          struct array of files that did not complete
+%                        (errored or skipped at a hard gate), from
+%                        runPipelineCore. These have no report, so they are
+%                        surfaced here rather than derived from reports.
 
 if nargin < 3 || ~isstruct(opts), opts = struct(); end
 if ~isfield(opts, 'title'),           opts.title = 'Session Quality Overview'; end
 if ~isfield(opts, 'onRefresh'),       opts.onRefresh = []; end
 if ~isfield(opts, 'onExport'),        opts.onExport = []; end
 if ~isfield(opts, 'onFailedRowClick'),opts.onFailedRowClick = []; end
+if ~isfield(opts, 'failed'),          opts.failed = struct([]); end
 
 % Clear any existing children so this works as both first-paint and refresh.
 delete(allchild(parent));
@@ -36,23 +44,26 @@ delete(allchild(parent));
 verdicts = aggregateGateVerdicts(reports);
 metrics  = aggregateMetricDistributions(reports);
 
-drawHeader(parent, opts.title, verdicts);
-drawHeatmap(parent, verdicts);
-drawFailedTable(parent, reports, opts.onFailedRowClick);
+drawHeader(parent, opts.title, verdicts, opts.failed);
+drawFailedTable(parent, reports, opts.failed, opts.onFailedRowClick);
 drawHistograms(parent, metrics);
 drawButtons(parent, opts.onRefresh, opts.onExport);
 end
 
 % -- header ----------------------------------------------------------------
 
-function drawHeader(parent, titleText, verdicts)
-nFiles = numel(verdicts.files);
-if nFiles == 0
+function drawHeader(parent, titleText, verdicts, failed)
+nFiles    = numel(verdicts.files);
+nErrored  = numel(failed);
+if nFiles == 0 && nErrored == 0
     sub = 'No reports yet - run a pipeline with a Quality Gate.';
 else
-    sub = sprintf('%d files: %d Pass / %d Marginal / %d Fail / %d Pending', ...
+    sub = sprintf('%d files: %d Pass / %d Marginal / %d Fail', ...
         nFiles, verdicts.counts.Pass, verdicts.counts.Marginal, ...
-        verdicts.counts.Fail, verdicts.counts.Pending);
+        verdicts.counts.Fail);
+    if nErrored > 0
+        sub = sprintf('%s / %d did not complete', sub, nErrored);
+    end
 end
 uilabel(parent, 'Text', titleText, 'FontWeight', 'bold', 'FontSize', 14, ...
     'Position', [10, parentTop(parent) - 25, parentWidth(parent) - 20, 22]);
@@ -61,65 +72,33 @@ uilabel(parent, 'Text', sub, ...
     'FontColor', [0.4 0.4 0.4]);
 end
 
-% -- verdict heatmap -------------------------------------------------------
-
-function drawHeatmap(parent, v)
-W = parentWidth(parent);
-H = parentTop(parent);
-% Layout: left half, vertical band starting below header.
-pos = [10, round(H * 0.42), round(W * 0.48), round(H * 0.42)];
-ax = uiaxes(parent, 'Position', pos);
-% Filenames and gate labels contain underscores; default 'tex' interpreter
-% would render them as subscripts (e.g. rtmsct_214_1_SPL).
-ax.TickLabelInterpreter = 'none';
-title(ax, 'Verdict heatmap (files x gates)', 'Interpreter', 'none');
-
-if isempty(v.verdicts)
-    text(ax, 0.5, 0.5, 'No verdicts to plot', ...
-        'HorizontalAlignment', 'center', 'Units', 'normalized');
-    axis(ax, 'off');
-    return
-end
-
-imagesc(ax, v.verdicts);
-colormap(ax, verdictColormap());
-caxis(ax, [0 4]);
-
-ax.YTick = 1:numel(v.files);
-ax.YTickLabel = v.files;
-ax.XTick = 1:numel(v.gates);
-ax.XTickLabel = v.gates;
-ax.XTickLabelRotation = 30;
-ax.YDir = 'reverse';
-xlabel(ax, 'Gate');
-ylabel(ax, 'File');
-end
-
-function cmap = verdictColormap()
-% Index by code: 0 NotChecked, 1 Pass, 2 Marginal, 3 Fail, 4 Pending.
-cmap = [ ...
-    0.85 0.85 0.85;   % 0 gray
-    0.20 0.70 0.30;   % 1 green
-    0.95 0.80 0.20;   % 2 yellow
-    0.85 0.20 0.20;   % 3 red
-    0.30 0.45 0.85];  % 4 blue (Pending)
-end
-
 % -- failed-files table ----------------------------------------------------
 
-function drawFailedTable(parent, reports, onRowClick)
+function drawFailedTable(parent, reports, failed, onRowClick)
+% Full width, and up to just under the header: this used to share the band
+% with a files x gates verdict heatmap, which was unreadable past ~10 files
+% and said nothing the table does not, one row per flagged file with the
+% actual reasons. Taking the whole band back buys visible rows.
+HEADER_H = 70;   % title + subtitle, per drawHeader
 W = parentWidth(parent);
 H = parentTop(parent);
-pos = [round(W * 0.50), round(H * 0.42), round(W * 0.48), round(H * 0.42)];
+yBot = round(H * 0.42);
+pos  = [10, yBot, W - 20, max(60, round(H - HEADER_H) - yBot)];
 
-rows = collectFailures(reports);
+% Two sources, one table: files that completed but tripped a gate
+% (collectFailures, derived from reports) and files that never produced a
+% report at all (failedFileRows, from the failure log). Errored files are
+% listed first so the re-run candidates are at the top.
+errRows = failedFileRows(failed);
+gateRows = collectFailures(reports);
+rows = [errRows; gateRows];
 uilabel(parent, 'Text', 'Failed / Marginal files', ...
     'FontWeight', 'bold', ...
     'Position', [pos(1), pos(2) + pos(4) + 2, pos(3), 18]);
 
 t = uitable(parent, 'Position', pos, ...
     'ColumnName', {'File', 'Gate', 'Verdict', 'Reasons'}, ...
-    'ColumnWidth', {120, 90, 70, 'auto'}, ...
+    'ColumnWidth', {220, 160, 80, 'auto'}, ...
     'Data', rows);
 
 if ~isempty(onRowClick)
@@ -131,7 +110,8 @@ function rows = collectFailures(reports)
 % One row per file. Roll up every Marginal/Fail gate's label and
 % reasons so a file is never split across multiple rows: the user gets
 % the full picture of why a file was flagged in one place.
-rows = {};
+% cell(0,4) (not {}) so it vertcats cleanly with the errored-file rows.
+rows = cell(0, 4);
 for ri = 1:numel(reports)
     r = reports{ri};
     if ~isstruct(r) || ~isfield(r, 'quality') ...
@@ -233,9 +213,6 @@ hold(ax, 'on');
 yl = ylim(ax);
 for t = m.absThresholds
     plot(ax, [t t], yl, 'r-', 'LineWidth', 1.2);
-end
-for t = m.batchCutoffs
-    plot(ax, [t t], yl, 'm--', 'LineWidth', 1.2);
 end
 hold(ax, 'off');
 end

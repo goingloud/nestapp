@@ -34,6 +34,9 @@ if ~isfield(opts, 'size'),       opts.size       = [1600 1200];          end
 if ~isfield(opts, 'title'),      opts.title      = '';                   end
 if ~isfield(opts, 'stepLabel'),  opts.stepLabel  = '';                   end
 if ~isfield(opts, 'attribute'),  opts.attribute  = 'minmax_no_tms';      end
+if ~isfield(opts, 'maxICs'),     opts.maxICs     = 25;                   end
+if ~isfield(opts, 'icaSnapshot'),opts.icaSnapshot = struct([]);          end
+if ~isfield(opts, 'exportLockDir'), opts.exportLockDir = '';             end
 
 parentDir = fileparts(outPath);
 if ~isempty(parentDir) && ~exist(parentDir, 'dir')
@@ -49,7 +52,9 @@ cleanup = onCleanup(@() closeFigSafely(fig));
 % suptitle. On the heuristic path this avoids running pwelch per
 % component twice; on TESA / ICLabel paths it avoids the field-copy
 % work too.
-icaMetrics = computeICAQualityMetrics(EEG);
+% Prefer the pre-rejection snapshot (all components, real reject flags)
+% when the pipeline captured one; otherwise fall back to the live EEG.
+icaView = buildICAView(EEG, opts);
 
 t = tiledlayout(fig, 2, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
 
@@ -62,7 +67,7 @@ end
 % --- Panel 2: ICA component topo grid (or placeholder) ---
 if opts.panels.icaGrid
     nexttile(t, 2);
-    drawICAGrid(EEG, icaMetrics);
+    drawICAGrid(icaView, opts);
 end
 
 % --- Panel 3: butterfly ---
@@ -77,9 +82,18 @@ if opts.panels.psd
     drawPSD(EEG);
 end
 
-title(t, buildSuperTitle(EEG, opts, icaMetrics), 'Interpreter', 'none', ...
+title(t, buildSuperTitle(EEG, opts, icaView.metrics), 'Interpreter', 'none', ...
     'FontWeight', 'bold');
 
+% Serialize the rasterization across parallel workers: concurrent
+% exportgraphics on headless workers can deadlock on shared OS graphics
+% resources, which is what wedges one random file in a big batch (see
+% acquireQCExportLock). The figure build above stays fully parallel; only
+% this export is mutually exclusive. No lock dir (tests / interactive /
+% single process) -> no locking. The lock releases as this function returns.
+if ~isempty(opts.exportLockDir)
+    exportLock = acquireQCExportLock(opts.exportLockDir); %#ok<NASGU>
+end
 exportgraphics(fig, outPath, 'Resolution', 150);
 figPath = outPath;
 end
@@ -180,7 +194,8 @@ plotSM(:, keptX) = SM;
 rejectedX = rej(:)';
 end
 
-function drawICAGrid(EEG, metrics)
+function drawICAGrid(view, opts)
+metrics = view.metrics;
 if isempty(metrics)
     text(0.5, 0.5, 'ICA not yet computed', ...
         'HorizontalAlignment', 'center', 'FontSize', 14, ...
@@ -190,57 +205,212 @@ if isempty(metrics)
     return
 end
 
-% spectopo / topoplot need chanlocs; fall back to a textual summary if absent.
-hasChanlocs = isfield(EEG, 'chanlocs') && ~isempty(EEG.chanlocs) ...
-           && isfield(EEG.chanlocs, 'X') && ~isempty(EEG.chanlocs(1).X) ...
-           && ~isempty(which('topoplot'));
+src = view.source;
+% "Captured at step N" makes clear these are the components as they were
+% when ICA rejection ran, not the post-cleaning survivors.
+if ~isempty(view.capturedStep)
+    capNote = sprintf('  -  ICs captured at step %d', view.capturedStep);
+else
+    capNote = '';   % no snapshot: panel reflects the live (post-clean) EEG
+end
 
-nComp = numel(metrics);
-nCol  = ceil(sqrt(nComp));
-nRow  = ceil(nComp / nCol);
+% topoplot needs chanlocs; fall back to a textual summary if absent.
+hasChanlocs = ~isempty(view.chanlocs) && isfield(view.chanlocs, 'X') ...
+           && ~isempty(view.chanlocs(1).X) && ~isempty(which('topoplot'));
 
-nKept = sum([metrics.kept]);
-nRej  = nComp - nKept;
-src   = metrics(1).source;
+nTotal = numel(metrics);
+nKept  = sum([metrics.kept]);
+nRej   = nTotal - nKept;
 
 if ~hasChanlocs
     summary = classificationCounts(metrics);
     txt = sprintf(['ICA topos unavailable (no chanlocs / no topoplot)\n' ...
         '%d components (%d kept / %d rejected) - classified by %s\n%s'], ...
-        nComp, nKept, nRej, src, summary);
+        nTotal, nKept, nRej, src, summary);
     text(0.5, 0.5, txt, 'HorizontalAlignment', 'center', 'Units', 'normalized');
     axis off
-    title(sprintf('ICA components (%s)', src));
+    title(sprintf('ICA components (%s)%s', src, capNote));
     return
 end
+
+% Pick which components to draw: largest by variance, but always keep the
+% rejected ones so a small artifact IC is never hidden by the cap.
+order = pickDisplayOrder(view, opts.maxICs);
+nShow = numel(order);
+nCol  = ceil(sqrt(nShow));
+nRow  = ceil(nShow / nCol);
 
 % Take over the current tile with a nested grid layout.
 parentAx = gca;
 parentPos = parentAx.Position;
 delete(parentAx);
 ax0 = axes('Position', parentPos);
-title(ax0, sprintf('ICA components (%s)  -  border colored by class; gray = kept', src));
+% Short single-line title - green/red borders carry the kept/rejected
+% meaning, so the title stays clear of the figure's main title.
+title(ax0, sprintf('ICA components (%s)%s', src, capNote), 'FontSize', 9);
 axis(ax0, 'off');
 
 innerWidth  = parentPos(3) / nCol;
-innerHeight = parentPos(4) / nRow * 0.95;   % leave space for tile title
+innerHeight = parentPos(4) / nRow * 0.95;
 yTop = parentPos(2) + parentPos(4) * 0.95;
+fig  = ancestor(ax0, 'figure');
 
-for k = 1:nComp
-    [rIdx, cIdx] = ind2sub([nRow nCol], k);
+for i = 1:nShow
+    k = order(i);
+    [rIdx, cIdx] = ind2sub([nRow nCol], i);
     px = parentPos(1) + (cIdx-1) * innerWidth;
     py = yTop          - rIdx     * innerHeight;
-    ax = axes('Position', [px py innerWidth*0.95 innerHeight*0.85]);
+    tilePos = [px py innerWidth*0.95 innerHeight*0.82];
+    ax = axes('Position', tilePos);
     try
-        topoplot(EEG.icawinv(:,k), EEG.chanlocs, 'electrodes', 'off');
+        topoplot(view.icawinv(:,k), view.chanlocs, 'electrodes', 'off');
     catch
         text(0.5, 0.5, '?', 'HorizontalAlignment','center','Units','normalized','Parent',ax);
         axis(ax,'off');
     end
-    borderColor = classColor(metrics(k).classification, metrics(k).kept);
-    set(ax, 'XColor', borderColor, 'YColor', borderColor, ...
-            'LineWidth', 2, 'Box', 'on', 'XTick', [], 'YTick', []);
-    title(ax, sprintf('%d %s', k, metrics(k).classification), 'FontSize', 8);
+    % topoplot calls "axis off", which hides the axes box - so the border
+    % can't live on the axes. Draw it as a figure annotation rectangle over
+    % the tile: green = accepted (kept), red = rejected.
+    if metrics(k).kept
+        borderColor = [0.15 0.65 0.20];   % green - accepted
+    else
+        borderColor = [0.85 0.20 0.20];   % red - rejected
+    end
+    annotation(fig, 'rectangle', tilePos, 'Color', borderColor, 'LineWidth', 2);
+    % Tile title: index, class, and the component's % variance (when known).
+    pv = view.compSize(k);
+    if isnan(pv), vtxt = ''; else, vtxt = sprintf('  %.1f%%', pv); end
+    title(ax, sprintf('%d %s%s', k, metrics(k).classification, vtxt), 'FontSize', 8);
+end
+end
+
+% -- ICA view construction (snapshot-preferred) ----------------------------
+
+function view = buildICAView(EEG, opts)
+% Assemble what drawICAGrid / the suptitle need. Preference order:
+%   1. opts.icaSnapshot  - the full pre-rejection decomposition captured by
+%      processOneFile just before pop_subcomp (all comps, real reject flags,
+%      per-comp variance, capture step). This is what makes the panel show
+%      every component and which were removed.
+%   2. live EEG          - post-rejection survivors (legacy behaviour) when
+%      no snapshot was captured (e.g. a gate before any ICA removal).
+view = struct('metrics', [], 'icawinv', [], 'chanlocs', [], ...
+    'source', '', 'compSize', [], 'capturedStep', []);
+
+snap = opts.icaSnapshot;
+if isValidSnapshot(snap)
+    view.icawinv  = snap.icawinv;
+    view.chanlocs = snap.chanlocs;
+    view.source   = snapshotSource(snap);
+    if isfield(snap, 'capturedStep'), view.capturedStep = snap.capturedStep; end
+    [view.metrics, view.compSize] = metricsFromSnapshot(snap);
+    return
+end
+
+m = computeICAQualityMetrics(EEG);
+view.metrics = m;
+if ~isempty(m) && isfield(EEG, 'icawinv') && ~isempty(EEG.icawinv)
+    view.icawinv  = EEG.icawinv;
+    if isfield(EEG, 'chanlocs'), view.chanlocs = EEG.chanlocs; end
+    view.source   = m(1).source;
+    view.compSize = nan(1, numel(m));   % no size info - keep natural order
+end
+end
+
+function tf = isValidSnapshot(snap)
+tf = isstruct(snap) && ~isempty(fieldnames(snap)) ...
+  && isfield(snap, 'icawinv') && ~isempty(snap.icawinv) ...
+  && isfield(snap, 'rejMask') && ~isempty(snap.rejMask);
+end
+
+function src = snapshotSource(snap)
+if isfield(snap, 'source') && ~isempty(snap.source)
+    src = snap.source;                       % caller-declared (e.g. 'TESA')
+elseif isfield(snap, 'iclabelProbs') && ~isempty(snap.iclabelProbs)
+    src = 'ICLabel';
+elseif isfield(snap, 'classLabels') && ~isempty(snap.classLabels)
+    src = 'Flags';
+else
+    src = 'ICA';
+end
+end
+
+function [m, compSize] = metricsFromSnapshot(snap)
+n   = size(snap.icawinv, 2);
+rej = logical(reshape(snap.rejMask, 1, []));
+if numel(rej) < n, rej(end+1:n) = false; end
+rej = rej(1:n);
+
+labels = snapshotLabels(snap, n);
+src    = snapshotSource(snap);
+
+if isfield(snap, 'compVarPct') && numel(snap.compVarPct) >= n
+    compSize = double(reshape(snap.compVarPct(1:n), 1, []));
+else
+    compSize = nan(1, n);
+end
+
+m = repmat(struct('compIdx', 0, 'source', src, 'classification', '', ...
+    'kept', true, 'compSize', NaN), 1, n);
+for k = 1:n
+    m(k).compIdx        = k;
+    m(k).classification = labels{k};
+    m(k).kept           = ~rej(k);
+    m(k).compSize       = compSize(k);
+end
+end
+
+function labels = snapshotLabels(snap, n)
+% Per-component class label: ICLabel argmax if probabilities were captured,
+% else the custom flag labels (AARATEP muscle / ARTIST decay), else blank.
+labels = repmat({''}, 1, n);
+if isfield(snap, 'iclabelProbs') && ~isempty(snap.iclabelProbs)
+    probs = snap.iclabelProbs;
+    if size(probs, 1) < n, probs(end+1:n, :) = 0; end
+    classes = {'Brain','Muscle','Eye','Heart','Line Noise','Channel Noise','Other'};
+    if isfield(snap, 'iclabelClasses') && ~isempty(snap.iclabelClasses)
+        classes = snap.iclabelClasses;
+    end
+    for k = 1:n
+        [~, idx] = max(probs(k, :));
+        if idx < 1 || idx > numel(classes), idx = numel(classes); end
+        labels{k} = char(classes{idx});
+    end
+elseif isfield(snap, 'classLabels') && ~isempty(snap.classLabels)
+    cl = snap.classLabels;
+    for k = 1:min(n, numel(cl))
+        if ~isempty(cl{k}), labels{k} = char(cl{k}); end
+    end
+end
+end
+
+function order = pickDisplayOrder(view, maxICs)
+% Largest-variance-first order, capped at maxICs, but every rejected
+% component is always included (even if it pushes past the cap).
+n  = numel(view.metrics);
+sz = view.compSize;
+if isempty(sz) || all(isnan(sz))
+    bySize = 1:n;
+else
+    [~, bySize] = sort(sz, 'descend', 'MissingPlacement', 'last');
+end
+if n <= maxICs
+    order = bySize;
+    return
+end
+
+isRej = ~[view.metrics.kept];
+rejBySize  = bySize(isRej(bySize));
+keptBySize = bySize(~isRej(bySize));
+nKeptShow  = max(0, maxICs - numel(rejBySize));
+chosen     = [rejBySize, keptBySize(1:min(nKeptShow, numel(keptBySize)))];
+
+% Lay the chosen set out largest-first for a tidy grid.
+if isempty(sz) || all(isnan(sz))
+    order = chosen;
+else
+    [~, ord2] = sort(view.compSize(chosen), 'descend', 'MissingPlacement', 'last');
+    order = chosen(ord2);
 end
 end
 
@@ -280,8 +450,19 @@ if isempty(EEG.data) || size(EEG.data, 2) < 256
     axis off; title('PSD per channel'); return
 end
 nbchan = size(EEG.data, 1);
-data2D = reshape(EEG.data, nbchan, []);
-[pxx, f] = pwelch(data2D', [], [], [], EEG.srate);
+data2D = reshape(EEG.data, nbchan, []);    % view; never transposed (see below)
+% Per-channel so we never materialise a full (samples x channels) copy, and so
+% qaWelchPsd bounds the spectrum (decimated bandwidth + fixed resolution). This
+% replaces an unbounded pwelch that, on raw 5 kHz multi-trial data, built ~10^5
+% bins and wedged exportgraphics on a parallel worker.
+[p, f, fsEff] = qaWelchPsd(data2D(1, :), EEG.srate);   % first channel sizes the output
+pxx = zeros(numel(p), nbchan);
+pxx(:, 1) = p;
+for c = 2:nbchan
+    pxx(:, c) = qaWelchPsd(data2D(c, :), EEG.srate);
+end
+% Bounded point count (~F_max/res points/channel) keeps the transparent overlay
+% cheap to rasterize, so we keep the original per-channel alpha.
 loglog(f, pxx, 'LineWidth', 0.5, 'Color', [0.5 0.5 0.5 0.4]);
 hold on
 loglog(f, mean(pxx, 2), 'k', 'LineWidth', 1.5);
@@ -291,7 +472,14 @@ ylabel('Power');
 title('PSD per channel (mean bold)');
 grid on
 if numel(f) >= 2
-    xlim([max(f(2), 0.5) min(f(end), EEG.srate/2)]);
+    xlim([max(f(2), 0.5) f(end)]);
+end
+% Note the working rate when the QA PSD was computed on downsampled data, so the
+% panel is not mistaken for the raw spectrum (lower effective rate / bandwidth).
+if fsEff < EEG.srate
+    text(0.99, 0.02, sprintf('PSD computed at %g Hz (downsampled from %g Hz)', fsEff, EEG.srate), ...
+        'Units','normalized', 'HorizontalAlignment','right', 'VerticalAlignment','bottom', ...
+        'FontSize', 7, 'Color', [0.45 0.45 0.45], 'Interpreter','none');
 end
 end
 
@@ -312,38 +500,6 @@ switch mode
 end
 end
 
-function c = classColor(cls, kept)
-% Border color per component classification. Source-agnostic - merges
-% TESA, ICLabel, and Heuristic category names into a small palette so
-% the visualization reads the same regardless of which classifier ran.
-%   kept = true  -> always gray, regardless of label (Brain / Keep / OK).
-%   kept = false -> color by artifact family:
-%                     muscle/EMG          -> red
-%                     electrode noise     -> orange
-%                     eye / blink / EOG   -> yellow
-%                     other / unknown     -> magenta
-GRAY    = [0.70 0.70 0.70];
-RED     = [0.85 0.20 0.20];
-ORANGE  = [0.95 0.50 0.10];
-YELLOW  = [0.90 0.80 0.10];
-MAGENTA = [0.80 0.30 0.80];
-
-if nargin >= 2 && kept
-    c = GRAY;
-    return
-end
-
-switch cls
-    case {'EMG', 'Muscle', 'TMS Muscle'},                       c = RED;
-    case {'Electrode', 'Elec Noise', 'Channel Noise',  ...
-          'Line Noise'},                                        c = ORANGE;
-    case {'EOG', 'Blink', 'Eye', 'Eye Move'},                   c = YELLOW;
-    case {'Heart', 'Sensory', 'Reject', 'Other'},               c = MAGENTA;
-    case {'OK', 'Keep', 'Brain'},                               c = GRAY;
-    otherwise,                                                  c = MAGENTA;
-end
-end
-
 function s = classificationCounts(metrics)
 % Group classifications by label and produce "Label: N" lines.
 labels = {metrics.classification};
@@ -356,17 +512,14 @@ end
 s = strjoin(parts, ', ');
 end
 
-function s = plural(n)
-if n == 1, s = ''; else, s = 's'; end
-end
 
 function s = buildSuperTitle(EEG, opts, metrics)
 parts = {};
 if ~isempty(opts.stepLabel), parts{end+1} = opts.stepLabel; end
 if ~isempty(opts.title),     parts{end+1} = opts.title;     end
-nbchan  = getOr(EEG, 'nbchan', size(EEG.data,1));
-nTrials = getOr(EEG, 'trials', max(size(EEG.data,3),1));
-srate   = getOr(EEG, 'srate', NaN);
+nbchan  = fieldOr(EEG, 'nbchan', size(EEG.data,1));
+nTrials = fieldOr(EEG, 'trials', max(size(EEG.data,3),1));
+srate   = fieldOr(EEG, 'srate', NaN);
 parts{end+1} = sprintf('nbchan=%d trials=%d srate=%g Hz', nbchan, nTrials, srate);
 
 % Append ICA kept/rejected counts when available - source aware.
@@ -461,13 +614,6 @@ for k = 1:n
 end
 end
 
-function v = getOr(s, field, default)
-if isfield(s, field) && ~isempty(s.(field))
-    v = s.(field);
-else
-    v = default;
-end
-end
 
 function closeFigSafely(fig)
 if ishandle(fig)
