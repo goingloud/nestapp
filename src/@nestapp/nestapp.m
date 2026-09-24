@@ -134,6 +134,7 @@ classdef nestapp < matlab.apps.AppBase
         exploreCache   = struct('path', {}, 'trialAvg', {}, 'labels', {}, ...
                                 'chanlocs', {}, 'time', {}, 'nTrials', {}, 'ok', {})
         exploreRoi     = {}      % ROI electrode labels (canonical spelling)
+        exploreSubjectRule = []  % last filename rule applied, to reopen the dialog on it
         exploreWindows = struct([])
         exploreRes     = struct([])   % last groupCurves result, for the exits
         % Per-plot settings, as a name/params struct array rather than a
@@ -2415,10 +2416,11 @@ classdef nestapp < matlab.apps.AppBase
 
         function ExploreFilesButtonPushed(app, ~)
         % The whole subject story is settled here: what n is, and why.
-            edited = exploreFilesTable(app.exploreEntries, ...
-                struct('parent', app.UIFigure));
+            [edited, rule] = exploreFilesTable(app.exploreEntries, ...
+                struct('parent', app.UIFigure, 'subjectRule', app.exploreSubjectRule));
             if isempty(edited); return; end     % cancelled
             app.exploreEntries = edited;
+            app.exploreSubjectRule = rule;
             refreshExplorePlots(app);
             recomputeExplore(app);
         end
