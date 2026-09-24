@@ -2086,12 +2086,19 @@ classdef nestapp < matlab.apps.AppBase
         end
 
         function refreshExploreDesign(app)
-        % Offer paired only when it is defined - every group holding the same
-        % subjects - and say how many complete sets there are either way.
+        % Offer paired whenever it is defined: two or more groups, and at least
+        % two subjects present in every one of them - a paired interval is the
+        % spread of within-subject differences, which one subject cannot give.
+        %
+        % Not "every subject in every group". Real cohorts are rarely that
+        % symmetric - one participant misses a post session - and groupCurves
+        % already handles it: a paired estimate keeps the complete subjects,
+        % in the same order in every group, and names the rest in res.dropped,
+        % which the status line reports. Demanding perfect symmetry here locked
+        % paired off for the ordinary cohort while the analysis supported it.
             [~, overall] = datasetSummary(app.exploreEntries);
             names   = exploreGroupNames(app);
-            canPair = numel(names) >= 2 && overall.nComplete > 0 && ...
-                      overall.nComplete == overall.nSubjects;
+            canPair = numel(names) >= 2 && overall.nComplete >= 2;
 
             app.ExplorePairedButton.Enable = onOffState(canPair);
             if ~canPair && app.ExplorePairedButton.Value
@@ -2100,14 +2107,16 @@ classdef nestapp < matlab.apps.AppBase
 
             if numel(names) < 2
                 app.ExploreDesignNoteLabel.Text = 'paired needs two or more groups';
+            elseif canPair && overall.nComplete == overall.nSubjects
+                app.ExploreDesignNoteLabel.Text = sprintf( ...
+                    'paired available: %d complete sets', overall.nComplete);
             elseif canPair
                 app.ExploreDesignNoteLabel.Text = sprintf( ...
-                    'paired available: %d complete set%s', ...
-                    overall.nComplete, plural(overall.nComplete));
-            elseif overall.nComplete > 0
-                app.ExploreDesignNoteLabel.Text = sprintf( ...
-                    'only %d of %d subjects are in every group', ...
+                    'paired uses the %d of %d subjects in every group', ...
                     overall.nComplete, overall.nSubjects);
+            elseif overall.nComplete == 1
+                app.ExploreDesignNoteLabel.Text = ...
+                    'paired needs 2+ subjects in every group (only 1)';
             else
                 app.ExploreDesignNoteLabel.Text = 'no subject is in every group';
             end
