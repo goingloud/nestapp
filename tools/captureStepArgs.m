@@ -232,10 +232,20 @@ for s = 1:numel(stepNames)
 
     entry = reg(strcmp({reg.name}, name));
     for p = entry.params
-        if ~contains(p.validRange, '|'), continue; end
-        choices = strtrim(strsplit(p.validRange, '|'));
-        dflt    = '';
+        dflt = '';
         if isfield(entry.defaults, p.key), dflt = entry.defaults.(p.key); end
+        if isfield(p, 'choices') && ~isempty(p.choices)
+            choices = {p.choices.key};
+        elseif strcmp(p.type, 'logical') && islogical(dflt)
+            v = base; v.(p.key) = ~dflt;
+            cases(end+1) = mk(sprintf('%s | %s=%d', name, p.key, ~dflt), ...
+                name, kind, v, prereqs); %#ok<AGROW>
+            continue
+        elseif contains(p.validRange, '|')
+            choices = strtrim(strsplit(p.validRange, '|'));
+        else
+            continue
+        end
         for c = 1:numel(choices)
             if isequal(choices{c}, dflt) || contains(choices{c}, '['), continue; end
             v = base; v.(p.key) = choices{c};
