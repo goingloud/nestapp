@@ -1,10 +1,11 @@
 % SPDX-License-Identifier: GPL-3.0-or-later
 % Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
 % Part of nestapp; see the LICENSE file for full terms.
-function msgs = paramProblems(regEntry, params)
+function [msgs, keys] = paramProblems(regEntry, params)
 % PARAMPROBLEMS  What is wrong with a step's settings, in the user's words.
-%   msgs = PARAMPROBLEMS(regEntry, params) returns a cellstr, empty when the
-%   settings are usable. Checked for schema-2 steps:
+%   [msgs, keys] = PARAMPROBLEMS(regEntry, params): msgs is a cellstr, empty when the
+%   settings are usable, and keys, the settings involved (the form turns them
+%   red). Checked for schema-2 steps:
 %     - each value against its own declaration (choices, limits, integer,
 %       step, a range's order) - see paramValueProblem;
 %     - the step's relations: requires, anyOf, order.
@@ -12,18 +13,22 @@ function msgs = paramProblems(regEntry, params)
 %
 %   Used by the pre-flight check, so a run cannot start with settings the
 %   upstream function would reject halfway through a batch, and by the form,
-%   which refuses the edit that would cause one.
+%   which shows the involved settings in red.
 %
 %   See also: paramValueProblem, paramRelation, disabledParamKeys
 
 msgs = {};
+keys = {};
 if fieldOr(regEntry, 'schema', 1) < 2, return; end
 off = disabledParamKeys(regEntry, params);
 
 for m = regEntry.params(:)'
     if any(strcmp(m.key, off)) || ~isfield(params, m.key), continue; end
     why = paramValueProblem(m, params.(m.key));
-    if ~isempty(why), msgs{end+1} = sprintf('%s: %s', m.friendlyName, why); end %#ok<AGROW>
+    if ~isempty(why)
+        msgs{end+1} = sprintf('%s: %s', m.friendlyName, why); %#ok<AGROW>
+        keys = [keys, {m.key}]; %#ok<AGROW>
+    end
 end
 
 has  = @(k) ~any(strcmp(k, off)) && isfield(params, k) && paramHasValue(params.(k), metaOf(regEntry, k));
@@ -34,6 +39,7 @@ for r = rels(:)'
         case 'requires'
             applies = isempty(r.controller) || ismember(valueText(params, r.controller), r.values);
             if applies && ~any(strcmp(r.params{1}, off)) && ~has(r.params{1})
+                keys = [keys, r.params(1)]; %#ok<AGROW>
                 if isempty(r.controller)
                     msgs{end+1} = sprintf('%s must be set.', name(r.params{1})); %#ok<AGROW>
                 else
@@ -43,6 +49,7 @@ for r = rels(:)'
             end
         case 'anyOf'
             if ~any(cellfun(has, r.params))
+                keys = [keys, r.params]; %#ok<AGROW>
                 msgs{end+1} = sprintf('Set at least one of %s.', ...
                     strjoin(cellfun(name, r.params, 'UniformOutput', false), ' or ')); %#ok<AGROW>
             end
@@ -50,6 +57,7 @@ for r = rels(:)'
             a = r.params{1}; b = r.params{2};
             if has(a) && has(b) && isnumeric(params.(a)) && isnumeric(params.(b)) ...
                     && ~(params.(a)(1) < params.(b)(1))
+                keys = [keys, {a, b}]; %#ok<AGROW>
                 msgs{end+1} = sprintf('%s must be below %s.', name(a), name(b)); %#ok<AGROW>
             end
     end
