@@ -123,8 +123,12 @@ Steps are data-driven. To add one (worked detail in
 1. **Register it** in `src/registry/stepRegistry.m`, appending a block with `.name`,
    `.defaults`, `.info`, `.params` (per-field metadata), and optional
    `.requires` (plugin/toolbox dependencies surfaced by the pre-flight check).
+   Write new steps with typed settings (`s.schema = 2`): choices, limits,
+   relations between settings and an `upstreamAudit`, as set out in
+   [docs/ui-design-language.md](../docs/ui-design-language.md).
 2. **Dispatch it** in `src/processOneFile.m`, adding a `case 'Your Step Name'`
-   to the switch that maps the step to its implementation.
+   to the switch that maps the step to its implementation. A typed step reads
+   its settings by name from `up` (built by `toUpstream`), never by position.
 3. **(Optional) Use it in a template.** Edit `src/util/buildTemplates.m`, then
    regenerate: run `buildTemplates()` and commit the updated `src/templates/*.mat`.
 4. Add a test. A step's dispatch is covered by `tests/eeglab/DispatchContractTest.m`
