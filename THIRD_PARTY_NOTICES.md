@@ -12,7 +12,7 @@ These external packages each define the algorithm and parameters of a built-in n
 
 - **Templates that use it:** `TMS-EEG / TEP (TESA)`, *plus most steps of* `TMS-EEG / AARATEP`.
 - **Upstream:** https://nigelrogasch.github.io/TESA/ (code at https://github.com/nigelrogasch/TESA)
-- **License:** GPL-3.0
+- **License:** GPL-2.0-or-later (stated in the source file headers; the repository has no separate license file)
 - **Installed via:** EEGLAB's own plugin manager, into EEGLAB's `plugins/` folder. **Not redistributed with nestapp** - `eeglab2026.0.0/` is untracked, so a clone of this repository contains no EEGLAB code and the user installs it themselves (see the README). Not vendored under `third_party/` either.
 - **What nestapp uses:** `pop_tesa_findpulse` (TMS pulse detection), `pop_tesa_removedata` (artifact removal), `pop_tesa_interpdata` (cubic interpolation), `pop_tesa_filtbutter` (zero-phase Butterworth filtering, also used for the 60 Hz notch in the AARATEP template), `pop_tesa_fastica` (FastICA wrapper), `pop_tesa_compselect` (six-detector TMS-EEG IC classifier), `pop_tesa_sound` (SOUND algorithm wrapper, used by AARATEP template), `pop_tesa_sspsir` (SSP-SIR), `pop_tesa_peakanalysis`/`pop_tesa_peakoutput` (TEP peak extraction).
 - **Template design provenance:** the `TMS-EEG / TEP (TESA)` template's step order is annotated against specific steps of the TESA User Manual (Rogasch's published preprocessing recipe). See `src/util/buildTemplates.m` lines 19–79 for the manual-step cross-references.
@@ -101,9 +101,13 @@ the built-in templates.)
 
 | Package | Upstream | License | Cite as |
 |---|---|---|---|
-| EEGLAB | https://eeglab.org | BSD | Delorme & Makeig (2004). *J Neurosci Methods* 134(1):9-21. doi:10.1016/j.jneumeth.2003.10.009 |
-| ICLabel | https://sccn.ucsd.edu/wiki/ICLabel | BSD | Pion-Tonachini, Kreutz-Delgado, Makeig (2019). *NeuroImage* 198:181-197. doi:10.1016/j.neuroimage.2019.05.026 |
-| CleanLine | EEGLAB plugin manager | BSD | Mullen T. (2012). NITRC: CleanLine. |
-| firfilt | EEGLAB plugin manager | GPL-2.0 | Widmann A., Schröger E., Maess B. (2015). *J Neurosci Methods* 250:34-46. doi:10.1016/j.jneumeth.2014.08.002 |
-| clean_rawdata | EEGLAB plugin manager | BSD | Mullen et al. (2015). *IEEE Trans Biomed Eng* 62(11):2553-2567. doi:10.1109/TBME.2015.2481482 |
-| FastICA | http://research.ics.aalto.fi/ica/fastica/ | GPL-2.0 | Hyvärinen & Oja (2000). *Neural Networks* 13(4-5):411-430. doi:10.1016/S0893-6080(00)00026-5 |
+| EEGLAB | https://eeglab.org | BSD-2-Clause (core: `eeglab.m` and `functions/`; plugins carry their own licenses) | Delorme & Makeig (2004). *J Neurosci Methods* 134(1):9-21. doi:10.1016/j.jneumeth.2003.10.009 |
+| ICLabel | https://github.com/sccn/ICLabel | BSD-2-Clause (repository license); several source file headers say GPL-2.0-or-later. Includes MatConvNet under its own BSD-style license | Pion-Tonachini, Kreutz-Delgado, Makeig (2019). *NeuroImage* 198:181-197. doi:10.1016/j.neuroimage.2019.05.026 |
+| CleanLine | EEGLAB plugin manager | GPL-2.0 (the plugin's `license.txt`) | Mullen T. (2012). NITRC: CleanLine. |
+| firfilt | EEGLAB plugin manager | GPL-2.0-or-later (source file headers) | Widmann A., Schröger E., Maess B. (2015). *J Neurosci Methods* 250:34-46. doi:10.1016/j.jneumeth.2014.08.002 |
+| clean_rawdata | EEGLAB plugin manager | GPL-3.0 (the plugin's `LICENSE`) | Mullen et al. (2015). *IEEE Trans Biomed Eng* 62(11):2553-2567. doi:10.1109/TBME.2015.2481482 |
+| PICARD | EEGLAB plugin manager | BSD-3-Clause | Ablin, Cardoso, Gramfort (2018). *IEEE Trans Signal Process* 66(15):4040-4049. doi:10.1109/TSP.2018.2844203 |
+| FastICA | http://research.ics.aalto.fi/ica/fastica/ | GPL (version not stated by the authors) | Hyvärinen & Oja (2000). *Neural Networks* 13(4-5):411-430. doi:10.1016/S0893-6080(00)00026-5 |
+
+Licenses were checked against the plugin files and upstream repositories in
+November 2026. Each package's own license file is authoritative if it differs.
