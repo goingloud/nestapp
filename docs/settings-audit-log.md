@@ -28,3 +28,4 @@ Earlier findings from the first parameter audit are in
 | 8 | Modified Bandpass Filter (TESA) | "Automatic" pulse window reads `EEG.tmscut` from a previous Remove TMS Artifacts; without one, TESA asserts "Must specify artifact timespan". A cross-step dependency the pre-flight cannot see yet. | open - cross-step check |
 | 9 | Modified Bandpass Filter (TESA) | An epoch too short for window ± extrapolation length fails with a bare "Assertion failed." (lines 164-165). nestapp could check `EEG.xmin`/`xmax` at dispatch and say what to change. | open |
 | 10 | Modified Bandpass Filter (TESA) | Band-pass / band-stop / low-pass without the cutoff they need were passed through to TESA. | fixed in conversion (refused at pre-flight) |
+| 11 | Frequency Filter (TESA) | Its description says "for bandpass: high = lower cutoff, low = upper cutoff" - the cutoff labels may be swapped relative to what they do. Not yet checked against code (Filter stage). | open |
