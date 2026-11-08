@@ -410,10 +410,18 @@ function s = modifiedFilterClause(p)
     else
         design = 'FIR';
     end
-    s = sprintf(['the data were filtered with a modified %s filter (%s), with the ' ...
-        '%g to %g ms pulse window bridged by autoregressive extrapolation to limit ' ...
-        'artifact spread'], design, edges, num(p, 'artifactStartMs', -2), ...
-        num(p, 'artifactEndMs', 12));
+    w = numVec(p, 'artifactWindow', []);
+    if numel(w) == 2
+        win = sprintf('the %g to %g ms pulse window', w(1), w(2));
+    elseif strcmpi(txt(p, 'artifactWindow', ''), 'auto')
+        win = 'a pulse window three times the removed-data window';
+    else   % saved before the window became one setting
+        win = sprintf('the %g to %g ms pulse window', num(p, 'artifactStartMs', -2), ...
+            num(p, 'artifactEndMs', 12));
+    end
+    s = sprintf(['the data were filtered with a modified %s filter (%s), with %s ' ...
+        'bridged by autoregressive extrapolation to limit artifact spread'], ...
+        design, edges, win);
 end
 
 function s = asrClause(p)
@@ -593,7 +601,13 @@ function s = txt(p, key, dflt)
 end
 
 function tf = isOn(p, key)
-    tf = strcmpi(txt(p, key, 'off'), 'on');
+% 'on'/'yes' as saved by text-era steps, or true from a typed (schema-2) one.
+    v = getf(p, key, false);
+    if islogical(v) && isscalar(v)
+        tf = v;
+    else
+        tf = any(strcmpi(txt(p, key, 'off'), {'on', 'yes'}));
+    end
 end
 
 function c = cellstrOf(v)

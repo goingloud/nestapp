@@ -26,4 +26,6 @@ function spec = applyParamEdit(spec, stepIdx, row, newData, registryEntry)
     paramMeta = params(row);
     val = convertParam(newData, paramMeta.type);
     spec(stepIdx).params.(paramMeta.key) = val;
+    % Typed (schema-2) steps store true/false, choice and mode keys.
+    spec(stepIdx).params = migrateStepParams(registryEntry, spec(stepIdx).params);
 end

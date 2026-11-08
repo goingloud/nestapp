@@ -47,6 +47,9 @@ function s = formatParamValue(val, paramMeta)
         else
             s = '(not set)';
         end
+    elseif islogical(val) && isscalar(val)
+        s = char(string(val));
+        s = strrep(strrep(s, 'true', 'on'), 'false', 'off');
     elseif ischar(val) && ~isrow(val)
         s = [deblank(val(1,:)), ' ...'];   % char matrix — show first row
     elseif ischar(val) || isstring(val)

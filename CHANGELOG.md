@@ -8,6 +8,34 @@ The version here must match `src/nestappVersion.m` and the release git tag.
 
 ## [Unreleased]
 
+### Changed
+
+- **Step settings are becoming typed** (first three steps: Re-Sample, Remove
+  Bad Channels, Modified Bandpass Filter (TESA)). Their settings are stored as
+  real values (on/off, numbers, named choices) instead of the text the
+  parameter table produced. Each step's options were re-checked against the
+  upstream EEGLAB/TESA function, and a run is refused up front, with the reason,
+  when settings would be rejected partway through a batch. Saved pipelines and
+  templates convert automatically when loaded. The new settings form follows
+  in a later release; until then the table still edits them.
+- **Modified Bandpass Filter (TESA)** can use an automatic pulse window: three
+  times the window cut by the last Remove TMS Artifacts step, which TESA
+  supports but nestapp never offered. The start and end of the window are now
+  one setting.
+
+### Fixed
+
+- **Remove Bad Channels ignored channel numbers.** Numbers typed into
+  "Evaluate channels" were silently dropped and every channel was checked.
+  Channels are now chosen by name ("Channels to check"); old pipelines that
+  listed numbers keep checking every channel, as they did, and say so on load.
+- **Remove Bad Channels: protected channels replaced the channels to check**
+  instead of being taken out of it. Setting both now checks the chosen
+  channels minus the protected ones.
+- **Modified Bandpass Filter (TESA)** refuses, before the run, settings TESA
+  cannot use: no cutoff at all, a band-pass, band-stop or low-pass type without
+  the cutoff it needs, cutoffs in the wrong order, or an odd Butterworth order.
+
 ## [2.2.1] - 2026-11-08
 
 ### Added

@@ -1,95 +1,102 @@
-
 % SPDX-License-Identifier: GPL-3.0-or-later
 % Copyright (C) 2023-2026 Aref Pariz and Wesley Dunne.
 % Part of nestapp; see the LICENSE file for full terms.
 function [keys, reasons] = disabledParamKeys(regEntry, params)
-% DISABLEDPARAMKEYS  Parameters the GUI should grey out and lock for a step.
-%   [keys, reasons] = DISABLEDPARAMKEYS(regEntry, params) returns the param
-%   keys to disable for a step, given its registry entry and current values,
-%   plus a struct of per-key explanations (reasons.(key)) for the alert shown
-%   when the user tries to edit a disabled param.
+% DISABLEDPARAMKEYS  Settings that do not apply right now, and why.
+%   [keys, reasons] = DISABLEDPARAMKEYS(regEntry, params) returns the keys to
+%   disable for a step given its current values, and reasons.(key), a sentence
+%   the form shows for each.
 %
-%   Two declarative relationships are honoured, both read from regEntry:
-%     exclusiveParamGroups - cell of ordered key-lists. The members of a group
-%       are alternative ways of writing one setting, so only one may hold a
-%       value. The highest-precedence member that is set (index 1 = precedence)
-%       stays editable; the rest are disabled. (Reproduces the old keep/remove
-%       behaviour: both set -> lower disabled; only one set -> the other
-%       disabled; neither set -> nothing disabled.)
-%     paramEnableWhen - rules struct array (.param, .controller, .values). A
-%       param is disabled unless params.(controller) is one of .values.
+%   Read from the step's declared relations (see paramRelation):
+%     exclusive  - only one member may hold a value. The first member set (in
+%                  declared precedence order) stays editable; the rest are
+%                  disabled. Nothing set: nothing disabled.
+%     enableWhen - a setting is disabled unless its controller holds one of
+%                  the listed values.
 %
-%   Inputs:
-%     regEntry - one element of stepRegistry() (uses .exclusiveParamGroups,
-%                .paramEnableWhen and .params for friendly names).
-%     params   - the step's params struct (spec(i).params).
+%   toUpstream drops the same keys, so a disabled setting is never passed to
+%   the upstream function either.
 %
-%   Output:
-%     keys    - cellstr of disabled param keys (possibly empty).
-%     reasons - struct keyed by disabled key -> human-readable explanation.
+%   See also: paramRelation, paramHasValue, toUpstream, paramForm
 
-    keys    = {};
-    reasons = struct();
-
-    % -- mutually-exclusive groups --
-    groups = {};
-    if isfield(regEntry, 'exclusiveParamGroups')
-        groups = regEntry.exclusiveParamGroups;
-    end
-    for gi = 1:numel(groups)
-        grp   = groups{gi};
-        isSet = cellfun(@(k) ~isempty(getParam(params, k)), grp);
-        if ~any(isSet)
-            continue
-        end
-        keep = find(isSet, 1);   % highest-precedence member that is set
-        for j = 1:numel(grp)
-            if j == keep
-                continue
+keys    = {};
+reasons = struct();
+rels    = fieldOr(regEntry, 'relations', []);
+for r = rels(:)'
+    switch r.kind
+        case 'exclusive'
+            isSet = cellfun(@(k) paramHasValue(getParam(params, k), metaOf(regEntry, k)), r.params);
+            if ~any(isSet), continue; end
+            keep = find(isSet, 1);
+            for j = setdiff(1:numel(r.params), keep)
+                keys{end+1} = r.params{j}; %#ok<AGROW>
+                reasons.(r.params{j}) = sprintf( ...
+                    ['"%s" is set, and these are two ways of writing the same ' ...
+                     'setting. Clear it to use this one.'], friendlyOf(regEntry, r.params{keep}));
             end
-            keys{end+1} = grp{j}; %#ok<AGROW>
-            reasons.(grp{j}) = sprintf( ...
-                ['"%s" is set, and these are two ways of writing the same ' ...
-                 'setting. Clear it before editing this one.'], ...
-                friendlyOf(regEntry, grp{keep}));
-        end
+        case 'enableWhen'
+            cur = valueText(getParam(params, r.controller));
+            if ~ismember(cur, r.values)
+                keys{end+1} = r.params{1}; %#ok<AGROW>
+                reasons.(r.params{1}) = sprintf('Only used when "%s" is %s.', ...
+                    friendlyOf(regEntry, r.controller), ...
+                    strjoin(choiceLabels(regEntry, r.controller, r.values), ' or '));
+            end
     end
-
-    % -- conditional enablement --
-    rules = [];
-    if isfield(regEntry, 'paramEnableWhen')
-        rules = regEntry.paramEnableWhen;
-    end
-    for ri = 1:numel(rules)
-        rule = rules(ri);
-        cur  = getParam(params, rule.controller);
-        if ~ismember(char(string(cur)), rule.values)
-            keys{end+1} = rule.param; %#ok<AGROW>
-            reasons.(rule.param) = sprintf('Applies only when "%s" is %s.', ...
-                friendlyOf(regEntry, rule.controller), strjoin(rule.values, ' or '));
-        end
-    end
-
-    keys = unique(keys, 'stable');
+end
+keys = unique(keys, 'stable');
 end
 
 % ── local helpers ─────────────────────────────────────────────────────────────
 
 function v = getParam(params, key)
-    if isstruct(params) && isfield(params, key)
-        v = params.(key);
-    else
-        v = [];
-    end
+v = [];
+if isstruct(params) && isfield(params, key), v = params.(key); end
+end
+
+function m = metaOf(regEntry, key)
+m = [];
+if isfield(regEntry, 'params') && ~isempty(regEntry.params)
+    ix = find(strcmp({regEntry.params.key}, key), 1);
+    if ~isempty(ix), m = regEntry.params(ix); end
+end
 end
 
 function f = friendlyOf(regEntry, key)
-% Friendly label for a param key, falling back to the key itself.
-    f = key;
-    if isfield(regEntry, 'params') && ~isempty(regEntry.params)
-        ix = find(strcmp({regEntry.params.key}, key), 1);
-        if ~isempty(ix)
-            f = regEntry.params(ix).friendlyName;
-        end
+f = key;
+m = metaOf(regEntry, key);
+if ~isempty(m), f = m.friendlyName; end
+end
+
+function labels = choiceLabels(regEntry, key, values)
+% The words the user sees for those values: a choice's label where the setting
+% has choices, "on"/"off" for a typed checkbox, else the value itself.
+labels = values;
+m = metaOf(regEntry, key);
+if isempty(m), return; end
+for k = 1:numel(values)
+    if isfield(m, 'choices') && ~isempty(m.choices)
+        ix = find(strcmp({m.choices.key}, values{k}), 1);
+        if ~isempty(ix), labels{k} = m.choices(ix).label; end
+    elseif any(strcmp(values{k}, {'true', 'false'}))
+        labels{k} = strrep(strrep(values{k}, 'true', 'on'), 'false', 'off');
     end
+end
+labels = cellfun(@(s) ['"' s '"'], labels, 'UniformOutput', false);
+end
+
+function s = valueText(v)
+% Compare a stored value against declared values as text. A typed logical
+% reads as 'true'/'false', which is how schema-2 steps declare them.
+if islogical(v) && isscalar(v)
+    s = char(string(v));
+elseif isstring(v) && isscalar(v)
+    s = char(v);
+elseif ischar(v)
+    s = v;
+elseif isnumeric(v) && isscalar(v)
+    s = num2str(v);
+else
+    s = '';
+end
 end

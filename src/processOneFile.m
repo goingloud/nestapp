@@ -118,10 +118,22 @@ stepLog = struct('step',{},'duration_s',{},'chanBefore',{},'chanAfter',{}, ...
 fileReport = initPipelineReport(fullPath);
 fileReport.pipelineName = opts.pipelineName;  % provenance (citations come from steps)
 
+registry = stepRegistry();
 for si = 1:nSteps
     step     = spec(si);
     stepName = canonicalStepName(step.name);   % migrate legacy step names before dispatch
     varin    = paramsToVarin(step.params);
+    % Schema-2 steps: settings are typed, and `up` holds them as the upstream
+    % function wants them (see toUpstream). Migrating here as well as on load
+    % keeps a scripted or hand-written spec in the old spelling running.
+    regEntry = registry(strcmp({registry.name}, stepName));
+    up = struct();
+    settingProblems = {};
+    if isscalar(regEntry) && regEntry.schema >= 2
+        typedParams     = migrateStepParams(regEntry, step.params);
+        settingProblems = paramProblems(regEntry, typedParams);
+        up              = toUpstream(regEntry, typedParams);
+    end
 
     % Progress notification - may throw nestapp:cancelled if user cancelled.
     if ~isempty(opts.progressFcn)
@@ -150,6 +162,9 @@ for si = 1:nSteps
     t0 = tic;
 
     try
+        if ~isempty(settingProblems)
+            error('nestapp:badSettings', '%s', strjoin(settingProblems, ' '));
+        end
         switch stepName
             case 'Load Channel Location'
                 vars = convertContainedStringsToChars(varin);
@@ -468,34 +483,23 @@ for si = 1:nSteps
                 end
 
             case 'Remove Bad Channels'
-                vars = convertContainedStringsToChars(varin);
-                EEGelecNames = {EEG.chanlocs(1:end).labels};
-                ind1 = find(strcmpi(vars,'impelec'));
-                AuximportantElects = vars{ind1+1};
-                importantElects = matches(EEGelecNames, AuximportantElects,"IgnoreCase",true);
-                vars([ind1, ind1+1]) = [];
-
-                ind2 = find(strcmpi(vars,'elec'));
-                if strcmp(vars{1,ind2+1},'[]')
-                    vars{1,ind2+1} = 1:EEG.nbchan;
-                elseif iscell(vars{1,ind2+1})
-                    vars{1,ind2+1} = find(ismember(EEGelecNames, vars{1,ind2+1}));
-                else
-                    vars{1,ind2+1} = 1:EEG.nbchan;
+                % Channels are chosen by label; pop_rejchan wants indices.
+                % Checked = the chosen channels (or all), minus the protected.
+                labels  = {EEG.chanlocs.labels};
+                checked = true(1, EEG.nbchan);
+                if ~isempty(up.elec)
+                    checked = matches(labels, up.elec, 'IgnoreCase', true);
                 end
-
-                ind3 = find(strcmpi(vars,'freqrange'));
-                if sum(isnan(vars{ind3+1})) || strcmpi(vars{ind3},'[]')
-                    vars([ind3, ind3+1]) = [];
+                if ~isempty(up.impelec)
+                    checked = checked & ~matches(labels, up.impelec, 'IgnoreCase', true);
                 end
-
-                badBefore = {EEG.chanlocs.labels};
-                if sum(importantElects)
-                    vars{1,ind2+1} = find(~importantElects);
-                    EEG = pop_rejchan(EEG, vars{:});
-                else
-                    EEG = pop_rejchan(EEG, vars{:});
+                args = {'elec', find(checked), 'threshold', up.threshold, ...
+                        'norm', up.norm, 'measure', up.measure};
+                if isfield(up, 'freqrange')
+                    args = [args, {'freqrange', up.freqrange}]; %#ok<AGROW>
                 end
+                badBefore = labels;
+                EEG = pop_rejchan(EEG, args{:});
                 % Record what was rejected so "Interpolate Channels" restores
                 % only bad channels, not intentionally-removed ones.
                 EEG = recordBadChannels(EEG, badBefore);
@@ -623,8 +627,7 @@ for si = 1:nSteps
                 EEG = eeg_checkset( EEG );
 
             case 'Re-Sample'
-                vars = convertContainedStringsToChars(varin);
-                EEG = pop_resample(EEG,vars{2:2:end});
+                EEG = pop_resample(EEG, up.freq, up.fc, up.df);
                 EEG = eeg_checkset( EEG );
 
             case 'Re-Reference'
@@ -720,26 +723,19 @@ for si = 1:nSteps
                 EEG = eeg_checkset( EEG );
 
             case 'Modified Bandpass Filter (TESA)'
-                o = varinToStruct(varin);
-                % The Butterworth design requires an even order (it fails deep
-                % in an inputParser with @(x)mod(x,2)==0). Catch it here with a
-                % message that names the step, as the sibling Frequency Filter
-                % (TESA) does, rather than letting the cryptic one surface.
-                if ~isempty(o.filtOrder) && mod(o.filtOrder, 2) ~= 0
-                    error('nestapp:modBandpassOddOrder', ...
-                        ['Modified Bandpass Filter (TESA): filter order must be ' ...
-                         'an even number (got %g). Use 4, 6, ...'], o.filtOrder);
+                % The window and extrapolation length are SECONDS upstream; the
+                % step exposes ms like every other nestapp step. An automatic
+                % window passes [], which TESA reads as 3x the last cut. The
+                % even-order rule is declared on the setting (paramProblems).
+                args = {'lowCutoff',             up.lowCutoff, ...
+                        'highCutoff',            up.highCutoff, ...
+                        'filterMethod',          up.filterMethod, ...
+                        'artifactTimespan',      up.artifactWindow * 1e-3, ...
+                        'pieceWiseTimeToExtend', up.extendMs * 1e-3};
+                if isfield(up, 'filtOrder')
+                    args = [args, {'filtOrder', up.filtOrder}]; %#ok<AGROW>
                 end
-                % artifactTimespan and pieceWiseTimeToExtend are SECONDS
-                % upstream; the step exposes ms like every other nestapp step.
-                EEG = pop_tesa_modifiedbandpassfilter(EEG, ...
-                    'lowCutoff',             o.lowCutoff, ...
-                    'highCutoff',            o.highCutoff, ...
-                    'filterMethod',          o.filterMethod, ...
-                    'artifactTimespan',      [o.artifactStartMs, o.artifactEndMs] * 1e-3, ...
-                    'pieceWiseTimeToExtend', o.extendMs * 1e-3, ...
-                    'filtOrder',             o.filtOrder, ...
-                    'filtType',              o.filtType);
+                EEG = pop_tesa_modifiedbandpassfilter(EEG, args{:}, 'filtType', up.filtType);
                 EEG = eeg_checkset( EEG );
 
             case 'Detect Bad Channels (TESA)'

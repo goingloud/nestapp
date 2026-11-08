@@ -36,8 +36,15 @@ for k = 1:numel(spec)
     if ~isempty(note)
         warnings{end+1} = sprintf('Step %d migrated: %s', k, note); %#ok<AGROW>
     end
-    if ~any(strcmp({registry.name}, spec(k).name))
+    entry = registry(strcmp({registry.name}, spec(k).name));
+    if isempty(entry)
         warnings{end+1} = sprintf('Unknown step "%s" (not in registry)', spec(k).name); %#ok<AGROW>
+        continue
+    end
+    % Steps with typed settings: convert the saved text ('on', '[]', ...).
+    [spec(k).params, notes] = migrateStepParams(entry, spec(k).params);
+    for n = 1:numel(notes)
+        warnings{end+1} = sprintf('Step %d (%s) - %s', k, spec(k).name, notes{n}); %#ok<AGROW>
     end
 end
 end

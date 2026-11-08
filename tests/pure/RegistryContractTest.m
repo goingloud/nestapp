@@ -168,6 +168,80 @@ classdef RegistryContractTest < NestappTestCase
             b = plotRegistry();
             tc.verifyNotEqual(b(1).name, 'mutated');
         end
+
+        % ── typed (schema-2) steps ───────────────────────────────────────────
+
+        function everyTypedStepIsSelfConsistent(tc)
+        % One sweep over every typed step, so each one is held to the same
+        % rules whoever converted it: defaults acceptable to their own
+        % declarations and relations, relations naming real settings and
+        % choices, binary settings typed, and an upstream audit recorded.
+            for s = stepRegistry()
+                if s.schema < 2, continue; end
+                keys = {s.params.key};
+                tc.verifyNotEmpty(s.upstreamAudit, [s.name ': no upstreamAudit']);
+                tc.verifyEmpty(setdiff(keys, fieldnames(s.defaults)), [s.name ': settings without a default']);
+                tc.verifyEmpty(paramProblems(s, s.defaults), [s.name ': defaults rejected']);
+                for m = s.params
+                    tc.verifyFalse(contains(m.validRange, '|'), ...
+                        sprintf('%s/%s: a pipe list in validRange - declare choices', s.name, m.key));
+                    if strcmp(m.type, 'logical')
+                        tc.verifyClass(s.defaults.(m.key), 'logical', [s.name '/' m.key]);
+                    end
+                    % Prose describing a dependency needs a declared one, or the
+                    % form cannot honour it.
+                    if ~isempty(regexpi(m.description, 'only (used|applies)|ignored|overrides|disabled while', 'once'))
+                        related = arrayfun(@(r) any(strcmp(m.key, [r.params, {r.controller}])), s.relations);
+                        tc.verifyTrue(any(related), sprintf( ...
+                            '%s/%s: the description states a dependency no relation declares', s.name, m.key));
+                    end
+                end
+                for r = s.relations
+                    named = [r.params, {r.controller}];
+                    tc.verifyEmpty(setdiff(named(~cellfun(@isempty, named)), keys), ...
+                        sprintf('%s: a %s relation names an unknown setting', s.name, r.kind));
+                    if strcmp(r.kind, 'exclusive') || isempty(r.controller), continue; end
+                    ctl = s.params(strcmp(keys, r.controller));
+                    if ~isempty(ctl.choices)
+                        tc.verifyEmpty(setdiff(r.values, {ctl.choices.key}), ...
+                            sprintf('%s: %s relation on %s uses a value it does not offer', s.name, r.kind, r.controller));
+                    end
+                end
+            end
+        end
+
+        function aDisabledSettingIsNeverPassedUpstream(tc)
+        % The form greys it out; the upstream call must not receive it either,
+        % or the step does something the interface says it will not.
+            for s = stepRegistry()
+                if s.schema < 2, continue; end
+                for r = s.relations
+                    if ~strcmp(r.kind, 'enableWhen'), continue; end
+                    p = s.defaults;
+                    p.(r.controller) = 'a value no rule lists';
+                    tc.verifyFalse(isfield(toUpstream(s, p), r.params{1}), ...
+                        sprintf('%s: disabled %s still reaches upstream', s.name, r.params{1}));
+                end
+            end
+        end
+
+        function savedTextMigratesToTypedValuesAndStaysPut(tc)
+        % Every built-in template migrates to values its typed steps accept,
+        % and migrating again changes nothing - load and dispatch both run it.
+            reg = stepRegistry();
+            d = dir(fullfile(fileparts(which('stepRegistry')), '..', 'templates', '*.mat'));
+            for f = d'
+                T = load(fullfile(f.folder, f.name), 'spec');
+                for st = T.spec
+                    e = reg(strcmp({reg.name}, canonicalStepName(st.name)));
+                    if isempty(e) || e.schema < 2, continue; end
+                    once  = migrateStepParams(e, st.params);
+                    twice = migrateStepParams(e, once);
+                    tc.verifyEqual(twice, once, [f.name ': ' e.name ' migration is not idempotent']);
+                    tc.verifyEmpty(paramProblems(e, once), [f.name ': ' e.name]);
+                end
+            end
+        end
     end
 
     methods (Access = private)

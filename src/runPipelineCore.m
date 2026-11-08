@@ -49,6 +49,26 @@ if ~depsOk
     return
 end
 
+% Settings a typed step would reject (paramProblems): refuse the run now,
+% naming the step, rather than failing the same way on every file.
+reg = stepRegistry();
+bad = {};
+for si = 1:nSteps
+    e = reg(strcmp({reg.name}, canonicalStepName(spec(si).name)));
+    if ~isscalar(e) || e.schema < 2, continue; end
+    probs = paramProblems(e, migrateStepParams(e, spec(si).params));
+    if ~isempty(probs)
+        bad{end+1} = sprintf('Step %d (%s): %s', si, e.name, strjoin(probs, ' ')); %#ok<AGROW>
+    end
+end
+if ~isempty(bad)
+    if ~isfield(opts, 'uiFigure') || isempty(opts.uiFigure)
+        error('nestapp:badSettings', '%s', strjoin(bad, newline));
+    end
+    uialert(opts.uiFigure, strjoin(bad, newline), 'Check the step settings', 'Icon', 'error');
+    return
+end
+
 % Unified batch output: every run gets one timestamped folder.
 % Destination priority: opts.outputRoot (programmatic override, used
 % by tests) > nestapp.outputRoot pref > common parent of inputs.
