@@ -93,11 +93,14 @@ made to the old entry.
 
 ## Converting a step
 
-1. **Re-audit independently.** Read the upstream function (signature, option
-   parser, defaults, limits, and which options interact) and nestapp's dispatch
-   before looking at the old registry entry; then diff. Check every relationship
-   in both directions. `docs/param-audit-findings.md` lists findings from the
-   earlier audit to fold in.
+1. **Re-audit independently, against code.** Read the upstream function
+   (signature, option parser, defaults, limits, and which options interact) and
+   nestapp's dispatch before looking at the old registry entry; then diff.
+   Comments and help text (upstream's and ours) are claims to check, not
+   evidence. Check every relationship in both directions.
+   `docs/param-audit-findings.md` lists findings from the earlier audit to fold
+   in. Anything odd goes in `docs/settings-audit-log.md`; fix it only if the
+   conversion cannot be correct without the fix.
 2. Write the schema-2 entry: typed defaults, choices with labels and help,
    limits, sections, relations, `upstreamAudit`.
 3. Rewrite the `case` to use `up.<key>` from `toUpstream`.
