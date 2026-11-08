@@ -16,15 +16,28 @@ Every tab, control and export route. For installation and a first run, see the
 
 ### Building a pipeline
 
-The left panel is a tree of every processing step, grouped by the stage it
-belongs to. Click a step to read what it does and what its parameters mean in
-the **Info** panel.
+The **Pipeline** list on the left is the pipeline, in run order. Click a step
+to show its settings in the middle of the tab.
 
-- **Add** (or double-click) appends the selected step to **Selected Steps**.
-- **Remove**, **Move Up** and **Move Down** edit the order.
-- Clicking a step in **Selected Steps** shows its parameters in the table
-  below, where they can be edited. **Default Value** resets that step.
-- **Re/Start Steps** clears the pipeline, after a confirmation prompt.
+- **Edit pipeline...** opens a window with every available step on the left,
+  grouped by stage and searchable, and the pipeline on the right. **Add →**
+  (or double-click) inserts the highlighted step after the selected one;
+  **← Remove**, **Move up** and **Move down** edit the pipeline; **Clear all**
+  empties it. Colours show what changed since the window opened: green added,
+  red removed, blue moved. **OK** applies the changes, **Cancel** discards them.
+  Steps already in the pipeline keep their settings.
+- The settings form uses a control for each kind of setting: a checkbox for
+  on/off, a dropdown for a choice, a numeric field or spinner with its limits,
+  a from/to pair for a range, **Choose...** for channel lists (offering the
+  channels of the selected data). A setting changed from its default is shown
+  in **bold**; a greyed-out setting does not apply with the current choices,
+  and its tooltip says why. Rarely changed settings are under **Show advanced
+  settings**.
+- The help pane under the form explains the setting you are working on (each
+  choice, and its default), or the step itself.
+- **Reset step** puts every setting of the selected step back to its default.
+- A step whose settings would stop the run turns **red**, with the reason in
+  the help pane; **Run Analysis** lists any such steps and does not start.
 
 **Only installed steps are offered.** The picker asks what each step requires
 and withholds any whose plugin is missing or too old. The alternative would be

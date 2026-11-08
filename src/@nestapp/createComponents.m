@@ -26,8 +26,6 @@ function createComponents(app)
             app.UIFigure.AutoResizeChildren = 'off';
             app.UIFigure.SizeChangedFcn    = createCallbackFcn(app, @UIFigureSizeChanged, true);
             app.UIFigure.CloseRequestFcn   = createCallbackFcn(app, @UIFigureCloseRequest, true);
-            % Drives the dwell-delayed step legend (see stepsTreeLegend).
-            app.UIFigure.WindowButtonMotionFcn = createCallbackFcn(app, @UIFigureMouseMoved, true);
 
             % Create menu bar
             mFile = uimenu(app.UIFigure, 'Text', 'File');
@@ -83,171 +81,104 @@ function createComponents(app)
             app.TabGroup.SelectionChangedFcn = createCallbackFcn(app, @TabGroupSelectionChanged, true);
 
             % Create CleaningTab
+            % Three columns, per docs/ui-design-language.md: the pipeline on the
+            % left, the selected step's settings in the middle with a help pane
+            % under them, data and Run on the right. Steps are added, removed
+            % and reordered in the Edit pipeline window (editPipelineDialog).
             app.CleaningTab = uitab(app.TabGroup);
             app.CleaningTab.AutoResizeChildren = 'off';
             app.CleaningTab.Title = 'Cleaning';
+            app.CleaningTab.BackgroundColor = nestColours('page');
 
-            % Create StepsTree - a stage-grouped tree of the available steps
-            % (see stepTaxonomy / populateStepsTree). Nodes are filled in
-            % startupFcn via populateStepsTree so the empty tree here and the
-            % populated one share one source. NodeData on each leaf is the exact
-            % registry step name, which the Add/selection callbacks read.
-            app.StepsTree = uitree(app.CleaningTab);
-            app.StepsTree.FontSize = 11;
-            app.StepsTree.Position = [10 173 207 294];
-            app.StepsTree.SelectionChangedFcn = createCallbackFcn(app, @StepsTreeSelectionChanged, true);
-            % Double-click a step to add it. DoubleClickedFcn is a recent uitree
-            % addition; guard so older releases just fall back to the Add button.
-            if isprop(app.StepsTree, 'DoubleClickedFcn')
-                app.StepsTree.DoubleClickedFcn = createCallbackFcn(app, @StepsTreeDoubleClicked, true);
-            end
+            % Left: the pipeline
+            app.PipelineLabel = uilabel(app.CleaningTab);
+            app.PipelineLabel.Position = [10 470 200 24];
+            app.PipelineLabel.Text = 'Pipeline';
+            app.PipelineLabel.FontSize = 16;
+            app.PipelineLabel.FontWeight = 'bold';
+            app.PipelineLabel.FontColor = nestColours('navy');
 
-            % Create CommandDescriptionLabel
-            app.CommandDescriptionLabel = uilabel(app.CleaningTab);
-            app.CommandDescriptionLabel.FontSize = 14;
-            app.CommandDescriptionLabel.FontWeight = 'bold';
-            app.CommandDescriptionLabel.Position = [12 152 31 22];
-            app.CommandDescriptionLabel.Text = 'Info';
-
-            % Create InfoTextArea
-            app.InfoTextArea = uitextarea(app.CleaningTab);
-            app.InfoTextArea.Editable = 'off';
-            app.InfoTextArea.Position = [10 10 207 143];
-
-            % Create StepsListBoxLabel
-            app.StepsListBoxLabel = uilabel(app.CleaningTab);
-            app.StepsListBoxLabel.FontSize = 16;
-            app.StepsListBoxLabel.FontWeight = 'bold';
-            app.StepsListBoxLabel.Position = [89 475 49 22];
-            app.StepsListBoxLabel.Text = 'Steps';
-
-            % Create SelectedListBox
             app.SelectedListBox = uilistbox(app.CleaningTab);
-            app.SelectedListBox.Items = {''};
+            app.SelectedListBox.Items = {};
             app.SelectedListBox.ValueChangedFcn = createCallbackFcn(app, @SelectedListBoxValueChanged, true);
             app.SelectedListBox.FontSize = 11;
-            app.SelectedListBox.Position = [230 104 215 360];
-            app.SelectedListBox.Value = '';
+            app.SelectedListBox.Position = [10 48 215 416];
 
-            % Create MoveUpButton
-            app.MoveUpButton = uibutton(app.CleaningTab, 'push');
-            app.MoveUpButton.ButtonPushedFcn = createCallbackFcn(app, @MoveUpButtonPushed, true);
-            app.MoveUpButton.BackgroundColor = [0.8 0.8 0.8];
-            app.MoveUpButton.Position = [340 56 105 36];
-            app.MoveUpButton.Text = 'Move Up';
+            app.EditPipelineButton = uibutton(app.CleaningTab, 'push');
+            app.EditPipelineButton.ButtonPushedFcn = createCallbackFcn(app, @EditPipelineButtonPushed, true);
+            app.EditPipelineButton.Position = [10 12 215 28];
+            app.EditPipelineButton.Text = 'Edit pipeline...';
+            app.EditPipelineButton.FontSize = 12;
 
-            % Create MoveDownButton
-            app.MoveDownButton = uibutton(app.CleaningTab, 'push');
-            app.MoveDownButton.ButtonPushedFcn = createCallbackFcn(app, @MoveDownButtonPushed, true);
-            app.MoveDownButton.BackgroundColor = [0.8 0.8 0.8];
-            app.MoveDownButton.Position = [340 12 105 36];
-            app.MoveDownButton.Text = 'Move Down';
+            % Middle: the selected step's settings
+            app.StepTitleLabel = uilabel(app.CleaningTab);
+            app.StepTitleLabel.Position = [237 471 400 24];
+            app.StepTitleLabel.Text = '';
+            app.StepTitleLabel.FontSize = 16;
+            app.StepTitleLabel.FontWeight = 'bold';
+            app.StepTitleLabel.FontColor = nestColours('navy');
 
-            % Create AddButton
-            app.AddButton = uibutton(app.CleaningTab, 'push');
-            app.AddButton.ButtonPushedFcn = createCallbackFcn(app, @AddButtonPushed, true);
-            app.AddButton.BackgroundColor = [0.8 0.8 0.8];
-            app.AddButton.Position = [230 56 105 36];
-            app.AddButton.Text = 'Add';
+            app.StepSourceLabel = uilabel(app.CleaningTab);
+            app.StepSourceLabel.Position = [237 454 400 18];
+            app.StepSourceLabel.Text = '';
+            app.StepSourceLabel.FontColor = [0.45 0.45 0.45];
 
-            % Create RemoveButton
-            app.RemoveButton = uibutton(app.CleaningTab, 'push');
-            app.RemoveButton.ButtonPushedFcn = createCallbackFcn(app, @RemoveButtonPushed, true);
-            app.RemoveButton.BackgroundColor = [0.8 0.8 0.8];
-            app.RemoveButton.Position = [230 12 105 36];
-            app.RemoveButton.Text = 'Remove';
+            app.StepAccentBar = uipanel(app.CleaningTab);
+            app.StepAccentBar.Position = [237 449 400 3];
+            app.StepAccentBar.BorderType = 'none';
+            app.StepAccentBar.BackgroundColor = nestColours('mint');
 
-            % Create SelectedListBoxLabel
-            app.SelectedListBoxLabel = uilabel(app.CleaningTab);
-            app.SelectedListBoxLabel.FontSize = 16;
-            app.SelectedListBoxLabel.FontWeight = 'bold';
-            app.SelectedListBoxLabel.Position = [278 472 119 25];
-            app.SelectedListBoxLabel.Text = 'Selected Steps';
+            app.SettingsPanel = uipanel(app.CleaningTab);
+            app.SettingsPanel.Position = [237 152 400 291];
+            app.SettingsPanel.BorderType = 'line';
+            app.SettingsPanel.BackgroundColor = [1 1 1];
+            app.SettingsPanel.Scrollable = 'on';
+            app.SettingsPanel.AutoResizeChildren = 'off';
 
-            % Create UITable
-            app.UITable = uitable(app.CleaningTab);
-            app.UITable.ColumnName = {'Properties'; 'Value'};
-            app.UITable.RowName = {};
-            app.UITable.CellEditCallback = createCallbackFcn(app, @UITableCellEdit, true);
-            app.UITable.CellSelectionCallback = createCallbackFcn(app, @UITableCellSelection, true);
-            app.UITable.Position = [450 104 188 363];
+            app.ResetStepButton = uibutton(app.CleaningTab, 'push');
+            app.ResetStepButton.ButtonPushedFcn = createCallbackFcn(app, @ResetStepButtonPushed, true);
+            app.ResetStepButton.Position = [527 122 110 24];
+            app.ResetStepButton.Text = 'Reset step';
+            app.ResetStepButton.Tooltip = 'Put every setting of this step back to its default';
 
-            % Create DefaultValueButton
-            app.DefaultValueButton = uibutton(app.CleaningTab, 'push');
-            app.DefaultValueButton.ButtonPushedFcn = createCallbackFcn(app, @DefaultValueButtonPushed, true);
-            app.DefaultValueButton.BackgroundColor = [0.8 0.8 0.8];
-            app.DefaultValueButton.Position = [485 15 110 23];
-            app.DefaultValueButton.Text = 'Default Value';
+            app.HelpTextArea = uitextarea(app.CleaningTab);
+            app.HelpTextArea.Editable = 'off';
+            app.HelpTextArea.Position = [237 10 400 106];
+            app.HelpTextArea.BackgroundColor = [1 1 1];
 
-            % Create TextArea
-            app.TextArea = uitextarea(app.CleaningTab);
-            app.TextArea.ValueChangedFcn = createCallbackFcn(app, @TextAreaValueChanged, true);
-            app.TextArea.Position = [450 46 188 56];
+            % Right: logo, data, run
+            app.Image = uiimage(app.CleaningTab);
+            app.Image.Position = [652 452 205 41];
+            app.Image.ImageSource = fullfile(imageDir, 'LogoNest.png');
 
-            % Create SelectedListBoxLabel_2
-            app.SelectedListBoxLabel_2 = uilabel(app.CleaningTab);
-            app.SelectedListBoxLabel_2.FontSize = 16;
-            app.SelectedListBoxLabel_2.FontWeight = 'bold';
-            app.SelectedListBoxLabel_2.Position = [492 472 102 25];
-            app.SelectedListBoxLabel_2.Text = 'Parameter(s)';
+            app.LoadTemplateButton = uibutton(app.CleaningTab, 'push');
+            app.LoadTemplateButton.ButtonPushedFcn = createCallbackFcn(app, @LoadTemplateMenuSelected, true);
+            app.LoadTemplateButton.Position = [652 414 205 28];
+            app.LoadTemplateButton.Text = 'Load template...';
+            app.LoadTemplateButton.FontSize = 12;
 
-            % Create SelectDatatoPerformAnalysisPanel
-            % Panel expanded to show file listbox (was 116px tall, now 206px)
             app.SelectDatatoPerformAnalysisPanel = uipanel(app.CleaningTab);
             app.SelectDatatoPerformAnalysisPanel.AutoResizeChildren = 'off';
-            app.SelectDatatoPerformAnalysisPanel.BorderType = 'none';
-            app.SelectDatatoPerformAnalysisPanel.Title = 'Select Data to Perform Analysis';
-            app.SelectDatatoPerformAnalysisPanel.Position = [649 237 208 206];
+            app.SelectDatatoPerformAnalysisPanel.Title = 'Data';
+            app.SelectDatatoPerformAnalysisPanel.FontWeight = 'bold';
+            app.SelectDatatoPerformAnalysisPanel.ForegroundColor = nestColours('navy');
+            app.SelectDatatoPerformAnalysisPanel.BackgroundColor = [1 1 1];
+            app.SelectDatatoPerformAnalysisPanel.Position = [652 172 205 234];
 
-            % Create SelectedFilesListBox - shows all queued files
             app.SelectedFilesListBox = uilistbox(app.SelectDatatoPerformAnalysisPanel);
             app.SelectedFilesListBox.Items = {};
-            app.SelectedFilesListBox.Position = [5 30 195 145];
+            app.SelectedFilesListBox.Position = [5 36 193 172];
             app.SelectedFilesListBox.FontSize = 10;
 
-            % Create SelectDataButton (full-width "Browse..." at bottom of panel)
             app.SelectDataButton = uibutton(app.SelectDatatoPerformAnalysisPanel, 'push');
             app.SelectDataButton.ButtonPushedFcn = createCallbackFcn(app, @SelectDataButtonPushed, true);
-            app.SelectDataButton.Position = [5 5 195 23];
+            app.SelectDataButton.Position = [5 6 193 25];
             app.SelectDataButton.Text = 'Browse...';
             app.SelectDataButton.Tooltip = {'Browse a folder tree with checkboxes and a path filter to pick data files across many subject folders'};
 
-            % Create RunAnalysisButton
-            app.RunAnalysisButton = uibutton(app.CleaningTab, 'push');
-            app.RunAnalysisButton.ButtonPushedFcn = createCallbackFcn(app, @RunAnalysisButtonPushed, true);
-            app.RunAnalysisButton.BackgroundColor = [0.20 0.55 0.20];
-            app.RunAnalysisButton.FontColor = [1 1 1];
-            app.RunAnalysisButton.FontSize = 18;
-            app.RunAnalysisButton.FontWeight = 'bold';
-            app.RunAnalysisButton.Position = [657 117 201 60];
-            app.RunAnalysisButton.Text = 'Run Analysis';
-
-            % Create Image
-            app.Image = uiimage(app.CleaningTab);
-            app.Image.Position = [653 453 203 44];
-            app.Image.ImageSource = fullfile(imageDir, 'LogoNest.jpg');
-
-            % Create NESTAPPLabel
-            app.NESTAPPLabel = uilabel(app.CleaningTab);
-            app.NESTAPPLabel.FontSize = 14;
-            app.NESTAPPLabel.FontWeight = 'bold';
-            app.NESTAPPLabel.FontAngle = 'italic';
-            app.NESTAPPLabel.Position = [785 448 71 22];
-            app.NESTAPPLabel.Text = 'NESTAPP';
-
-            % Create ReStartStepsButton
-            app.ReStartStepsButton = uibutton(app.CleaningTab, 'push');
-            app.ReStartStepsButton.ButtonPushedFcn = createCallbackFcn(app, @ReStartStepsButtonPushed, true);
-            app.ReStartStepsButton.BackgroundColor = [0.651 0.651 0.651];
-            app.ReStartStepsButton.FontSize = 18;
-            app.ReStartStepsButton.FontWeight = 'bold';
-            app.ReStartStepsButton.Position = [658 193 201 36];
-            app.ReStartStepsButton.Text = 'ReStart Steps';
-
-            % Create ParallelCheckBox
             app.ParallelCheckBox = uicheckbox(app.CleaningTab);
-            app.ParallelCheckBox.Text = 'Parallel Processing';
-            app.ParallelCheckBox.Position = [657 85 201 24];
+            app.ParallelCheckBox.Text = 'Parallel processing';
+            app.ParallelCheckBox.Position = [652 138 205 22];
             app.ParallelCheckBox.Value = false;
             if license('test', 'Distrib_Computing_Toolbox')
                 app.ParallelCheckBox.Enable = 'on';
@@ -255,6 +186,15 @@ function createComponents(app)
                 app.ParallelCheckBox.Enable = 'off';
                 app.ParallelCheckBox.Tooltip = 'Requires Parallel Computing Toolbox';
             end
+
+            app.RunAnalysisButton = uibutton(app.CleaningTab, 'push');
+            app.RunAnalysisButton.ButtonPushedFcn = createCallbackFcn(app, @RunAnalysisButtonPushed, true);
+            app.RunAnalysisButton.BackgroundColor = nestColours('run');
+            app.RunAnalysisButton.FontColor = [1 1 1];
+            app.RunAnalysisButton.FontSize = 16;
+            app.RunAnalysisButton.FontWeight = 'bold';
+            app.RunAnalysisButton.Position = [652 66 205 60];
+            app.RunAnalysisButton.Text = 'Run Analysis';
 
             % Create ReportsTab
             app.ReportsTab = uitab(app.TabGroup);
@@ -376,24 +316,6 @@ function createComponents(app)
             app.ReportsImagePanel.AutoResizeChildren = 'off';
             app.ReportsImagePanel.Visible = 'off';
 
-            % Floating hover tip for the Steps tree. Parented to the figure
-            % rather than a tab so it is never clipped, and created last so it
-            % paints over the TabGroup. See stepsTreeLegend for why this is not
-            % the native Tooltip.
-            app.StepsTipPanel = uipanel(app.UIFigure);
-            app.StepsTipPanel.BorderType = 'line';
-            app.StepsTipPanel.BackgroundColor = [1 1 0.88];
-            app.StepsTipPanel.AutoResizeChildren = 'off';
-            % Tall enough for the wrapped legend at this width; the text is
-            % fixed, so a fixed box that fits it is simpler than measuring.
-            app.StepsTipPanel.Position = [0 0 300 84];
-            app.StepsTipPanel.Visible = 'off';
-
-            app.StepsTipLabel = uilabel(app.StepsTipPanel);
-            app.StepsTipLabel.Position = [8 5 284 74];
-            app.StepsTipLabel.VerticalAlignment = 'top';
-            app.StepsTipLabel.WordWrap = 'on';
-            app.StepsTipLabel.FontSize = 11;
 
 
             %% ---- Explore tab -------------------------------------------

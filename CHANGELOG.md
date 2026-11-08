@@ -10,6 +10,17 @@ The version here must match `src/nestappVersion.m` and the release git tag.
 
 ### Changed
 
+- **A new Cleaning tab.** The parameter table is replaced by a settings form
+  with a proper control for each setting (checkboxes, dropdowns of named
+  choices, numeric fields with limits, from/to ranges, a channel chooser),
+  a help pane that explains the setting being edited, and **Reset step**.
+  Changed settings are bold; settings that do not apply are greyed with the
+  reason; a step whose settings would stop the run turns red. Steps are added,
+  removed and reordered in a new **Edit pipeline** window, which colours what
+  changed (added, removed, moved) until OK. The tab picks up the lab logo's
+  colours. Steps not yet converted to typed settings show a dropdown wherever
+  their options are a fixed list and a text field otherwise.
+
 - **Step settings are becoming typed** (first three steps: Re-Sample, Remove
   Bad Channels, Modified Bandpass Filter (TESA)). Their settings are stored as
   real values (on/off, numbers, named choices) instead of the text the

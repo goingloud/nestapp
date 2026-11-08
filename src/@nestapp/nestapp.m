@@ -12,29 +12,21 @@ classdef nestapp < matlab.apps.AppBase
         UIFigure                        matlab.ui.Figure
         TabGroup                        matlab.ui.container.TabGroup
         CleaningTab                     matlab.ui.container.Tab
-        ReStartStepsButton              matlab.ui.control.Button
-        NESTAPPLabel                    matlab.ui.control.Label
+        PipelineLabel                   matlab.ui.control.Label
+        SelectedListBox                 matlab.ui.control.ListBox
+        EditPipelineButton              matlab.ui.control.Button
+        StepTitleLabel                  matlab.ui.control.Label
+        StepSourceLabel                 matlab.ui.control.Label
+        StepAccentBar                   matlab.ui.container.Panel
+        SettingsPanel                   matlab.ui.container.Panel
+        ResetStepButton                 matlab.ui.control.Button
+        HelpTextArea                    matlab.ui.control.TextArea
         Image                           matlab.ui.control.Image
+        LoadTemplateButton              matlab.ui.control.Button
         RunAnalysisButton               matlab.ui.control.Button
         SelectDatatoPerformAnalysisPanel  matlab.ui.container.Panel
         SelectDataButton                matlab.ui.control.Button
         SelectedFilesListBox            matlab.ui.control.ListBox
-        SelectedListBoxLabel_2          matlab.ui.control.Label
-        TextArea                        matlab.ui.control.TextArea
-        DefaultValueButton              matlab.ui.control.Button
-        UITable                         matlab.ui.control.Table
-        SelectedListBoxLabel            matlab.ui.control.Label
-        RemoveButton                    matlab.ui.control.Button
-        AddButton                       matlab.ui.control.Button
-        MoveDownButton                  matlab.ui.control.Button
-        MoveUpButton                    matlab.ui.control.Button
-        SelectedListBox                 matlab.ui.control.ListBox
-        StepsListBoxLabel               matlab.ui.control.Label
-        InfoTextArea                    matlab.ui.control.TextArea
-        CommandDescriptionLabel         matlab.ui.control.Label
-        StepsTree                       matlab.ui.container.Tree
-        StepsTipPanel                   matlab.ui.container.Panel
-        StepsTipLabel                   matlab.ui.control.Label
         UIAxes                          matlab.ui.control.UIAxes
         ReportsTab                      matlab.ui.container.Tab
         ReportsListBox                  matlab.ui.control.ListBox
@@ -65,17 +57,14 @@ classdef nestapp < matlab.apps.AppBase
     end
     properties (Access = public)
         % Tab Cleaning
-        selectedItem % Selected Table Item Values
-        info % containers.Map: step name -> info/description text (shown in InfoTextArea)
-        hoverTimer    % singleShot timer: fires once the pointer has rested on the Steps tree
-        treeRect      % cached figure-relative rect of StepsTree (getpixelposition is slow)
-        treeRectStamp % UIFigure.Position the cached rect was computed for
+        info          % containers.Map: step name -> description (Edit pipeline, help pane)
         stepBlocks    % containers.Map: step name -> true if it ALWAYS waits for a human
         stepProviders % containers.Map: step name -> provider (TESA, EEGLAB, ...)
-        % Canonical pipeline state - single source of truth for steps and params.
-        % appendStep/removeStep/moveStep/clearSteps/loadPipelineData all write here.
-        currentParamKey  = ''  % param key selected in UITable (transient)
-        currentParamType = ''  % type of selected param (transient)
+        offeredStepNames = {}  % steps this machine can run (availableSteps), offered in Edit pipeline
+        settingsFormState = [] % the settings form for the selected step (settingsForm)
+        focusKey = ''          % the setting the help pane is describing
+        showAdvanced = false   % whether "advanced settings" are unfolded
+        channelLabelCache = [] % labels offered by the channel chooser, per data queue
         originalSize     % [w h] of UIFigure at creation - used by UIFigureSizeChanged
         isResizing = false % guards UIFigureSizeChanged against its own clamp write
         baseLayout = []  % per-component base geometry captured at startup - drives rescaleComponents
@@ -164,109 +153,15 @@ classdef nestapp < matlab.apps.AppBase
     end
 
     methods (Access = private)
-        % -- Pipeline state mutation methods ---------------------------------
-        % app.spec, SelectedListBox.Items, and SelectedListBox.ItemsData must
-        % stay in sync. These methods are the ONLY permitted way to add,
-        % remove, move, or clear steps -- callbacks delegate here.
-
-        function name = selectedStepName(app)
-        % SELECTEDSTEPNAME  Registry step name of the selected tree node, or ''
-        % when a category/operation header (empty NodeData) is selected.
-            name = '';
-            n = app.StepsTree.SelectedNodes;
-            if isempty(n); return; end
-            d = n(1).NodeData;
-            if ischar(d) || isstring(d); name = char(d); end
-        end
-
-        function UIFigureMouseMoved(app, ~)
-        % Any pointer movement hides the tip and restarts its clock, so it
-        % only ever appears once the pointer has been still on the tree for
-        % HOVER_DELAY seconds - and gets out of the way the instant you move.
-        % Fires on every mouse move over the window, so it stays cheap: no
-        % graphics write unless the tip is actually up.
-            if isempty(app.hoverTimer) || ~isvalid(app.hoverTimer); return; end
-            stop(app.hoverTimer);
-            hideStepsTip(app);
-            if ~pointerOverStepsTree(app); return; end
-            start(app.hoverTimer);
-        end
-
-        function tf = pointerOverStepsTree(app)
-        % True when the pointer is inside the Steps tree, which only exists
-        % while the Cleaning tab is showing.
-            tf = false;
-            if app.TabGroup.SelectedTab ~= app.CleaningTab; return; end
-            r = stepsTreeRect(app);
-            p = app.UIFigure.CurrentPoint;
-            tf = p(1) >= r(1) && p(1) <= r(1) + r(3) ...
-              && p(2) >= r(2) && p(2) <= r(2) + r(4);
-        end
-
-        function r = stepsTreeRect(app)
-        % Figure-relative rect of the tree. getpixelposition costs ~150 us, far
-        % too much for a callback that fires on every mouse move, so cache it
-        % and recompute only when the window has changed size or moved.
-            pos = app.UIFigure.Position;
-            if isempty(app.treeRect) || ~isequal(app.treeRectStamp, pos)
-                app.treeRect      = getpixelposition(app.StepsTree, true);
-                app.treeRectStamp = pos;
-            end
-            r = app.treeRect;
-        end
-
-        function showStepsTip(app)
-        % Fired by the dwell timer. Places the tip near the pointer, nudged so
-        % it never sits under the cursor and never leaves the window.
-            if ~isvalid(app.UIFigure) || ~pointerOverStepsTree(app); return; end
-            GAP = 14;
-            tip = app.StepsTipPanel.Position(3:4);
-            fig = app.UIFigure.Position(3:4);
-            p   = app.UIFigure.CurrentPoint;
-            x   = min(max(1, p(1) + GAP), fig(1) - tip(1) - 1);
-            y   = min(max(1, p(2) - tip(2) - GAP), fig(2) - tip(2) - 1);
-            app.StepsTipPanel.Position = [x, y, tip];
-            app.StepsTipPanel.Visible = 'on';
-        end
-
-        function hideStepsTip(app)
-        % Guarded on the current state: this runs on every mouse move, and
-        % re-asserting 'off' on an already-hidden panel is a graphics write
-        % for nothing.
-            if ~isempty(app.StepsTipPanel) && isvalid(app.StepsTipPanel) ...
-                    && app.StepsTipPanel.Visible
-                app.StepsTipPanel.Visible = 'off';
-            end
-        end
-
-        function txt = stepsTreeLegend(app)
-        % The text of the tree's hover tip, and the one place the design is
-        % explained.
-        %
-        % uitreenode has no Tooltip property, so a per-node hover tip is not
-        % possible - this tree-level key carries the dot's meaning instead, and
-        % the Info panel below names the provider and the exact wait behaviour
-        % for whichever step is selected.
-        %
-        % It is shown by a dwell timer rather than the native Tooltip: the
-        % native one fires on MATLAB's own schedule and cannot be delayed, and
-        % assigning Tooltip mid-hover does not reliably re-trigger it.
-            n = 0;
-            if ~isempty(app.stepBlocks); n = app.stepBlocks.Count; end
-            txt = sprintf([ ...
-                'Amber dot: the step waits for you - it opens a window you ' ...
-                'must close, and cannot run with Parallel Processing on ' ...
-                '(%d steps).\n\nSelect a step for details.'], n);
-        end
+        % -- The pipeline and the selected step's settings ---------------------
+        % app.spec is the pipeline; setPipeline replaces it, settingChanged edits
+        % one setting. The list and the form are always redrawn from app.spec.
 
         function lines = stepInfoLines(app, name)
-        % What the Info panel shows for one step: its description, then the
-        % facts the tree can only hint at - who supplies it (every step has a
-        % provider, so that is text rather than a dot) and, for the few that
-        % carry the amber dot, what the dot means for this step.
+        % What is said about one step in the Edit pipeline window and the help
+        % pane: its description, then who supplies it and, for a step that can
+        % stop and wait for the user, what that means for the run.
             lines = string.empty(0, 1);
-            % The dot's meaning goes first: the Info panel is small, and a
-            % note under a long description is a note nobody scrolls to.
             if ~isempty(app.stepBlocks) && isKey(app.stepBlocks, name)
                 if app.stepBlocks(name)
                     lines(end+1) = "* Waits for you - opens a window you must " + ...
@@ -278,45 +173,29 @@ classdef nestapp < matlab.apps.AppBase
                 lines(end+1) = "  Cannot run with Parallel Processing on.";
                 lines(end+1) = "";
             end
-            lines(end+1) = string(app.info(name));
+            if isKey(app.info, name), lines(end+1) = string(app.info(name)); end
             if ~isempty(app.stepProviders) && isKey(app.stepProviders, name)
                 lines(end+1) = "";
                 lines(end+1) = "Provided by: " + string(app.stepProviders(name));
             end
         end
 
-        function populateStepsTree(app)
-        % POPULATESTEPSTREE  (Re)build the stage-grouped picker tree and the
-        % name->info map from the steps this machine can run (availableSteps).
-        % Leaf NodeData is the exact registry step name. Any available step the
-        % taxonomy forgot is collected under "Other" so nothing silently
-        % vanishes from the picker.
-            delete(app.StepsTree.Children);
+        function buildStepCatalog(app)
+        % BUILDSTEPCATALOG  What this machine can run, for the Edit pipeline
+        % window: the offered step names (availableSteps), their descriptions,
+        % providers, and which ones can stop and wait for the user.
             reg             = stepRegistry();
             [steps, hidden] = availableSteps(reg);
             availNames      = {steps.name};
-            % A withheld step leaves no trace in the tree, so "where did my
+            % A withheld step leaves no trace in the picker, so "where did my
             % steps go" has to be answerable somewhere. Nearly always a missing
-            % or too-old plugin - or EEGLAB not initialised, which used to hide
-            % most of the registry here (see startupFcn).
+            % or too-old plugin - or EEGLAB not initialised (see startupFcn).
             if ~isempty(hidden)
                 nestLog('CFG', 'Step picker: %d of %d steps not offered: %s', ...
                     numel(hidden), numel(reg), strjoin({hidden.name}, ', '));
             end
-            app.info        = containers.Map(availNames, {steps.info});
-
-            % uitree node styling (uistyle/addStyle on a tree) is R2023b+; the
-            % app's floor is R2023a, so probe once - the picker still builds on
-            % older releases, just without bold headers / muted operation rows.
-            canStyle = treeStylingSupported(app, app.StepsTree);
-
-            TAX = stepTaxonomy();
-            % Steps that can stop and wait for a human get the amber dot. The
-            % set is derived from the registry via canStepBlock, so adding an
-            % interactive step marks itself in the picker.
-            % TODO: runPipelineCore's local findInteractiveSteps is still a
-            % hardcoded name list and does not agree with the registry - it is
-            % what actually gates the parallel-processing warning.
+            app.offeredStepNames = availNames;
+            app.info          = containers.Map(availNames, {steps.info});
             app.stepBlocks    = containers.Map('KeyType', 'char', 'ValueType', 'logical');
             app.stepProviders = containers.Map('KeyType', 'char', 'ValueType', 'char');
             for r = 1:numel(reg)
@@ -324,178 +203,197 @@ classdef nestapp < matlab.apps.AppBase
                 [tf, always] = canStepBlock(reg(r));
                 if tf; app.stepBlocks(reg(r).name) = always; end
             end
-            flag = stepInteractiveIcon();
-            sCat = uistyle('FontWeight', 'bold');
-            sOp  = uistyle('FontColor', [0.42 0.47 0.53]);
-
-            placed = {};
-            for c = 1:numel(TAX)
-                cat = TAX(c);
-                % keep only the operations/variants available on this machine
-                ops = struct('name', {}, 'variants', {});
-                cnt = 0;
-                for o = 1:numel(cat.ops)
-                    v = cat.ops(o).variants;
-                    v = v(ismember({v.step}, availNames));
-                    if isempty(v); continue; end
-                    cnt = cnt + 1;
-                    ops(cnt).name     = cat.ops(o).name;
-                    ops(cnt).variants = v;
-                end
-                if cnt == 0; continue; end
-                nShown = sum(arrayfun(@(o) numel(o.variants), ops));
-                cNode = uitreenode(app.StepsTree, ...
-                    'Text', sprintf('%s   (%d)', upper(cat.name), nShown), 'NodeData', '');
-                if canStyle; addStyle(app.StepsTree, sCat, 'node', cNode); end
-                for o = 1:numel(ops)
-                    if numel(ops(o).variants) == 1
-                        addStepLeaf(app, cNode, ops(o).variants(1), flag);
-                    else
-                        oNode = uitreenode(cNode, 'Text', ops(o).name, 'NodeData', '');
-                        if canStyle; addStyle(app.StepsTree, sOp, 'node', oNode); end
-                        for k = 1:numel(ops(o).variants)
-                            addStepLeaf(app, oNode, ops(o).variants(k), flag);
-                        end
+            tax = stepTaxonomy();
+            for c = 1:numel(tax)
+                for o = 1:numel(tax(c).ops)
+                    for v = tax(c).ops(o).variants
+                        app.stepProviders(v.step) = v.provider;
                     end
-                    placed = [placed, {ops(o).variants.step}]; %#ok<AGROW>
                 end
             end
+        end
 
-            % Safety net: surface any available step the taxonomy did not place.
-            orphan = setdiff(availNames, placed);
-            if ~isempty(orphan)
-                oNode = uitreenode(app.StepsTree, ...
-                    'Text', sprintf('OTHER   (%d)', numel(orphan)), 'NodeData', '');
-                if canStyle; addStyle(app.StepsTree, sCat, 'node', oNode); end
-                for i = 1:numel(orphan)
-                    uitreenode(oNode, 'Text', orphan{i}, 'NodeData', orphan{i});
-                end
+        function e = registryEntry(~, name)
+        % The registry entry for a step name, or [] if this registry has none.
+            reg = stepRegistry();
+            e = reg(strcmp({reg.name}, name));
+            if ~isscalar(e), e = []; end
+        end
+
+        function setPipeline(app, spec, sel)
+        % SETPIPELINE  Replace the pipeline and show step sel's settings. The one
+        % place app.spec is replaced wholesale (loading, templates, the Edit
+        % pipeline window), so the list and the form cannot fall out of step.
+            if isempty(spec)
+                spec = repmat(struct('name', '', 'params', struct()), 0, 1);
             end
-
-            expand(app.StepsTree);
-            app.StepsTipLabel.Text = stepsTreeLegend(app);
-        end
-
-        function addStepLeaf(app, parent, v, flagIcon)
-        % ADDSTEPLEAF  One leaf whose NodeData is the registry step name; an
-        % amber dot marks a step that can stop and wait for a human.
-            node = uitreenode(parent, 'Text', v.step, 'NodeData', v.step);
-            app.stepProviders(v.step) = v.provider;
-            if isKey(app.stepBlocks, v.step)
-                % Set the flag after creation and tolerate its absence: the leaf
-                % must always appear even on a release without node icons.
-                try, node.Icon = flagIcon; catch, end %#ok<CTCH>
-            end
-        end
-
-        function tf = treeStylingSupported(~, tree)
-        % TREESTYLINGSUPPORTED  True when uistyle/addStyle work on a uitree node
-        % (R2023b+). Probed at runtime rather than gated on a version string, so
-        % the picker degrades gracefully without depending on release numbers.
-            probe = uitreenode(tree, 'Text', '', 'NodeData', '');
-            try
-                addStyle(tree, uistyle('FontWeight', 'bold'), 'node', probe);
-                tf = true;
-            catch
-                tf = false;
-            end
-            delete(probe);
-        end
-
-        function appendStep(app, stepName)
-        % APPENDSTEP  Append stepName to the pipeline using its default params.
-            reg    = stepRegistry();
-            regIdx = find(strcmp({reg.name}, stepName), 1);
-            if isempty(regIdx); return; end
-            n = numel(app.SelectedListBox.Items);
-            % Treat a single empty-string sentinel as an empty list
-            if n == 1 && isempty(app.SelectedListBox.Items{1})
-                n = 0;
-                app.SelectedListBox.Items(:)     = [];
-                app.SelectedListBox.ItemsData(:) = [];
-                app.spec = repmat(struct('name','','params',struct()), 0, 1);
-            end
-            pos = n + 1;
-            app.SelectedListBox.Items{pos}     = stepName;
-            app.SelectedListBox.ItemsData{pos} = ['Item' num2str(pos)];
-            app.spec(pos)                      = makePipelineStep(stepName, reg);
-            app.pipelineDirty = true;
-            updateStatusBar(app);
-        end
-
-        function removeStep(app, idx)
-        % REMOVESTEP  Remove the step at index idx and renumber ItemsData.
-            app.SelectedListBox.Items(idx)     = [];
-            app.SelectedListBox.ItemsData(idx) = [];
-            app.spec(idx)                      = [];
-            for i = idx : numel(app.SelectedListBox.ItemsData)
-                app.SelectedListBox.ItemsData{i} = ['Item' num2str(i)];
-            end
-            app.pipelineDirty = true;
-            updateStatusBar(app);
-        end
-
-        function moveStep(app, idx, direction)
-        % MOVESTEP  Swap step at idx with its neighbour in the given direction
-        %   (+1 = move down, -1 = move up). No-op at boundaries.
-            n    = numel(app.SelectedListBox.Items);
-            idx2 = idx + direction;
-            if idx2 < 1 || idx2 > n; return; end
-            % Swap step names and spec entries
-            [app.SelectedListBox.Items{idx}, app.SelectedListBox.Items{idx2}] = ...
-                deal(app.SelectedListBox.Items{idx2}, app.SelectedListBox.Items{idx});
-            [app.spec(idx), app.spec(idx2)] = deal(app.spec(idx2), app.spec(idx));
-            % ItemsData stays in positional order - just renumber both slots
-            app.SelectedListBox.ItemsData{idx}  = ['Item' num2str(idx)];
-            app.SelectedListBox.ItemsData{idx2} = ['Item' num2str(idx2)];
-            app.SelectedListBox.Value = app.SelectedListBox.ItemsData{idx2};
-            app.pipelineDirty = true;
-            updateStatusBar(app);
-        end
-
-        function clearSteps(app)
-        % CLEARSTEPS  Remove all pipeline steps and reset state.
-            app.spec = repmat(struct('name','','params',struct()), 0, 1);
-            app.SelectedListBox.Items(:)     = [];
-            app.SelectedListBox.ItemsData(:) = [];
-            app.UITable.Data    = [];
-            app.ItemNum          = 0;
-            app.currentParamKey  = '';
-            app.currentParamType = '';
-            app.pipelineDirty   = true;
+            app.spec = spec;
+            if nargin < 3 || isempty(sel), sel = 1; end
+            app.ItemNum = min(max(sel, 1), numel(app.spec));
+            refreshPipelineList(app);
+            showStepSettings(app);
             updateStatusBar(app);
         end
 
         function idx = selectedStepIndex(app)
-        % SELECTEDSTEPINDEX  Decode the current SelectedListBox selection to a 1-based index.
-            idx = str2double(strrep(app.SelectedListBox.Value, 'Item', ''));
+        % SELECTEDSTEPINDEX  The step whose settings are shown, or [] for none.
+            idx = app.ItemNum;
+            if isempty(idx) || idx < 1 || idx > numel(app.spec), idx = []; end
         end
 
-        function refreshParamTable(app, stepIdx)
-        % REFRESHPARAMTABLE  Update UITable from app.spec(stepIdx).
-            reg    = stepRegistry();
-            step   = app.spec(stepIdx);
-            regIdx = find(strcmp({reg.name}, step.name), 1);
-            if isempty(regIdx)
-                app.UITable.Data = [];
+        function refreshPipelineList(app)
+        % The pipeline list: numbered steps, the selected one highlighted, any
+        % with settings that would stop the run in red. The list's own
+        % selection is cleared after each click and the highlight drawn as a
+        % style, so it reads the same as the rest of the tab.
+            n = numel(app.spec);
+            lb = app.SelectedListBox;
+            lb.Items     = arrayfun(@(k) sprintf('%d  %s', k, app.spec(k).name), 1:n, 'UniformOutput', false);
+            lb.ItemsData = num2cell(1:n);
+            lb.Value     = {};
+            removeStyle(lb);
+            bad = arrayfun(@(k) ~isempty(stepProblems(app, k)), 1:n);
+            if any(bad), addStyle(lb, uistyle('FontColor', nestColours('problem')), 'item', find(bad)); end
+            k = selectedStepIndex(app);
+            if ~isempty(k)
+                colour = nestColours('navy');
+                if bad(k), colour = nestColours('problem'); end
+                addStyle(lb, uistyle('BackgroundColor', nestColours('mintTint'), ...
+                    'FontWeight', 'bold', 'FontColor', colour), 'item', k);
+            end
+        end
+
+        function [msgs, keys] = stepProblems(app, k)
+        % What would stop step k from running (typed steps; see paramProblems).
+            msgs = {}; keys = {};
+            e = registryEntry(app, app.spec(k).name);
+            if isempty(e), return; end
+            [msgs, keys] = paramProblems(e, migrateStepParams(e, app.spec(k).params));
+        end
+
+        function showStepSettings(app)
+        % Build the settings form for the selected step.
+            k = selectedStepIndex(app);
+            app.focusKey = '';
+            app.settingsFormState = [];
+            if isempty(k)
+                app.StepTitleLabel.Text  = '';
+                app.StepSourceLabel.Text = '';
+                delete(app.SettingsPanel.Children);
+                app.ResetStepButton.Enable = 'off';
+                app.HelpTextArea.Value = {'Use "Edit pipeline..." to add steps, or load a template.'};
                 return
             end
-            data = buildParamTableData(step, reg(regIdx));
-            % Show params that are disabled for this step - overridden by a
-            % mutually-exclusive sibling, or gated off by another param's value
-            % - greyed out. The '(' prefix makes styleParamTable grey the cell.
-            disabled = disabledParamKeys(reg(regIdx), step.params);
-            if ~isempty(disabled)
-                keys = {reg(regIdx).params.key};
-                for k = 1:numel(disabled)
-                    r = find(strcmp(keys, disabled{k}), 1);
-                    if ~isempty(r)
-                        data{r,2} = '(disabled)';
-                    end
-                end
+            name = app.spec(k).name;
+            e = registryEntry(app, name);
+            app.StepTitleLabel.Text = name;
+            app.ResetStepButton.Enable = 'on';
+            if isempty(e)
+                app.StepSourceLabel.Text = 'Not available in this version of nestapp';
+                delete(app.SettingsPanel.Children);
+                app.HelpTextArea.Value = {''};
+                return
             end
-            app.UITable.Data = data;
-            styleParamTable(app);
+            app.spec(k).params = migrateStepParams(e, app.spec(k).params);
+            app.StepSourceLabel.Text = stepSource(app, e);
+            cb  = struct('onChange', @(key, v) settingChanged(app, key, v), ...
+                         'onFocus',  @(key) settingFocused(app, key), ...
+                         'onToggleAdvanced', @() toggleAdvanced(app));
+            ctx = struct('showAdvanced', app.showAdvanced, 'figure', app.UIFigure, ...
+                         'channelLabels', {channelChoices(app)});
+            app.settingsFormState = settingsForm(app.SettingsPanel, e, app.spec(k).params, cb, ctx);
+            refreshSettingStates(app);
+        end
+
+        function refreshSettingStates(app)
+        % Bold for changed, grey for disabled, red for a problem - and the
+        % step name red too - then the help pane.
+            k = selectedStepIndex(app);
+            if isempty(k) || isempty(app.settingsFormState), updateHelp(app); return; end
+            e = registryEntry(app, app.spec(k).name);
+            [~, badKeys] = stepProblems(app, k);
+            settingsForm('refresh', app.settingsFormState, e, app.spec(k).params, badKeys);
+            colour = nestColours('navy');
+            if ~isempty(badKeys), colour = nestColours('problem'); end
+            app.StepTitleLabel.FontColor = colour;
+            updateHelp(app);
+        end
+
+        function settingChanged(app, key, value)
+            k = selectedStepIndex(app);
+            if isempty(k), return; end
+            app.spec(k).params.(key) = value;
+            app.pipelineDirty = true;
+            updateStatusBar(app);
+            refreshSettingStates(app);
+            refreshPipelineList(app);
+        end
+
+        function settingFocused(app, key)
+            if strcmp(app.focusKey, key), return; end
+            app.focusKey = key;
+            updateHelp(app);
+        end
+
+        function toggleAdvanced(app)
+            app.showAdvanced = ~app.showAdvanced;
+            showStepSettings(app);
+        end
+
+        function updateHelp(app)
+        % The help pane: any problems first, then the setting being worked on
+        % (what it does, why it is disabled, each choice, the default) - or,
+        % when none is, the step's own description.
+            k = selectedStepIndex(app);
+            if isempty(k), return; end
+            e = registryEntry(app, app.spec(k).name);
+            if isempty(e), return; end
+            lines = {};
+            msgs = stepProblems(app, k);
+            for i = 1:numel(msgs), lines{end+1} = ['Problem: ' msgs{i}]; end %#ok<AGROW>
+            if ~isempty(msgs), lines{end+1} = ''; end
+            m = e.params(strcmp({e.params.key}, app.focusKey));
+            if isscalar(m)
+                lines{end+1} = m.friendlyName;
+                lines{end+1} = m.description;
+                [off, why] = disabledParamKeys(e, app.spec(k).params);
+                if any(strcmp(m.key, off)), lines{end+1} = ['(' why.(m.key) ')']; end
+                opts = [m.choices, m.modes];
+                if ~isempty(opts), lines{end+1} = ''; end
+                for o = opts, lines{end+1} = sprintf('%s - %s', o.label, o.help); end %#ok<AGROW>
+                if isfield(e.defaults, m.key)
+                    lines{end+1} = '';
+                    lines{end+1} = ['Default: ' settingText(m, e.defaults.(m.key))];
+                end
+            else
+                lines = [lines, reshape(cellstr(stepInfoLines(app, e.name)), 1, [])];
+            end
+            app.HelpTextArea.Value = lines;
+        end
+
+        function s = stepSource(~, e)
+        % "Provider · function" under the step name.
+            dot = [' ' char(183) ' '];
+            if ~isempty(e.requires)
+                s = [e.requires(1).plugin dot e.requires(1).fn];
+                return
+            end
+            fn = regexp(e.info, '"(\w+)"', 'tokens', 'once');
+            s = 'EEGLAB';
+            if ~isempty(fn), s = [s dot fn{1}]; end
+        end
+
+        function labels = channelChoices(app)
+        % Channel labels for the chooser, read from the queued data once per
+        % queue (channelLabelChoices), standard labels when none is queued.
+            paths = app.filePaths;
+            if isempty(paths), paths = {}; end
+            if ~isempty(app.channelLabelCache) && isequal(app.channelLabelCache.paths, paths)
+                labels = app.channelLabelCache.labels;
+                return
+            end
+            labels = channelLabelChoices(paths);
+            app.channelLabelCache = struct('paths', {paths}, 'labels', {labels});
         end
 
         % -----------------------------------------------------------------
@@ -604,30 +502,12 @@ classdef nestapp < matlab.apps.AppBase
         %   Unknown steps produce a warning dialog.
             data = load(fullPath, '-mat');
             reg  = stepRegistry();
-            [app.spec, warns] = specFromSaved(data, reg);
+            [loaded, warns] = specFromSaved(data, reg);
+            setPipeline(app, loaded, 1);
 
             if ~isempty(warns)
                 uialert(app.UIFigure, strjoin(warns, newline), ...
                     'Pipeline Warning', 'Icon', 'warning');
-            end
-
-            n = numel(app.spec);
-            items     = cell(1, n);
-            itemsData = cell(1, n);
-            for k = 1:n
-                items{k}     = app.spec(k).name;
-                itemsData{k} = ['Item' num2str(k)];
-            end
-            app.SelectedListBox.Items     = items;
-            app.SelectedListBox.ItemsData = itemsData;
-
-            app.currentParamKey  = '';
-            app.currentParamType = '';
-            app.UITable.Data     = [];
-
-            if n > 0
-                app.SelectedListBox.Value = itemsData{1};
-                refreshParamTable(app, 1);
             end
         end
 
@@ -1655,36 +1535,6 @@ classdef nestapp < matlab.apps.AppBase
 
         rescaleComponents(app, sX, sY)
 
-        function styleParamTable(app)
-        % Grey the value cells that hold a placeholder rather than a value.
-        % The rule itself lives in greyPlaceholderCells, so the step table, the
-        % plot options dialog and the figure dialog cannot drift apart on what
-        % counts as "not set" - they already had, over the literal '[]'.
-            greyPlaceholderCells(app.UITable);
-        end
-
-        function s = formatParamForDisplay(~, val, paramMeta)
-        % FORMATPARAMFORDISPLAY  Render a typed param value as a display string.
-        %   val: typed value from spec.params.(key)
-        %   paramMeta: params struct entry from stepRegistry (has .placeholder, .type)
-            if isempty(val)
-                if ~isempty(paramMeta.placeholder)
-                    s = paramMeta.placeholder;
-                else
-                    s = '(not set)';
-                end
-            elseif ischar(val) && ~isrow(val)
-                s = [deblank(val(1,:)), ' ...'];   % char matrix - show first line
-            elseif ischar(val) || isstring(val)
-                s = char(val);
-            elseif iscell(val)
-                s = strjoin(cellfun(@char, val, 'UniformOutput', false), ', ');
-            else
-                s = mat2str(val);
-            end
-        end
-
-        
     end
 
 
@@ -1694,14 +1544,8 @@ classdef nestapp < matlab.apps.AppBase
         % Apply tooltips to controls that are not self-explanatory.
         % Called once from startupFcn. Add new tooltips here as needed.
         function applyTooltips(app)
-            % Pipeline builder
-            app.AddButton.Tooltip           = 'Add the selected step to the pipeline';
-            app.RemoveButton.Tooltip        = 'Remove the selected step from the pipeline';
-            app.MoveUpButton.Tooltip        = 'Move the selected step earlier in the pipeline';
-            app.MoveDownButton.Tooltip      = 'Move the selected step later in the pipeline';
-            app.DefaultValueButton.Tooltip  = 'Reset the selected parameter to its default value';
-            app.ReStartStepsButton.Tooltip  = ['Resume processing from the current step index. ' ...
-                'Increment the step counter manually to skip steps, or reset to 1 to reprocess from the start.'];
+            app.EditPipelineButton.Tooltip  = 'Add, remove and reorder the steps of the pipeline';
+            app.LoadTemplateButton.Tooltip  = 'Start from one of the built-in pipelines';
             app.RunAnalysisButton.Tooltip   = 'Run the pipeline on the selected data file(s)';
             app.SelectDataButton.Tooltip    = 'Select a folder or individual files to process';
         end
@@ -1713,37 +1557,22 @@ classdef nestapp < matlab.apps.AppBase
             % nothing EEGLAB provides - including every plugin - resolves until
             % eeglab() has run its path setup and plugin scan. So prefs (which
             % is where the EEGLAB folder is recorded) and EEGLAB itself have to
-            % come up BEFORE the tree is built; otherwise a cold MATLAB hides
-            % most of the registry as "not installed". See ensureEeglabReady.
+            % come up BEFORE the step catalog is built; otherwise a cold MATLAB
+            % hides most of the registry as "not installed". See ensureEeglabReady.
             loadPrefs(app);
             initEeglab(app);
-            % Fill the stage-grouped step-picker tree and the name->info map it
-            % reads on selection. Both are built from availableSteps, so what is
-            % offered here is exactly what the pre-flight will accept.
-            populateStepsTree(app);
+            % What Edit pipeline offers, built from availableSteps, so what is
+            % offered is exactly what the pre-flight will accept.
+            buildStepCatalog(app);
 
-            app.spec = repmat(struct('name','','params',struct()), 0, 1);
-            app.SelectedListBox.Items(:) = [];
-            app.SelectedListBox.ItemsData(:) = [];
-            app.UITable.Data = [];
-            app.ItemNum = 1;
             % Snapshot base geometry before originalSize so the resize handler
             % (guarded on originalSize) always has it. Components are still at
             % their createComponents positions here (no resize has scaled them).
             app.baseLayout        = captureBaseLayout(app);
             app.originalSize      = app.UIFigure.Position(3:4);
+            setPipeline(app, [], 1);
             initExploreTab(app);
             applyTooltips(app);
-            % Dwell timer for the Steps tree legend. StartDelay is restarted by
-            % every mouse move, so the tip appears only after the pointer has
-            % been still this long.
-            HOVER_DELAY = 3;
-            app.hoverTimer = timer( ...
-                'StartDelay',    HOVER_DELAY, ...
-                'ExecutionMode', 'singleShot', ...
-                'BusyMode',      'drop', ...
-                'Name',          'nestappStepsHover', ...
-                'TimerFcn',      @(~,~) showStepsTip(app));
             buildRecentFilesMenu(app);
             buildRecentPipelinesMenu(app);
             updateStatusBar(app);
@@ -2971,44 +2800,26 @@ classdef nestapp < matlab.apps.AppBase
             end
         end
 
-        % Selection changed function: StepsTree
-        function StepsTreeSelectionChanged(app, ~)
-            % Category and operation nodes have empty NodeData - they group, they
-            % are not steps, so selecting one just clears the Info panel.
-            name = selectedStepName(app);
-            if isempty(name)
-                app.InfoTextArea.Value = '';
-            elseif isKey(app.info, name)
-                app.InfoTextArea.Value = stepInfoLines(app, name);
-            end
-            app.selectedItem = [];
+        % Button pushed function: EditPipelineButton
+        function EditPipelineButtonPushed(app, ~)
+            editPipelineDialog(app.UIFigure, app.spec, app.offeredStepNames, ...
+                @(name) stepInfoLines(app, name), ...
+                @(name) ~isempty(app.stepBlocks) && isKey(app.stepBlocks, name), ...
+                @(spec) pipelineEdited(app, spec), selectedStepIndex(app));
         end
 
-        % Double-clicked callback: StepsTree
-        function StepsTreeDoubleClicked(app, ~)
-            % Double-clicking a step adds it; double-clicking a category/
-            % operation header (empty NodeData) does nothing here and lets the
-            % tree's native expand/collapse take over.
-            name = selectedStepName(app);
-            if isempty(name)
-                return
+        function pipelineEdited(app, spec)
+        % OK in the Edit pipeline window. Keeps the selected step selected if it
+        % is still there.
+            if isequaln(spec, app.spec), return; end
+            sel = 1;
+            k = selectedStepIndex(app);
+            if ~isempty(k)
+                hit = find(strcmp({spec.name}, app.spec(k).name), 1);
+                if ~isempty(hit), sel = hit; end
             end
-            appendStep(app, name);
-        end
-
-        % Button pushed function: AddButton
-        function AddButtonPushed(app, ~)
-            name = selectedStepName(app);
-            if isempty(name)
-                return   % a category/operation header is selected - nothing to add
-            end
-            appendStep(app, name);
-        end
-
-        % Button pushed function: MoveUpButton
-        function MoveUpButtonPushed(app, ~)
-            ind = selectedStepIndex(app);
-            moveStep(app, ind, -1);
+            app.pipelineDirty = true;
+            setPipeline(app, spec, sel);
         end
 
         % Button pushed function: SavePipelineButton
@@ -3027,18 +2838,6 @@ classdef nestapp < matlab.apps.AppBase
             app.pipelineName  = baseName;
             app.pipelineDirty = false;
             updateStatusBar(app);
-        end
-
-        % Button pushed function: RemoveButton
-        function RemoveButtonPushed(app, ~)
-            ind = selectedStepIndex(app);
-            removeStep(app, ind);
-        end
-
-        % Button pushed function: MoveDownButton
-        function MoveDownButtonPushed(app, ~)
-            ind = selectedStepIndex(app);
-            moveStep(app, ind, +1);
         end
 
         % Button pushed function: LoadPipelineButton
@@ -3094,6 +2893,8 @@ classdef nestapp < matlab.apps.AppBase
             app.file        = labels;
             app.NSelecFiles = numel(fullPaths);
             app.SelectedFilesListBox.Items = labels;
+            app.SelectDatatoPerformAnalysisPanel.Title = sprintf('Data (%d file%s)', ...
+                numel(labels), plural(numel(labels)));
 
             % Note: the "Data folder" pref (lastDataFolder) is updated by
             % selectDataTree to the browse root, not clobbered to a subfolder.
@@ -3134,20 +2935,6 @@ classdef nestapp < matlab.apps.AppBase
             end
         end
 
-        % Button pushed function: ReStartStepsButton
-        function ReStartStepsButtonPushed(app, ~)
-            confirmClear = getpref('nestapp', 'confirmClear', true);
-            if confirmClear
-                answer = uiconfirm(app.UIFigure, ...
-                    'Clear all pipeline steps? This cannot be undone.', ...
-                    'Clear Pipeline', ...
-                    'Options', {'Clear', 'Cancel'}, ...
-                    'DefaultOption', 2, 'CancelOption', 2);
-                if strcmp(answer, 'Cancel'); return; end
-            end
-            clc
-            clearSteps(app);
-        end
 
         % Menu selected function: Load Template...
         function LoadTemplateMenuSelected(app, ~)
@@ -3210,16 +2997,11 @@ classdef nestapp < matlab.apps.AppBase
                 idx = find(strcmp(names, lb.Value), 1);
                 close(dlg);
                 if isempty(idx); return; end
-                clearSteps(app);
                 clc
                 loadPipelineData(app, paths{idx});
                 app.pipelineName  = names{idx};
                 app.pipelineDirty = true;
                 updateStatusBar(app);
-                if ~isempty(app.SelectedListBox.Items)
-                    app.SelectedListBox.Value = app.SelectedListBox.ItemsData{1};
-                    refreshParamTable(app, 1);
-                end
                 promptForRequiredParams(app);
             end
         end
@@ -3240,14 +3022,13 @@ classdef nestapp < matlab.apps.AppBase
 
             % Put the offending step's parameters on screen first, so the
             % dialog is pointing at something the user can actually edit.
-            if numel(app.SelectedListBox.ItemsData) >= stepIdx
-                app.SelectedListBox.Value = app.SelectedListBox.ItemsData{stepIdx};
-                refreshParamTable(app, stepIdx);
-            end
+            app.ItemNum = stepIdx;
+            refreshPipelineList(app);
+            showStepSettings(app);
 
             uialert(app.UIFigure, sprintf( ...
                 ['"%s" needs these before the pipeline can run:\n\n    %s\n\n' ...
-                 'Its parameters are shown below - fill them in, then Run.'], ...
+                 'Its settings are shown - fill them in, then Run.'], ...
                 app.spec(stepIdx).name, strjoin(labels, sprintf('\n    '))), ...
                 'Settings needed', 'Icon', 'info');
         end
@@ -3361,82 +3142,15 @@ classdef nestapp < matlab.apps.AppBase
             end
         end
 
-        % Value changed function: TextArea
-        function TextAreaValueChanged(app, ~)
-            if isempty(app.currentParamKey); return; end
-            stepIdx = selectedStepIndex(app);
-            if isempty(stepIdx) || stepIdx > numel(app.spec); return; end
-
-            raw = app.TextArea.Value;
-            if iscell(raw) || isstring(raw)
-                raw = strjoin(raw, ' ');
-            end
-
-            val = convertParam(raw, app.currentParamType);
-            app.spec(stepIdx).params.(app.currentParamKey) = val;
-            refreshParamTable(app, stepIdx);
+        % Button pushed function: ResetStepButton
+        function ResetStepButtonPushed(app, ~)
+        % Every setting of the selected step back to its default.
+            k = selectedStepIndex(app);
+            if isempty(k), return; end
+            app.spec(k) = makePipelineStep(app.spec(k).name, stepRegistry());
             app.pipelineDirty = true;
-            updateStatusBar(app);
-        end
-
-        % Cell selection callback: UITable
-        function UITableCellSelection(app, event)
-            if isempty(event.Indices); return; end
-            row     = event.Indices(1);
-            stepIdx = selectedStepIndex(app);
-            if isempty(stepIdx) || stepIdx > numel(app.spec); return; end
-
-            reg    = stepRegistry();
-            step   = app.spec(stepIdx);
-            regIdx = find(strcmp({reg.name}, step.name), 1);
-            if isempty(regIdx); return; end
-            params = reg(regIdx).params;
-            if row > numel(params); return; end
-
-            paramMeta = params(row);
-            app.currentParamKey  = paramMeta.key;
-            app.currentParamType = paramMeta.type;
-
-            val = step.params.(paramMeta.key);
-            if isnumeric(val)
-                app.TextArea.Value = num2str(val);
-            elseif iscell(val)
-                % Cell params may mix char and numeric entries (e.g. SSP-SIR
-                % PC = {'data', 90}); strjoin needs char/string, so stringify
-                % each element first instead of erroring on the numeric one.
-                parts = cell(1, numel(val));
-                for ii = 1:numel(val)
-                    v = val{ii};
-                    if ischar(v)
-                        parts{ii} = v;
-                    elseif isstring(v)
-                        parts{ii} = char(v);
-                    elseif isnumeric(v) || islogical(v)
-                        parts{ii} = num2str(v);
-                    else
-                        parts{ii} = char(string(v));
-                    end
-                end
-                app.TextArea.Value = strjoin(parts, ', ');
-            elseif ischar(val) && ~isrow(val) && ~isempty(val)
-                app.TextArea.Value = cellstr(val);   % char matrix -> cell for TextArea
-            else
-                app.TextArea.Value = char(val);
-            end
-        end
-
-        % Button pushed function: DefaultValueButton
-        function DefaultValueButtonPushed(app, ~)
-            stepIdx = selectedStepIndex(app);
-            if isempty(stepIdx) || stepIdx > numel(app.spec); return; end
-            reg  = stepRegistry();
-            name = app.spec(stepIdx).name;
-            app.spec(stepIdx) = makePipelineStep(name, reg);
-            app.currentParamKey  = '';
-            app.currentParamType = '';
-            app.TextArea.Value   = '';
-            refreshParamTable(app, stepIdx);
-            app.pipelineDirty = true;
+            refreshPipelineList(app);
+            showStepSettings(app);
             updateStatusBar(app);
         end
 
@@ -3469,6 +3183,9 @@ classdef nestapp < matlab.apps.AppBase
             rescaleComponents(app, sX, sY);
             reRenderReportsOnResize(app);  % reflow the Reports pane if one is showing
             scheduleExploreRepaint(app);  % and the Explore plot, for the same reason
+            % The settings form is built for the panel's width, and its rows
+            % are created after the layout snapshot, so rebuild it at the new size.
+            if ~isempty(app.settingsFormState), showStepSettings(app); end
         end
 
         function endResize(app)
@@ -3488,49 +3205,16 @@ classdef nestapp < matlab.apps.AppBase
             end
         end
 
-        % Cell edit callback: UITable
-        function UITableCellEdit(app, event)
-            stepIdx = selectedStepIndex(app);
-            if isempty(stepIdx) || stepIdx > numel(app.spec); return; end
-
-            reg    = stepRegistry();
-            step   = app.spec(stepIdx);
-            regIdx = find(strcmp({reg.name}, step.name), 1);
-            if isempty(regIdx); return; end
-
-            row    = event.Indices(1);
-            params = reg(regIdx).params;
-            % Reject edits to a parameter that is disabled for this step -
-            % overridden by a mutually-exclusive sibling, or gated off by
-            % another param's value. Revert the cell and explain why.
-            if row <= numel(params)
-                [disabled, reasons] = disabledParamKeys(reg(regIdx), step.params);
-                key = params(row).key;
-                if any(strcmp(key, disabled))
-                    uialert(app.UIFigure, reasons.(key), 'Parameter disabled');
-                    refreshParamTable(app, stepIdx);   % revert the edited cell
-                    return
-                end
-            end
-
-            app.spec = applyParamEdit(app.spec, stepIdx, row, event.NewData, reg(regIdx));
-            app.pipelineDirty = true;
-            updateStatusBar(app);
-            % Re-render so setting/clearing one mutually-exclusive param updates
-            % the disabled state of its sibling.
-            refreshParamTable(app, stepIdx);
-        end
-
         % Value changed function: SelectedListBox
         function SelectedListBoxValueChanged(app, ~)
-            stepIdx = selectedStepIndex(app);
-            if isempty(stepIdx) || stepIdx > numel(app.spec); return; end
-            app.currentParamKey  = '';
-            app.currentParamType = '';
-            app.TextArea.Value   = '';
-            refreshParamTable(app, stepIdx);
+        % A click on a step shows its settings. The list's own selection is
+        % cleared and the highlight drawn by refreshPipelineList instead.
+            v = app.SelectedListBox.Value;
+            if isempty(v), return; end
+            app.ItemNum = v;
+            refreshPipelineList(app);
+            showStepSettings(app);
         end
-
 
         % Menu selected function: Tools > Browse Raw EEG...
         function browseRawEegMenu(app, ~)
@@ -3730,7 +3414,7 @@ classdef nestapp < matlab.apps.AppBase
             % Stop the timers first: a pending callback would otherwise fire
             % against a half-deleted app, and an undeleted timer outlives the
             % app in the MATLAB session, firing into nothing forever.
-            for t = [app.hoverTimer, app.exploreResizeTimer, app.reportsResizeTimer]
+            for t = [app.exploreResizeTimer, app.reportsResizeTimer]
                 if isvalid(t); stop(t); delete(t); end
             end
 

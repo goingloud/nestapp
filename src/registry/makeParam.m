@@ -6,9 +6,9 @@ function p = makeParam(key, friendlyName, unit, validRange, description, varargi
 %   p = MAKEPARAM(key, friendlyName, unit, validRange, description, ...)
 %
 %   Optional name-value pairs:
-%     'placeholder' - shown in the table for [] values, e.g. '(all channels)'.
-%                     By convention it starts with '(' so styleParamTable greys
-%                     it, and it should NAME THE DEFAULT where there is one -
+%     'placeholder' - shown in a text field left empty, e.g. '(all channels)'.
+%                     By convention it starts with '(' so it reads as a hint,
+%                     and it should NAME THE DEFAULT where there is one -
 %                     that keeps the default itself in exactly one place (the
 %                     function that applies it) while still telling the reader
 %                     what leaving the cell alone will do.
@@ -47,13 +47,13 @@ function p = makeParam(key, friendlyName, unit, validRange, description, varargi
 %     'pickFrom'    - 'channels' | 'events': offer labels read from the data.
 %
 %   Lifted out of stepRegistry when plotRegistry needed the same shape. The
-%   whole param toolchain - buildParamTableData, applyParamEdit, convertParam,
-%   disabledParamKeys, styleParamTable - reads these fields and nothing else,
+%   whole param toolchain - the settings forms (settingsForm, paramForm),
+%   convertParam, disabledParamKeys, toUpstream - reads these fields and nothing else,
 %   so anything built with this constructor gets the editor for free. A second
-%   near-identical struct would have meant those five functions quietly
+%   near-identical struct would have meant those functions quietly
 %   supporting two shapes.
 %
-%   See also: stepRegistry, plotRegistry, buildParamTableData, convertParam
+%   See also: stepRegistry, plotRegistry, settingsForm, convertParam
 
 placeholder = ''; type = 'scalar'; required = false; choicesFrom = '';
 choices = {}; modes = {}; valueLabel = 'Custom'; limits = []; openMin = false;

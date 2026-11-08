@@ -35,7 +35,7 @@ classdef AppStartupTest < NestappTestCase
         % ── A2.1 ─────────────────────────────────────────────────────────────
 
         function aColdStartOffersEveryInstalledStep(tc)
-        % THE ROW THIS FOLDER EXISTS FOR. populateStepsTree asks availableSteps
+        % THE ROW THIS FOLDER EXISTS FOR. buildStepCatalog asks availableSteps
         % what is installed; availableSteps probes which() per requirement; and
         % nothing EEGLAB provides - including every plugin - resolves until
         % eeglab() has run its plugin scan. startupFcn did not do that first,
@@ -74,7 +74,7 @@ classdef AppStartupTest < NestappTestCase
             tc.verifyEqual(sort(offered), sort({availableSteps().name}), ...
                 ['the picker and the pre-flight disagree about what is ' ...
                  'runnable. startupFcn must bring EEGLAB up (loadPrefs, then ' ...
-                 'initEeglab) BEFORE populateStepsTree asks which() what is ' ...
+                 'initEeglab) BEFORE buildStepCatalog asks which() what is ' ...
                  'available.']);
             tc.verifyGreaterThan(numel(offered), coldCount, sprintf( ...
                 ['the tree was built while EEGLAB was still hidden: %d steps ' ...
@@ -244,13 +244,8 @@ classdef AppStartupTest < NestappTestCase
     methods (Access = private)
 
         function names = stepLeafNames(~, app)
-        % The step names the picker actually offers. The tree is stage-grouped,
-        % so the grouping nodes have to be dropped: a step leaf is the one that
-        % carries NodeData, which is what StepsTreeSelectionChanged reads.
-            nodes = findall(app.StepsTree, 'Type', 'uitreenode');
-            keep  = arrayfun(@(n) ~isempty(n.NodeData), nodes);
-            names = arrayfun(@(n) string(n.NodeData), nodes(keep));
-            names = cellstr(names(:)');
+        % The step names the Edit pipeline window offers (buildStepCatalog).
+            names = app.offeredStepNames;
         end
 
         function cleanup = hideEeglabEntirely(tc)
@@ -273,16 +268,20 @@ classdef AppStartupTest < NestappTestCase
         function makePipelineDirty(tc, app)
         % Through the real mutation path rather than by writing the flag: the
         % test should not be able to pass against an app that never sets it.
-            tree = app.StepsTree;
+        % Here that is the Edit pipeline window: add the first offered step, OK.
+            invokeCallback(tc, app.EditPipelineButton, 'ButtonPushedFcn');
+            dlg = findall(groot, 'Type', 'figure', 'Name', 'Edit pipeline');
+            tc.assertNotEmpty(dlg, 'Edit pipeline did not open');
+            tc.addTeardown(@() delete(dlg(isvalid(dlg))));
+            tree  = findall(dlg(1), 'Type', 'uitree');
             nodes = findall(tree, 'Type', 'uitreenode');
             leaf  = nodes(arrayfun(@(n) ~isempty(n.NodeData), nodes));
             tc.assertNotEmpty(leaf, 'no step to add, so the pipeline cannot be made dirty');
             tree.SelectedNodes = leaf(1);
-            invokeCallback(tc, tree, 'SelectionChangedFcn');
-
-            addBtn = findall(app.UIFigure, 'Type', 'uibutton', 'Text', 'Add');
-            tc.assertNotEmpty(addBtn, 'no Add button');
-            invokeCallback(tc, addBtn(1), 'ButtonPushedFcn');
+            add = findall(dlg(1), 'Type', 'uibutton', 'Text', ['Add ' char(8594)]);
+            invokeCallback(tc, add(1), 'ButtonPushedFcn');
+            ok = findall(dlg(1), 'Type', 'uibutton', 'Text', 'OK');
+            invokeCallback(tc, ok(1), 'ButtonPushedFcn');
         end
 
         function invokeMenu(tc, app, label)
