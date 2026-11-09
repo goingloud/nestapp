@@ -19,6 +19,7 @@ function dlg = editPipelineDialog(parentFig, spec, available, describe, blocks, 
 %   was when the window opened: added steps green, removed steps red (still
 %   listed where they were, unnumbered), steps whose order changed blue.
 %   Existing steps keep their settings; added steps start at their defaults.
+%   Double-clicking a removed (red) step puts it back where it was.
 %
 %   Does not wait: the result arrives through onOK.
 %
@@ -51,10 +52,11 @@ uibutton(dlg, 'Position', [355 162 110 28], 'Text', 'Move down', 'ButtonPushedFc
 uilabel(dlg, 'Position', [475 485 330 22], 'Text', 'Pipeline', ...
     'FontWeight', 'bold', 'FontSize', 14, 'FontColor', navy);
 list = uilistbox(dlg, 'Position', [475 60 330 418], 'Items', {}, 'FontSize', 13);
+if isprop(list, 'DoubleClickedFcn'), list.DoubleClickedFcn = @(~, ~) restoreSelected(); end
 uibutton(dlg, 'Position', [475 15 120 28], 'Text', 'Clear all', 'ButtonPushedFcn', @(~, ~) clearAll());
 uibutton(dlg, 'Position', [610 15 90 28], 'Text', 'Cancel', 'ButtonPushedFcn', @(~, ~) delete(dlg));
 uibutton(dlg, 'Position', [710 15 95 28], 'Text', 'OK', 'FontWeight', 'bold', ...
-    'BackgroundColor', nestColours('mint'), 'FontColor', navy, 'ButtonPushedFcn', @(~, ~) finish());
+    'BackgroundColor', nestColours('run'), 'FontColor', [1 1 1], 'ButtonPushedFcn', @(~, ~) finish());
 
 flag = stepInteractiveIcon();
 groups = libraryGroups(available);   % stage -> offered steps, worked out once
@@ -115,6 +117,21 @@ render(min(startAt, numel(work)));
         step = makePipelineStep(name, reg);
         work = [work(1:k), struct('name', name, 'params', step.params, 'orig', 0), work(k+1:end)];
         render(k + 1);
+    end
+
+    function restoreSelected()
+        % Double-clicking a removed (red) step puts it back, with its
+        % settings, where it is listed: after the last surviving step that
+        % preceded it.
+        v = list.Value;
+        if ~(ischar(v) && startsWith(v, 'r')), return; end
+        r = str2double(v(2:end));
+        origs = [work.orig];
+        at = find(origs > 0 & origs < r, 1, 'last');
+        if isempty(at), at = 0; end
+        back = struct('name', spec(r).name, 'params', spec(r).params, 'orig', r);
+        work = [work(1:at), back, work(at+1:end)];
+        render(at + 1);
     end
 
     function removeSelected()

@@ -24,7 +24,7 @@ to show its settings in the middle of the tab.
   (or double-click) inserts the highlighted step after the selected one;
   **← Remove**, **Move up** and **Move down** edit the pipeline; **Clear all**
   empties it. Colours show what changed since the window opened: green added,
-  red removed, blue moved. **OK** applies the changes, **Cancel** discards them.
+  red removed (double-click one to put it back), blue moved. **OK** applies the changes, **Cancel** discards them.
   Steps already in the pipeline keep their settings.
 - The settings form uses a control for each kind of setting: a checkbox for
   on/off, a dropdown for a choice, a numeric field or spinner with its limits,
