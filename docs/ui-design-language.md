@@ -52,12 +52,15 @@ check and the dispatch read the same declarations.
 - `choices` - `{key, label, help}` rows for a closed list.
 - `modes` - `{key, label, help[, emit]}` rows for named states beside a value.
   `emit` is what the upstream function receives for that state (default `[]`).
-  The **first** mode is what an empty value in an old file meant.
-- `limits`, `openMin`, `step` - what a number may be.
+  An empty value in an old file becomes the mode that emits `[]` - what it
+  passed upstream before.
+- `limits`, `openMin`, `step` - what a number may be (`step` counts from the
+  lower limit: from 2 in steps of 2 is the even numbers).
 - `section`, `advanced` - where it sits in the form.
 - `upstream` - how a logical is passed: `'onoff'` (default), `'yesno'`, `'01'`,
   `'logical'`.
-- `pickFrom` - `'channels'` or `'events'`.
+- `choicesFrom` - a list supplied at run time; `'channels'` gives a channel list
+  picked with **Choose...**.
 
 **Defaults are typed**: `true`/`false`, numbers, choice keys, mode keys, cell
 arrays of labels.
@@ -68,7 +71,7 @@ arrays of labels.
 |---|---|---|
 | `exclusive` | two ways of writing one setting | setting one disables the others; listed in precedence order |
 | `enableWhen` | applies only for some values of another setting | disabled otherwise, and **not passed upstream** |
-| `requires` | must be set (always, or for some values of another setting) | pre-flight refuses the run |
+| `requires` | must be set for some values of another setting (always: makeParam 'required') | pre-flight refuses the run |
 | `anyOf` | at least one of these must be set | pre-flight refuses the run |
 | `order` | `a < b` when both are set | pre-flight refuses the run |
 
@@ -83,8 +86,8 @@ against the text `'[]'`. Unit conversions (ms to s) and label-to-index lookups
 live there, in one readable call.
 
 **Old files.** `migrateStepParams` converts saved text to typed values on load
-and again at dispatch (it is idempotent). Renamed or merged keys go in its
-`legacyShapes` switch, keyed by step name. A value it cannot read falls back to
+and again at dispatch (it is idempotent). Renamed or merged keys and re-encoded values
+go in the step's own `s.legacy` function, declared beside it in the registry. A value it cannot read falls back to
 the default and says so.
 
 **`upstreamAudit`** records what was checked: the upstream function and version
@@ -104,7 +107,7 @@ made to the old entry.
 2. Write the schema-2 entry: typed defaults, choices with labels and help,
    limits, sections, relations, `upstreamAudit`.
 3. Rewrite the `case` to use `up.<key>` from `toUpstream`.
-4. Add `legacyShapes` rules for renamed keys or re-encoded values.
+4. Add an `s.legacy` function for renamed keys or re-encoded values.
 5. Check it while implementing:
    `c = captureStepArgs('cases', {'Step'}); captureStepArgs(c, 'before.mat')`
    on the old code, the same cases after, then
