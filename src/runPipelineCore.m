@@ -54,11 +54,9 @@ end
 reg = stepRegistry();
 bad = {};
 for si = 1:nSteps
-    e = reg(strcmp({reg.name}, canonicalStepName(spec(si).name)));
-    if ~isscalar(e) || e.schema < 2, continue; end
-    probs = paramProblems(e, migrateStepParams(e, spec(si).params));
-    if ~isempty(probs)
-        bad{end+1} = sprintf('Step %d (%s): %s', si, e.name, strjoin(probs, ' ')); %#ok<AGROW>
+    st = stepSettings(spec(si), reg);
+    if ~isempty(st.problems)
+        bad{end+1} = sprintf('Step %d (%s): %s', si, st.entry.name, strjoin(st.problems, ' ')); %#ok<AGROW>
     end
 end
 if ~isempty(bad)

@@ -24,7 +24,9 @@ function p = makeParam(key, friendlyName, unit, validRange, description, varargi
 %                     "Which windows to map" is the case: the windows are the
 %                     ones in the user's table right now, so they cannot be a
 %                     validRange. The form is handed a context struct and reads
-%                     the named field from it.
+%                     the named field from it. In the step settings form,
+%                     'channels' gives a channel list the chooser picks from
+%                     (the field may hold a function that returns the list).
 %
 %   Typed settings (steps with schema 2; see docs/ui-design-language.md):
 %     'choices'     - N x 3 cell {key, label, help}: a closed list. key is the
@@ -39,12 +41,12 @@ function p = makeParam(key, friendlyName, unit, validRange, description, varargi
 %                     (default 'Custom').
 %     'limits'      - [min max] accepted for a number (Inf allowed).
 %     'openMin'     - true when min itself is not allowed (a width > 0).
-%     'step'        - spinner step for integers; 2 with an even min = even only.
+%     'step'        - allowed values count from min in this step (a spinner's
+%                     step): from 2 in steps of 2 is the even numbers.
 %     'section'     - heading the setting is grouped under in the form.
 %     'advanced'    - true to start folded under "Advanced".
 %     'upstream'    - how a logical is passed: 'onoff' | 'yesno' | '01' |
 %                     'logical'. Default 'onoff'.
-%     'pickFrom'    - 'channels' | 'events': offer labels read from the data.
 %
 %   Lifted out of stepRegistry when plotRegistry needed the same shape. The
 %   whole param toolchain - the settings forms (settingsForm, paramForm),
@@ -57,7 +59,7 @@ function p = makeParam(key, friendlyName, unit, validRange, description, varargi
 
 placeholder = ''; type = 'scalar'; required = false; choicesFrom = '';
 choices = {}; modes = {}; valueLabel = 'Custom'; limits = []; openMin = false;
-step = []; section = ''; advanced = false; upstream = 'onoff'; pickFrom = '';
+step = []; section = ''; advanced = false; upstream = 'onoff';
 if mod(numel(varargin), 2) ~= 0
     error('makeParam:oddArgs', 'Name-value arguments must come in pairs.');
 end
@@ -77,7 +79,6 @@ for i = 1:2:numel(varargin)
         case 'section';     section = v;
         case 'advanced';    advanced = logical(v);
         case 'upstream';    upstream = v;
-        case 'pickfrom';    pickFrom = v;
         otherwise
             error('makeParam:unknownOpt', 'Unknown option "%s".', varargin{i});
     end
@@ -88,8 +89,7 @@ p = struct('key',key,'friendlyName',friendlyName,'unit',unit, ...
            'choicesFrom',choicesFrom, 'choices',{asRows(choices, 3)}, ...
            'modes',{asRows(modes, 4)}, 'valueLabel',valueLabel, ...
            'limits',limits, 'openMin',openMin, 'step',step, ...
-           'section',section, 'advanced',advanced, 'upstream',upstream, ...
-           'pickFrom',pickFrom);
+           'section',section, 'advanced',advanced, 'upstream',upstream);
 end
 
 function s = asRows(c, width)

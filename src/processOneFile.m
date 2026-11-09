@@ -126,14 +126,10 @@ for si = 1:nSteps
     % Schema-2 steps: settings are typed, and `up` holds them as the upstream
     % function wants them (see toUpstream). Migrating here as well as on load
     % keeps a scripted or hand-written spec in the old spelling running.
-    regEntry = registry(strcmp({registry.name}, stepName));
+    st = stepSettings(step, registry);
+    settingProblems = st.problems;
     up = struct();
-    settingProblems = {};
-    if isscalar(regEntry) && regEntry.schema >= 2
-        typedParams     = migrateStepParams(regEntry, step.params);
-        settingProblems = paramProblems(regEntry, typedParams);
-        up              = toUpstream(regEntry, typedParams);
-    end
+    if st.typed, up = toUpstream(st.entry, st.params); end
 
     % Progress notification - may throw nestapp:cancelled if user cancelled.
     if ~isempty(opts.progressFcn)

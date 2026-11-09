@@ -31,13 +31,8 @@ for i = 1:nOrig
     work(i) = struct('name', spec(i).name, 'params', spec(i).params, 'orig', i);
 end
 
-pos = [0 0 820 520];
-if ~isempty(parentFig) && isvalid(parentFig)
-    p = parentFig.Position;
-    pos(1:2) = p(1:2) + (p(3:4) - pos(3:4)) / 2;
-end
 navy = nestColours('navy');
-dlg = appWindow('Name', 'Edit pipeline', 'Position', pos, 'WindowStyle', 'modal', ...
+dlg = appWindow('Name', 'Edit pipeline', 'Position', centreOn(parentFig, 820, 520), 'WindowStyle', 'modal', ...
     'Color', nestColours('page'));
 
 uilabel(dlg, 'Position', [15 485 330 22], 'Text', 'Available steps', ...
@@ -62,6 +57,7 @@ uibutton(dlg, 'Position', [710 15 95 28], 'Text', 'OK', 'FontWeight', 'bold', ..
     'BackgroundColor', nestColours('mint'), 'FontColor', navy, 'ButtonPushedFcn', @(~, ~) finish());
 
 flag = stepInteractiveIcon();
+groups = libraryGroups(available);   % stage -> offered steps, worked out once
 fillTree('');
 if nargin < 7 || isempty(startAt), startAt = 1; end
 render(min(startAt, numel(work)));
@@ -70,18 +66,9 @@ render(min(startAt, numel(work)));
 
     function fillTree(query)
         delete(tree.Children);
-        tax = stepTaxonomy();
-        placed = {};
-        for c = 1:numel(tax)
-            names = {};
-            for o = 1:numel(tax(c).ops)
-                names = [names, {tax(c).ops(o).variants.step}]; %#ok<AGROW>
-            end
-            names = names(ismember(names, available));
-            placed = [placed, names]; %#ok<AGROW>
-            addGroup(tax(c).name, names, query);
+        for g = groups
+            addGroup(g.title, g.names, query);
         end
-        addGroup('Other', setdiff(available, placed, 'stable'), query);
         if ~isempty(query), expand(tree, 'all'); end
     end
 
@@ -156,10 +143,7 @@ render(min(startAt, numel(work)));
     end
 
     function finish()
-        out = struct('name', {}, 'params', {});
-        for i = 1:numel(work)
-            out(i) = struct('name', work(i).name, 'params', work(i).params);
-        end
+        out = rmfield(work, 'orig');
         delete(dlg);
         onOK(out);
     end
@@ -186,7 +170,7 @@ render(min(startAt, numel(work)));
         list.Items = items;
         list.ItemsData = data;
         removeStyle(list);
-        colours = struct('added', [0.0 0.5 0.15], 'removed', nestColours('problem'), 'moved', [0.1 0.35 0.75]);
+        colours = struct('added', nestColours('added'), 'removed', nestColours('problem'), 'moved', nestColours('moved'));
         for f = fieldnames(colours)'
             idx = find(strcmp(kind, f{1}));
             if ~isempty(idx), addStyle(list, uistyle('FontColor', colours.(f{1})), 'item', idx); end
@@ -197,4 +181,22 @@ render(min(startAt, numel(work)));
             list.Value = data{1};
         end
     end
+end
+
+function groups = libraryGroups(available)
+% The library's groups: each stage of stepTaxonomy with the offered steps it
+% holds, then "Other" for any offered step the taxonomy does not place.
+tax = stepTaxonomy();
+groups = struct('title', {}, 'names', {});
+placed = {};
+for c = 1:numel(tax)
+    names = {};
+    for o = 1:numel(tax(c).ops)
+        names = [names, {tax(c).ops(o).variants.step}]; %#ok<AGROW>
+    end
+    names = names(ismember(names, available));
+    placed = [placed, names]; %#ok<AGROW>
+    groups(end+1) = struct('title', tax(c).name, 'names', {names}); %#ok<AGROW>
+end
+groups(end+1) = struct('title', 'Other', 'names', {setdiff(available, placed, 'stable')});
 end

@@ -22,7 +22,7 @@ function [tf, always] = canStepBlock(regEntry)
 %   until now that only surfaced after the pipeline was built and Run Analysis
 %   was pressed.
 %
-%   See also: interactivePipelineSteps, stepRegistry, populateStepsTree
+%   See also: interactivePipelineSteps, stepRegistry, editPipelineDialog
 
 % isequal already rejects [] and 0, so no emptiness test is needed here.
 always = isfield(regEntry, 'interactive') && isequal(regEntry.interactive, true);

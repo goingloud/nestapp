@@ -48,7 +48,8 @@ classdef nestapp < matlab.apps.AppBase
     end
 
     properties (Access = private)
-        ItemNum % Index for selected Item
+        selectedStep % the pipeline step whose settings are shown (see selectStep)
+        stepBad = false(1, 0) % per step: settings that would stop the run (red in the list)
         path         % File Path (single-folder selection; '' when files span folders)
         file         % File Name(s) shown in the listbox (basenames, or folder/name when multi-folder)
         filePaths    % Full path of every queued data file - source of truth for Run Analysis
@@ -213,62 +214,59 @@ classdef nestapp < matlab.apps.AppBase
             end
         end
 
-        function e = registryEntry(~, name)
-        % The registry entry for a step name, or [] if this registry has none.
-            reg = stepRegistry();
-            e = reg(strcmp({reg.name}, name));
-            if ~isscalar(e), e = []; end
-        end
-
         function setPipeline(app, spec, sel)
         % SETPIPELINE  Replace the pipeline and show step sel's settings. The one
         % place app.spec is replaced wholesale (loading, templates, the Edit
         % pipeline window), so the list and the form cannot fall out of step.
+        % Typed steps are migrated here, once, so the form and the checks
+        % always see typed values.
             if isempty(spec)
                 spec = repmat(struct('name', '', 'params', struct()), 0, 1);
             end
+            reg = stepRegistry();
+            app.stepBad = false(1, numel(spec));
+            for k = 1:numel(spec)
+                st = stepSettings(spec(k), reg);
+                spec(k).params = st.params;
+                app.stepBad(k) = ~isempty(st.problems);
+            end
             app.spec = spec;
             if nargin < 3 || isempty(sel), sel = 1; end
-            app.ItemNum = min(max(sel, 1), numel(app.spec));
+            selectStep(app, sel);
+            updateStatusBar(app);
+        end
+
+        function selectStep(app, k)
+        % Show step k's settings (clamped to the pipeline) and highlight it.
+            app.selectedStep = min(max(k, 1), numel(app.spec));
             refreshPipelineList(app);
             showStepSettings(app);
-            updateStatusBar(app);
         end
 
         function idx = selectedStepIndex(app)
         % SELECTEDSTEPINDEX  The step whose settings are shown, or [] for none.
-            idx = app.ItemNum;
+            idx = app.selectedStep;
             if isempty(idx) || idx < 1 || idx > numel(app.spec), idx = []; end
         end
 
         function refreshPipelineList(app)
         % The pipeline list: numbered steps, the selected one highlighted, any
-        % with settings that would stop the run in red. The list's own
-        % selection is cleared after each click and the highlight drawn as a
-        % style, so it reads the same as the rest of the tab.
+        % with settings that would stop the run in red (app.stepBad). The
+        % list's own selection is cleared after each click and the highlight
+        % drawn as a style, so it reads the same as the rest of the tab.
             n = numel(app.spec);
             lb = app.SelectedListBox;
             lb.Items     = arrayfun(@(k) sprintf('%d  %s', k, app.spec(k).name), 1:n, 'UniformOutput', false);
             lb.ItemsData = num2cell(1:n);
             lb.Value     = {};
             removeStyle(lb);
-            bad = arrayfun(@(k) ~isempty(stepProblems(app, k)), 1:n);
+            bad = app.stepBad;
             if any(bad), addStyle(lb, uistyle('FontColor', nestColours('problem')), 'item', find(bad)); end
             k = selectedStepIndex(app);
             if ~isempty(k)
-                colour = nestColours('navy');
-                if bad(k), colour = nestColours('problem'); end
-                addStyle(lb, uistyle('BackgroundColor', nestColours('mintTint'), ...
-                    'FontWeight', 'bold', 'FontColor', colour), 'item', k);
+                addStyle(lb, uistyle('BackgroundColor', nestColours('mintTint'), 'FontWeight', 'bold', ...
+                    'FontColor', ternary(bad(k), nestColours('problem'), nestColours('navy'))), 'item', k);
             end
-        end
-
-        function [msgs, keys] = stepProblems(app, k)
-        % What would stop step k from running (typed steps; see paramProblems).
-            msgs = {}; keys = {};
-            e = registryEntry(app, app.spec(k).name);
-            if isempty(e), return; end
-            [msgs, keys] = paramProblems(e, migrateStepParams(e, app.spec(k).params));
         end
 
         function showStepSettings(app)
@@ -284,39 +282,46 @@ classdef nestapp < matlab.apps.AppBase
                 app.HelpTextArea.Value = {'Use "Edit pipeline..." to add steps, or load a template.'};
                 return
             end
-            name = app.spec(k).name;
-            e = registryEntry(app, name);
-            app.StepTitleLabel.Text = name;
+            st = stepSettings(app.spec(k));
+            app.StepTitleLabel.Text = app.spec(k).name;
             app.ResetStepButton.Enable = 'on';
-            if isempty(e)
+            if isempty(st.entry)
                 app.StepSourceLabel.Text = 'Not available in this version of nestapp';
                 delete(app.SettingsPanel.Children);
                 app.HelpTextArea.Value = {''};
                 return
             end
-            app.spec(k).params = migrateStepParams(e, app.spec(k).params);
-            app.StepSourceLabel.Text = stepSource(app, e);
+            app.StepSourceLabel.Text = stepSource(app, st.entry);
             cb  = struct('onChange', @(key, v) settingChanged(app, key, v), ...
                          'onFocus',  @(key) settingFocused(app, key), ...
                          'onToggleAdvanced', @() toggleAdvanced(app));
+            % Channel labels are read only when a chooser actually opens.
             ctx = struct('showAdvanced', app.showAdvanced, 'figure', app.UIFigure, ...
-                         'channelLabels', {channelChoices(app)});
-            app.settingsFormState = settingsForm(app.SettingsPanel, e, app.spec(k).params, cb, ctx);
+                         'channels', @() channelChoices(app));
+            app.settingsFormState = settingsForm(app.SettingsPanel, st.entry, app.spec(k).params, cb, ctx);
             refreshSettingStates(app);
         end
 
         function refreshSettingStates(app)
         % Bold for changed, grey for disabled, red for a problem - and the
-        % step name red too - then the help pane.
+        % step name red too - then the help pane. The step is checked once
+        % here and the result handed to the form and the help pane.
             k = selectedStepIndex(app);
-            if isempty(k) || isempty(app.settingsFormState), updateHelp(app); return; end
-            e = registryEntry(app, app.spec(k).name);
-            [~, badKeys] = stepProblems(app, k);
-            settingsForm('refresh', app.settingsFormState, e, app.spec(k).params, badKeys);
-            colour = nestColours('navy');
-            if ~isempty(badKeys), colour = nestColours('problem'); end
-            app.StepTitleLabel.FontColor = colour;
-            updateHelp(app);
+            if isempty(k) || isempty(app.settingsFormState), return; end
+            st = stepSettings(app.spec(k));
+            [off, why] = disabledParamKeys(st.entry, st.params);
+            app.settingsFormState = settingsForm('refresh', app.settingsFormState, ...
+                st.entry, st.params, st.problemKeys, off, why);
+            app.StepTitleLabel.FontColor = ternary(isempty(st.problems), ...
+                nestColours('navy'), nestColours('problem'));
+            updateHelp(app, st, off, why);
+            % Only the edited step can have changed; repaint the list only if
+            % its red/not-red state flipped.
+            isBad = ~isempty(st.problems);
+            if numel(app.stepBad) >= k && app.stepBad(k) ~= isBad
+                app.stepBad(k) = isBad;
+                refreshPipelineList(app);
+            end
         end
 
         function settingChanged(app, key, value)
@@ -326,13 +331,12 @@ classdef nestapp < matlab.apps.AppBase
             app.pipelineDirty = true;
             updateStatusBar(app);
             refreshSettingStates(app);
-            refreshPipelineList(app);
         end
 
         function settingFocused(app, key)
             if strcmp(app.focusKey, key), return; end
             app.focusKey = key;
-            updateHelp(app);
+            refreshSettingStates(app);
         end
 
         function toggleAdvanced(app)
@@ -340,30 +344,22 @@ classdef nestapp < matlab.apps.AppBase
             showStepSettings(app);
         end
 
-        function updateHelp(app)
+        function updateHelp(app, st, off, why)
         % The help pane: any problems first, then the setting being worked on
         % (what it does, why it is disabled, each choice, the default) - or,
         % when none is, the step's own description.
-            k = selectedStepIndex(app);
-            if isempty(k), return; end
-            e = registryEntry(app, app.spec(k).name);
-            if isempty(e), return; end
-            lines = {};
-            msgs = stepProblems(app, k);
-            for i = 1:numel(msgs), lines{end+1} = ['Problem: ' msgs{i}]; end %#ok<AGROW>
-            if ~isempty(msgs), lines{end+1} = ''; end
-            m = e.params(strcmp({e.params.key}, app.focusKey));
-            if isscalar(m)
-                lines{end+1} = m.friendlyName;
-                lines{end+1} = m.description;
-                [off, why] = disabledParamKeys(e, app.spec(k).params);
+            e = st.entry;
+            lines = cellfun(@(msg) ['Problem: ' msg], st.problems, 'UniformOutput', false);
+            if ~isempty(lines), lines{end+1} = ''; end
+            m = paramMeta(e, app.focusKey);
+            if ~isempty(m)
+                lines = [lines, {m.friendlyName, m.description}];
                 if any(strcmp(m.key, off)), lines{end+1} = ['(' why.(m.key) ')']; end
                 opts = [m.choices, m.modes];
                 if ~isempty(opts), lines{end+1} = ''; end
                 for o = opts, lines{end+1} = sprintf('%s - %s', o.label, o.help); end %#ok<AGROW>
                 if isfield(e.defaults, m.key)
-                    lines{end+1} = '';
-                    lines{end+1} = ['Default: ' settingText(m, e.defaults.(m.key))];
+                    lines = [lines, {'', ['Default: ' settingText(m, e.defaults.(m.key))]}];
                 end
             else
                 lines = [lines, reshape(cellstr(stepInfoLines(app, e.name)), 1, [])];
@@ -3022,9 +3018,7 @@ classdef nestapp < matlab.apps.AppBase
 
             % Put the offending step's parameters on screen first, so the
             % dialog is pointing at something the user can actually edit.
-            app.ItemNum = stepIdx;
-            refreshPipelineList(app);
-            showStepSettings(app);
+            selectStep(app, stepIdx);
 
             uialert(app.UIFigure, sprintf( ...
                 ['"%s" needs these before the pipeline can run:\n\n    %s\n\n' ...
@@ -3148,9 +3142,9 @@ classdef nestapp < matlab.apps.AppBase
             k = selectedStepIndex(app);
             if isempty(k), return; end
             app.spec(k) = makePipelineStep(app.spec(k).name, stepRegistry());
+            app.stepBad(k) = false;   % defaults are valid (RegistryContractTest)
             app.pipelineDirty = true;
-            refreshPipelineList(app);
-            showStepSettings(app);
+            selectStep(app, k);
             updateStatusBar(app);
         end
 
@@ -3185,7 +3179,16 @@ classdef nestapp < matlab.apps.AppBase
             scheduleExploreRepaint(app);  % and the Explore plot, for the same reason
             % The settings form is built for the panel's width, and its rows
             % are created after the layout snapshot, so rebuild it at the new size.
-            if ~isempty(app.settingsFormState), showStepSettings(app); end
+            if app.TabGroup.SelectedTab == app.CleaningTab, refitSettingsForm(app); end
+        end
+
+        function refitSettingsForm(app)
+        % Rebuild the settings form only if the panel's width changed since it
+        % was built - a height change or a repeat event costs nothing.
+            f = app.settingsFormState;
+            if ~isempty(f) && f.width ~= app.SettingsPanel.Position(3)
+                showStepSettings(app);
+            end
         end
 
         function endResize(app)
@@ -3211,9 +3214,7 @@ classdef nestapp < matlab.apps.AppBase
         % cleared and the highlight drawn by refreshPipelineList instead.
             v = app.SelectedListBox.Value;
             if isempty(v), return; end
-            app.ItemNum = v;
-            refreshPipelineList(app);
-            showStepSettings(app);
+            selectStep(app, v);
         end
 
         % Menu selected function: Tools > Browse Raw EEG...
@@ -3341,6 +3342,8 @@ classdef nestapp < matlab.apps.AppBase
                 % work, so the canvas may be sized for the old window. Repaint
                 % on the way in.
                 renderExplorePlot(app);
+            elseif event.NewValue == app.CleaningTab
+                refitSettingsForm(app);   % same, for the settings form
             end
         end
 

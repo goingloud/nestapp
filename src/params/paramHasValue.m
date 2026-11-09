@@ -16,13 +16,24 @@ function tf = paramHasValue(v, meta)
 if nargin < 2, meta = []; end
 tf = false;
 if isempty(v); return; end
-if (ischar(v) || isstring(v)) && any(strcmp(strtrim(char(v)), {'', '[]'})); return; end
-if iscell(v) && isscalar(v) && (ischar(v{1}) || isstring(v{1})) ...
-        && any(strcmp(strtrim(char(v{1})), {'', '[]'})); return; end
+if isBlankText(v); return; end
+% A list of blank (or '[]') strings is how an unset list arrives from text.
+if iscell(v) && all(cellfun(@isBlankText, v)); return; end
 if isnumeric(v) && isscalar(v) && isnan(v); return; end
 if ~isempty(meta) && isfield(meta, 'modes') && ~isempty(meta.modes) ...
         && ischar(v) && any(strcmp(v, {meta.modes.key}))
     return
 end
 tf = true;
+end
+
+function tf = isBlankText(x)
+% '' / '[]' / whitespace, as a char row or a scalar string. Anything else -
+% a char matrix, a missing string, a number - is not blank text.
+tf = false;
+if ischar(x) && (isempty(x) || isrow(x))
+    tf = any(strcmp(strtrim(x), {'', '[]'}));
+elseif isstring(x) && isscalar(x) && ~ismissing(x)
+    tf = any(strcmp(strtrim(char(x)), {'', '[]'}));
+end
 end

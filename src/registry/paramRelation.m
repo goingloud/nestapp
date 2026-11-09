@@ -11,8 +11,8 @@ function r = paramRelation(kind, params, controller, values)
 %       a only applies while controller is one of the values. Otherwise it is
 %       disabled in the form and NOT passed upstream.
 %   r = PARAMRELATION('requires',   a, controller, {v1, ...})
-%       a must hold a value while controller is one of the values. With no
-%       controller, a must always hold a value.
+%       a must hold a value while controller is one of the values. (A setting
+%       that must ALWAYS hold a value is declared with makeParam's 'required'.)
 %   r = PARAMRELATION('anyOf',      {a, b, ...})
 %       At least one of these must hold a value.
 %   r = PARAMRELATION('order',      {a, b})
@@ -31,6 +31,9 @@ if ischar(params), params = {params}; end
 known = {'exclusive', 'enableWhen', 'requires', 'anyOf', 'order'};
 if ~any(strcmp(kind, known))
     error('paramRelation:kind', 'Unknown relationship "%s".', kind);
+end
+if any(strcmp(kind, {'enableWhen', 'requires'})) && (isempty(controller) || isempty(values))
+    error('paramRelation:controller', '"%s" needs a controller and its values.', kind);
 end
 r = struct('kind', kind, 'params', {params}, 'controller', controller, ...
     'values', {cellstr(values)});

@@ -20,12 +20,8 @@ current = reshape(cellstr(current), 1, []);
 current = current(~cellfun(@isempty, current));
 items   = unique([reshape(cellstr(available), 1, []), current], 'stable');
 
-pos = [0 0 320 440];
-if ~isempty(parentFig) && isvalid(parentFig)
-    p = parentFig.Position;
-    pos(1:2) = p(1:2) + (p(3:4) - pos(3:4)) / 2;
-end
-dlg = appWindow('Name', title, 'Position', pos, 'WindowStyle', 'modal', 'Resize', 'off');
+dlg = appWindow('Name', title, 'Position', centreOn(parentFig, 320, 440), ...
+    'WindowStyle', 'modal', 'Resize', 'off');
 uilabel(dlg, 'Position', [12 408 296 22], 'Text', 'Select channels (Ctrl/Shift for several)', ...
     'FontColor', nestColours('navy'), 'FontWeight', 'bold');
 lb = uilistbox(dlg, 'Position', [12 104 296 300], 'Items', items, 'Multiselect', 'on', ...
@@ -38,8 +34,8 @@ uibutton(dlg, 'Position', [218 10 90 28], 'Text', 'OK', 'FontWeight', 'bold', ..
     'ButtonPushedFcn', @(~, ~) finish());
 
     function finish()
-        typed = strtrim(strsplit(other.Value, ','));
-        chosen = unique([reshape(cellstr(lb.Value), 1, []), typed(~cellfun(@isempty, typed))], 'stable');
+        chosen = unique([reshape(cellstr(lb.Value), 1, []), ...
+            reshape(convertParam(other.Value, 'stringlist'), 1, [])], 'stable');
         delete(dlg);
         onDone(chosen);
     end

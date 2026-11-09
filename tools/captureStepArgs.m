@@ -241,13 +241,11 @@ for s = 1:numel(stepNames)
             cases(end+1) = mk(sprintf('%s | %s=%d', name, p.key, ~dflt), ...
                 name, kind, v, prereqs); %#ok<AGROW>
             continue
-        elseif contains(p.validRange, '|')
-            choices = strtrim(strsplit(p.validRange, '|'));
         else
-            continue
+            choices = validRangeChoices(p);   % text-era steps
         end
         for c = 1:numel(choices)
-            if isequal(choices{c}, dflt) || contains(choices{c}, '['), continue; end
+            if isequal(choices{c}, dflt), continue; end
             v = base; v.(p.key) = choices{c};
             cases(end+1) = mk(sprintf('%s | %s=%s', name, p.key, choices{c}), ...
                 name, kind, v, prereqs); %#ok<AGROW>
@@ -336,10 +334,6 @@ end
 
 function s = firstLine(s)
 s = strtok(s, newline);
-end
-
-function out = ternary(c, a, b)
-if c, out = a; else, out = b; end
 end
 
 function cleanUp(work)

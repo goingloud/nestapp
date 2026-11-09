@@ -4,7 +4,8 @@
 function form = settingsForm(varargin)
 % SETTINGSFORM  The Cleaning tab's form for one pipeline step's settings.
 %   form = SETTINGSFORM(parent, entry, values, cb, ctx)   build it
-%   SETTINGSFORM('refresh', form, entry, values, badKeys) update states only
+%   form = SETTINGSFORM('refresh', form, entry, values, badKeys, off, reasons)
+%                                                         update states only
 %
 %   parent  a (scrollable) uipanel; the form fills its current width
 %   entry   the step's stepRegistry entry
@@ -13,8 +14,10 @@ function form = settingsForm(varargin)
 %             onChange(key, value)   a setting was edited (value is typed)
 %             onFocus(key)           the user is working on this setting
 %             onToggleAdvanced()     the "advanced settings" link was clicked
-%   ctx     struct: showAdvanced (logical), channelLabels (cellstr offered by
-%           the channel chooser), figure (parent for dialogs)
+%   ctx     struct: showAdvanced (logical), figure (parent for dialogs), and a
+%           field per choicesFrom list a setting names - e.g. channels, the
+%           labels the channel chooser offers (a cellstr, or a function that
+%           returns one, so they are only read when the chooser opens)
 %
 %   Follows docs/ui-design-language.md. The control is derived from the
 %   setting's declaration (makeParam): a checkbox for a binary setting, a
@@ -26,14 +29,16 @@ function form = settingsForm(varargin)
 %
 %   'refresh' re-applies the states that depend on the values - bold for a
 %   changed setting, grey for a disabled one, red for one with a problem -
-%   without rebuilding, so focus and scroll position survive an edit.
+%   without rebuilding, so focus and scroll position survive an edit. It only
+%   touches rows whose state changed, and returns the form with that state.
+%   off/reasons are disabledParamKeys' output, passed in so the caller
+%   works them out once per edit.
 %
 %   See also: paramForm (the plot Options dialogs), disabledParamKeys,
 %   paramProblems, pickChannels
 
 if ischar(varargin{1}) && strcmp(varargin{1}, 'refresh')
-    refreshStates(varargin{2:end});
-    form = varargin{2};
+    form = refreshStates(varargin{2:end});
     return
 end
 [parent, entry, values, cb, ctx] = varargin{:};
@@ -52,8 +57,8 @@ typed = fieldOr(entry, 'schema', 1) >= 2;
 params = entry.params;
 if isempty(params)
     uilabel(parent, 'Position', [12 parent.Position(4)-34 W-12 22], ...
-        'Text', 'This step has no settings.', 'FontColor', [.45 .45 .45]);
-    form = struct('rows', struct('key', {}, 'label', {}, 'ctrls', {}), 'typed', typed, 'link', []);
+        'Text', 'This step has no settings.', 'FontColor', nestColours('muted'));
+    form = struct('rows', emptyRows(), 'width', parent.Position(3));
     return
 end
 
@@ -67,7 +72,7 @@ two = arrayfun(@(m) typed && needsSecondLine(m, ctrlW), shown);
 H = 6 + nHeads * (HEAD + GAP) + numel(shown) * ROW + sum(two) * LINE2 + any(adv) * LINK;
 top = max(H, parent.Position(4) - 4);
 
-rows = struct('key', {}, 'label', {}, 'ctrls', {});
+rows = emptyRows();
 y = top;
 for s = 1:numel(secs)
     inSec = shown(strcmp({shown.section}, secs{s}));
@@ -80,21 +85,20 @@ for s = 1:numel(secs)
     end
     for m = inSec
         y = y - ROW;
-        second = typed && needsSecondLine(m, ctrlW);
+        second = two(strcmp({shown.key}, m.key));
         rows(end+1) = buildRow(parent, y, m, values, entry, typed, ctrlX, ctrlW, W, cb, ctx, second * LINE2); %#ok<AGROW>
         y = y - second * LINE2;
     end
 end
-link = [];
 if any(adv)
     y = y - LINK + 6;
     word = 'Show'; arrow = char(9654);
     if ctx.showAdvanced, word = 'Hide'; arrow = char(9660); end
-    link = uihyperlink(parent, 'Position', [10 y W-10 22], ...
+    uihyperlink(parent, 'Position', [10 y W-10 22], ...
         'Text', sprintf('%s  %s advanced settings (%d)', arrow, word, sum(adv)), ...
         'URL', '', 'HyperlinkClickedFcn', @(~, ~) cb.onToggleAdvanced());
 end
-form = struct('rows', rows, 'typed', typed, 'link', link);
+form = struct('rows', rows, 'width', parent.Position(3));
 if top > parent.Position(4), scroll(parent, 'top'); end
 end
 
@@ -108,13 +112,12 @@ lbl = m.friendlyName;
 if ~isempty(m.unit), lbl = sprintf('%s (%s)', lbl, m.unit); end
 tip = tooltipFor(m, entry);
 focus = @(varargin) cb.onFocus(m.key);
-r = struct('key', m.key, 'label', [], 'ctrls', gobjects(0));
+r = struct('key', m.key, 'label', [], 'ctrls', gobjects(0), 'tip', tip, 'state', '');
 
 if ~typed
     r.label = uilabel(parent, 'Position', [10 y X-16 22], 'Text', lbl, 'Tooltip', tip);
-    choices = strtrim(strsplit(m.validRange, '|'));
-    if contains(m.validRange, '|') && all(cellfun(@(c) isvarname(strrep(c, '-', '_')) ...
-            || any(isstrprop(c, 'digit')), choices)) && ~contains(m.validRange, '[')
+    choices = validRangeChoices(m);
+    if ~isempty(choices)
         cur = asText(v);
         if ~any(strcmp(cur, choices)), choices = [{cur}, choices]; end
         r.ctrls = uidropdown(parent, 'Position', [X y CW 22], 'Items', choices, ...
@@ -184,12 +187,20 @@ function [h, readValue] = valueControl(parent, m, v, X, y, CW, tip, focus, commi
 % holds as a typed value ([] when incomplete).
 switch m.type
     case 'stringlist'
-        txt = uieditfield(parent, 'Position', [X y max(CW-84, 60) 22], 'Editable', 'off', ...
-            'Value', strjoin(cellstr(asCell(v)), ', '), 'Tooltip', tip);
-        btn = uibutton(parent, 'Position', [X+max(CW-84, 60)+6 y 78 22], 'Text', 'Choose...', ...
-            'Tooltip', tip, 'ButtonPushedFcn', @(~, ~) choose());
-        h = [txt, btn];
-        readValue = @() splitList(txt.Value);
+        % With a choicesFrom list: picked from it in a chooser. Without: typed,
+        % comma-separated.
+        listed = ~isempty(m.choicesFrom);
+        txtW = ternary(listed, max(CW-84, 60), CW);
+        txt = uieditfield(parent, 'Position', [X y txtW 22], 'Editable', ternary(listed, 'off', 'on'), ...
+            'Value', asText(v), 'Tooltip', tip);
+        readValue = @() convertParam(txt.Value, 'stringlist');
+        h = txt;
+        if listed
+            h = [txt, uibutton(parent, 'Position', [X+txtW+6 y 78 22], 'Text', 'Choose...', ...
+                'Tooltip', tip, 'ButtonPushedFcn', @(~, ~) choose())];
+        else
+            txt.ValueChangedFcn = @(~, ~) commit(readValue());
+        end
     case 'vector'
         w = max(round((CW - 28) / 2), 50);
         a = uieditfield(parent, 'numeric', 'Position', [X y w 22], 'AllowEmpty', 'on', ...
@@ -228,7 +239,9 @@ end
 
     function choose()
         focus();
-        pickChannels(ctx.figure, splitList(txt.Value), ctx.channelLabels, m.friendlyName, @chosen);
+        list = ctx.(m.choicesFrom);
+        if isa(list, 'function_handle'), list = list(); end
+        pickChannels(ctx.figure, readValue(), list, m.friendlyName, @chosen);
     end
     function chosen(labels)
         txt.Value = strjoin(labels, ', ');
@@ -238,26 +251,25 @@ end
 
 % ===========================================================================
 
-function refreshStates(form, entry, values, badKeys)
-if nargin < 4, badKeys = {}; end
-if isempty(form.rows), return; end
-[off, reasons] = disabledParamKeys(entry, values);
-grey = [0.55 0.55 0.55]; red = [0.80 0.15 0.15];
-for r = form.rows
+function form = refreshStates(form, entry, values, badKeys, off, reasons)
+if nargin < 5, [off, reasons] = disabledParamKeys(entry, values); end
+for i = 1:numel(form.rows)
+    r = form.rows(i);
     if ~all(isvalid(r.label)), continue; end
-    m = entry.params(strcmp({entry.params.key}, r.key));
     isOff = any(strcmp(r.key, off));
     isBad = any(strcmp(r.key, badKeys));
     changed = isfield(values, r.key) && isfield(entry.defaults, r.key) ...
         && ~isequal(values.(r.key), entry.defaults.(r.key));
+    state = sprintf('%d%d%d', isOff, isBad, changed);
+    if strcmp(state, r.state), continue; end   % nothing to repaint
     colour = [0 0 0];
-    if isOff, colour = grey; end
-    if isBad, colour = red; end
-    set(r.label, 'FontWeight', ternary(changed, 'bold', 'normal'), 'FontColor', colour);
-    set(r.ctrls, 'Enable', ternary(isOff, 'off', 'on'));
-    tip = tooltipFor(m, entry);
+    if isOff, colour = nestColours('disabled'); end
+    if isBad, colour = nestColours('problem'); end
+    tip = r.tip;
     if isOff, tip = sprintf('%s\n\n%s', reasons.(r.key), tip); end
-    set(r.label, 'Tooltip', tip);
+    set(r.label, 'FontWeight', ternary(changed, 'bold', 'normal'), 'FontColor', colour, 'Tooltip', tip);
+    set(r.ctrls, 'Enable', ternary(isOff, 'off', 'on'));
+    form.rows(i).state = state;
 end
 end
 
@@ -305,13 +317,8 @@ else, s = mat2str(v);
 end
 end
 
-function c = asCell(v)
-if iscell(v), c = v; elseif ischar(v) && ~isempty(v), c = {v}; else, c = {}; end
-end
-
-function c = splitList(s)
-c = strtrim(strsplit(char(s), ','));
-c = c(~cellfun(@isempty, c));
+function rows = emptyRows()
+rows = struct('key', {}, 'label', {}, 'ctrls', {}, 'tip', {}, 'state', {});
 end
 
 function x = firstOr(v, k)
@@ -327,8 +334,4 @@ end
 function p = pairOf(a, b)
 p = [];
 if ~isempty(a) && ~isempty(b), p = [a b]; end
-end
-
-function out = ternary(c, a, b)
-if c, out = a; else, out = b; end
 end

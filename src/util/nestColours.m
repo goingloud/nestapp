@@ -11,6 +11,8 @@ function c = nestColours(name)
 %     'page'      the Cleaning tab background, so white panels stand out
 %     'run'       the Run button (a plain green; mint is too bright that large)
 %     'problem'   a step or setting with a problem
+%     'muted', 'disabled', 'added', 'moved'   secondary text, a setting that
+%                 does not apply, and Edit pipeline's added / moved steps
 %
 %   See also: settingsForm, editPipelineDialog
 
@@ -22,6 +24,10 @@ switch name
     case 'page',     c = [0.965 0.97 0.975];
     case 'run',      c = [0.20 0.55 0.20];
     case 'problem',  c = [0.80 0.15 0.15];
+    case 'muted',    c = [0.45 0.45 0.45];   % secondary text (provider line, notes)
+    case 'disabled', c = [0.55 0.55 0.55];   % a setting that does not apply
+    case 'added',    c = [0.00 0.50 0.15];   % Edit pipeline: a step added
+    case 'moved',    c = [0.10 0.35 0.75];   % Edit pipeline: a step moved
     otherwise
         error('nestColours:unknown', 'No interface colour "%s".', name);
 end

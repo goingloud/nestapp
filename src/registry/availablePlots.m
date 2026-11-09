@@ -20,7 +20,7 @@ function [entries, categories] = availablePlots(ctx, registry)
 %
 %   An entry the taxonomy does not mention is collected under 'Other', so
 %   adding to plotRegistry and forgetting plotTaxonomy loses the ordering but
-%   never the feature - the same safety net populateStepsTree has.
+%   never the feature - the same safety net the Edit pipeline library has.
 %
 %   See also: plotRegistry, plotTaxonomy, plotAvailability
 

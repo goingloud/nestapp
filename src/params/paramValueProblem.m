@@ -30,7 +30,7 @@ switch meta.type
         if ~(islogical(v) && isscalar(v)), why = 'must be on or off.'; end
     case {'scalar', 'integer', 'vector'}
         if isempty(v), return; end
-        if ~isnumeric(v) || any(~isfinite(v(:)) & ~isinf(v(:)))
+        if ~isnumeric(v) || any(isnan(v(:)))
             why = 'must be a number.'; return
         end
         lim = meta.limits;
@@ -44,16 +44,18 @@ switch meta.type
         if strcmp(meta.type, 'integer') && any(v ~= round(v))
             why = 'must be a whole number.'; return
         end
-        if ~isempty(meta.step) && meta.step == 2 && ~isempty(lim) && mod(lim(1), 2) == 0 ...
-                && any(mod(v, 2) ~= 0)
-            why = 'must be even.'; return
+        % A step counts from the lower limit, as a spinner does: from 2 in
+        % steps of 2 is the even orders a Butterworth design accepts.
+        if ~isempty(meta.step) && ~isempty(lim) && any(mod(v - lim(1), meta.step) ~= 0)
+            if meta.step == 2 && mod(lim(1), 2) == 0
+                why = 'must be even.';
+            else
+                why = sprintf('must be %g, %g, %g, ...', lim(1), lim(1) + meta.step, lim(1) + 2*meta.step);
+            end
+            return
         end
         if strcmp(meta.type, 'vector') && numel(v) == 2 && ~(v(1) < v(2))
             why = 'the first value must be below the second.';
         end
 end
-end
-
-function out = ternary(c, a, b)
-if c, out = a; else, out = b; end
 end

@@ -58,19 +58,7 @@ end
 
 % ── helpers ─────────────────────────────────────────────────────────────────
 function tf = hasValue(step, key)
-tf = false;
-if ~isfield(step, 'params') || ~isstruct(step.params) || ~isfield(step.params, key)
-    return
-end
-v = step.params.(key);
-if isempty(v); return; end
-% A cell of empty strings is how an unset stringlist arrives from the table,
-% and it is no more "set" than [] is.
-if iscell(v) && all(cellfun(@(x) isempty(x) || (ischar(x) && isempty(strtrim(x))), v))
-    return
-end
-if (ischar(v) || isstring(v)) && isempty(strtrim(char(v)))
-    return
-end
-tf = true;
+% Set, by the one definition every settings check uses (paramHasValue).
+tf = isfield(step, 'params') && isstruct(step.params) && isfield(step.params, key) ...
+    && paramHasValue(step.params.(key));
 end

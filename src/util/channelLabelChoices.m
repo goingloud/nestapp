@@ -5,7 +5,7 @@ function labels = channelLabelChoices(filePaths)
 % CHANNELLABELCHOICES  Channel labels to offer in a channel chooser.
 %   labels = CHANNELLABELCHOICES(filePaths) reads the labels of the first data
 %   file it can (EEGLAB .set, BrainVision .vhdr header), and otherwise returns
-%   EEGLAB's standard 10-05 labels, then a short built-in 10-20 list.
+%   EEGLAB's standard 10-05 labels, then nestapp's own electrodeList.
 %
 %   Only headers are read - never the data - so it is cheap enough to call
 %   when a chooser opens.
@@ -62,8 +62,6 @@ if ~isempty(root) && isfile(f)
     end
 end
 if isempty(labels)
-    labels = {'Fp1','Fpz','Fp2','F7','F3','Fz','F4','F8','FC5','FC1','FC2','FC6', ...
-        'T7','C3','Cz','C4','T8','CP5','CP1','CP2','CP6','P7','P3','Pz','P4','P8', ...
-        'O1','Oz','O2','TP9','TP10'};
+    labels = electrodeList();   % the montage list nestapp already knows
 end
 end

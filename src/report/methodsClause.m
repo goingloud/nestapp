@@ -38,6 +38,14 @@ function clause = methodsClause(stepName, params)
     if ~isstruct(p); p = struct(); end
 
     name = canonicalStepName(stepName);   % resolve legacy names from old reports
+    % Old reports carry settings in their saved shape; typed steps read the
+    % current one, so the clauses below need not know both.
+    % A report must always render, so a value migration cannot read stays as
+    % it was and the clause falls back on its defaults, as it always has.
+    entry = registryStep(name);
+    if ~isempty(entry)
+        try, p = migrateStepParams(entry, p); catch, end %#ok<CTCH>
+    end
     switch name
         % ── channels ─────────────────────────────────────────────────────
         case 'Remove un-needed Channels'
@@ -413,11 +421,8 @@ function s = modifiedFilterClause(p)
     w = numVec(p, 'artifactWindow', []);
     if numel(w) == 2
         win = sprintf('the %g to %g ms pulse window', w(1), w(2));
-    elseif strcmpi(txt(p, 'artifactWindow', ''), 'auto')
+    else   % 'auto'
         win = 'a pulse window three times the removed-data window';
-    else   % saved before the window became one setting
-        win = sprintf('the %g to %g ms pulse window', num(p, 'artifactStartMs', -2), ...
-            num(p, 'artifactEndMs', 12));
     end
     s = sprintf(['the data were filtered with a modified %s filter (%s), with %s ' ...
         'bridged by autoregressive extrapolation to limit artifact spread'], ...

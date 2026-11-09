@@ -11,11 +11,13 @@ function [params, notes] = migrateStepParams(regEntry, params)
 %   setting's own declaration:
 %     logical  'on' 'yes' 'true' 1 -> true;  'off' 'no' 'false' 0 -> false
 %     choices  matched to a key, ignoring case and spacing (matchesChoice)
-%     modes    a mode key is kept; an empty legacy value becomes the FIRST
-%              declared mode (by convention, what empty used to mean)
+%     modes    a mode key is kept; an empty legacy value becomes the mode
+%              that passes [] upstream - which is exactly what the empty
+%              value passed before, so the run does not change
 %     numbers / lists   parsed from text (convertParam); {''} becomes {}
-%   Keys a step renamed or merged are rewritten first (legacyShapes), in one
-%   place, the way canonicalStepName handles renamed steps.
+%   Keys a step renamed or merged, or values it re-encoded, are rewritten
+%   first by the step's own 'legacy' function, declared beside it in
+%   stepRegistry.
 %
 %   Idempotent: typed values pass through unchanged, so it is safe to run on
 %   every load AND again at dispatch (which is what makes a hand-written or
@@ -28,7 +30,8 @@ function [params, notes] = migrateStepParams(regEntry, params)
 
 notes = {};
 if fieldOr(regEntry, 'schema', 1) < 2 || ~isstruct(params), return; end
-[params, notes] = legacyShapes(regEntry.name, params);
+legacy = fieldOr(regEntry, 'legacy', []);
+if ~isempty(legacy), [params, notes] = legacy(params); end
 for m = regEntry.params(:)'
     if ~isfield(params, m.key), continue; end
     dflt = [];
@@ -52,7 +55,11 @@ if ~isempty(m.modes)
         ix = find(arrayfun(@(c) matchesChoice(v, c.key), m.modes), 1);
         if ~isempty(ix), v = m.modes(ix).key; return; end
     end
-    if ~paramHasValue(v), v = m.modes(1).key; return; end
+    if ~paramHasValue(v)
+        ix = find(arrayfun(@(c) isempty(c.emit), m.modes), 1);
+        if isempty(ix), v = dflt; else, v = m.modes(ix).key; end
+        return
+    end
     v = asType(m, v);
     return
 end
@@ -104,31 +111,3 @@ else, s = class(v);
 end
 end
 
-function [p, notes] = legacyShapes(stepName, p)
-% Settings a step renamed, merged or re-encoded when it moved to schema 2.
-% Each case must leave already-migrated settings alone.
-notes = {};
-switch stepName
-    case 'Modified Bandpass Filter (TESA)'
-        % Two numbers became one window, which can also be "Automatic".
-        if isfield(p, 'artifactStartMs') && isfield(p, 'artifactEndMs')
-            p.artifactWindow = [p.artifactStartMs, p.artifactEndMs];
-            p = rmfield(p, {'artifactStartMs', 'artifactEndMs'});
-        end
-        % 0 meant "this side off" (upstream treats 0 and [] the same).
-        for k = {'lowCutoff', 'highCutoff'}
-            if isfield(p, k{1}) && isnumeric(p.(k{1})) && isscalar(p.(k{1})) && p.(k{1}) == 0
-                p.(k{1}) = 'off';
-            end
-        end
-    case 'Remove Bad Channels'
-        % Channel NUMBERS were accepted by the table but ignored by the step,
-        % which checked every channel. Keep that behaviour, and say so.
-        if isfield(p, 'elec') && isnumeric(p.elec) && ~isempty(p.elec)
-            p.elec = 'all';
-            notes{end+1} = ['Channels to check: channel numbers were ignored by ' ...
-                'earlier versions (all channels were checked). Still checking all; ' ...
-                'pick channels by name to restrict it.'];
-        end
-end
-end
