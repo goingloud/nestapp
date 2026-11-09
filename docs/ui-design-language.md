@@ -15,7 +15,7 @@ says `s.schema = 2`).
 | Several of a closed list | multi-select list | The heading shows the count ("3 selected"). |
 | Number | numeric field | Unit as a suffix; limits enforced; whole numbers for integers. |
 | Small integer (order, count) | spinner | The step comes from the spec (2 for even-only orders). |
-| Range | "from [ ] to [ ]" pair | Low must be below high. |
+| Range | "from [ ] to [ ]" pair | Low must be below high. A range is never one text field holding `[11 30]`: each end is its own number field (or, for a list of values, its own control). |
 | Named states + a value | mode dropdown + value field | "Off", "Automatic", "All channels" are choices; the field is enabled only for the value state. Never a magic number (0 = off, -1 = rank) or the text `[]`. |
 | Channels / events | picker fed from the data | Labels read from the first selected file; with no data, the standard 10-05 labels; "Other..." for anything else. |
 | Free text (labels, suffixes) | text field | Character rules where they matter (file-safe suffixes). |
@@ -105,7 +105,9 @@ made to the old entry.
    in. Anything odd goes in `docs/settings-audit-log.md`; fix it only if the
    conversion cannot be correct without the fix.
 2. Write the schema-2 entry: typed defaults, choices with labels and help,
-   limits, sections, relations, `upstreamAudit`.
+   limits, sections, relations, `upstreamAudit`. Every `vector` setting gets an
+   explicit shape: a from/to range (two number fields), a fixed-length set of
+   named numbers, or a list control - never bracketed text such as `[11 30]`.
 3. Rewrite the `case` to use `up.<key>` from `toUpstream`.
 4. Add an `s.legacy` function for renamed keys or re-encoded values.
 5. Check it while implementing:
